@@ -3,6 +3,7 @@ name = "smux"
 version = "0.1.0"
 edition = "2024"
 description = "Small Rust CLI for tmux session selection and creation"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.102"

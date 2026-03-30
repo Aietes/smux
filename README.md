@@ -49,6 +49,32 @@ The release workflow also produces:
 - zsh completions
 - `SHA256SUMS`
 
+### Install With Nix
+
+From the repository itself:
+
+```bash
+nix profile install .#smux
+```
+
+This now builds the packaged CLI, installs the `smux` binary, and includes the generated man pages and zsh completions in the Nix package output.
+
+### Install With Cargo
+
+Local source install:
+
+```bash
+cargo install --path .
+```
+
+Registry install will make sense once `smux` is published to crates.io:
+
+```bash
+cargo install smux
+```
+
+That publication path is technically ready in broad terms, but still needs final package metadata like license and repository fields before it should be pushed publicly.
+
 ### Build From Source
 
 This repository uses Nix and `nix-direnv`.
@@ -304,6 +330,21 @@ The GitHub release workflow builds and publishes:
 - generated zsh completions
 
 That keeps the installation story simple for users who do not want to build from source.
+
+## Distribution Status
+
+Current state:
+
+- GitHub release artifacts are prepared by workflow
+- local `nix profile install .#smux` is supported
+- local `cargo install --path .` is supported
+
+Still needed before public distribution:
+
+- choose and add a project license
+- add final Cargo package metadata such as repository and homepage
+- publish the crate for `cargo install smux`
+- submit package updates to Homebrew and nixpkgs
 
 ## Development
 
