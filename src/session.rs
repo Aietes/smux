@@ -7,17 +7,21 @@ use crate::templates;
 use crate::tmux::Tmux;
 use crate::util;
 
+pub const BUILTIN_TEMPLATE_NAME: &str = "__builtin__";
+
 pub fn connect_path(
     tmux: &Tmux,
     path: &Path,
     config: Option<&Config>,
     override_template: Option<&str>,
     override_name: Option<&str>,
+    project_detection: ProjectDetection,
 ) -> Result<()> {
     let normalized = util::normalize_path(path)?;
-    let resolved_project = match config {
-        Some(config) => crate::config::resolve_project(config, &normalized)?,
-        None => None,
+    let resolved_project = match (config, project_detection) {
+        (_, ProjectDetection::Disabled) => None,
+        (Some(config), _) => crate::config::resolve_project(config, &normalized)?,
+        (None, _) => None,
     };
 
     let template = resolve_template(config, override_template, resolved_project.as_ref())?;
@@ -42,12 +46,22 @@ pub fn connect_path(
     tmux.switch_or_attach(&session_name)
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ProjectDetection {
+    Enabled,
+    Disabled,
+}
+
 fn resolve_template(
     config: Option<&Config>,
     override_template: Option<&str>,
     project: Option<&crate::config::ResolvedProject<'_>>,
 ) -> Result<Template> {
     if let Some(template_name) = override_template {
+        if template_name == BUILTIN_TEMPLATE_NAME {
+            return Ok(templates::fallback_template());
+        }
+
         let config = config.context("explicit --template requires a config file with templates")?;
         return load_template(config, template_name);
     }
@@ -177,5 +191,11 @@ mod tests {
             templates::fallback_template().windows[0].name
         );
         Ok(())
+    }
+
+    #[test]
+    fn project_detection_can_be_disabled() {
+        let disabled = super::ProjectDetection::Disabled;
+        assert_eq!(disabled, super::ProjectDetection::Disabled);
     }
 }

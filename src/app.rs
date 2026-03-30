@@ -11,17 +11,24 @@ use crate::tmux::Tmux;
 use crate::util;
 use crate::zoxide;
 
+const BUILTIN_TEMPLATE_LABEL: &str = "<builtin>";
+
 pub fn run(cli: Cli) -> Result<()> {
     let tmux = Tmux::new();
 
     match cli.command {
         Commands::Select {
-            choose_template: _,
-            no_project_detect: _,
+            choose_template,
+            no_project_detect,
             config,
         } => {
             let loaded = config::load_optional(config.as_deref())?;
-            run_popup(&tmux, loaded.as_ref().map(|loaded| &loaded.config))
+            run_select(
+                &tmux,
+                loaded.as_ref().map(|loaded| &loaded.config),
+                choose_template,
+                no_project_detect,
+            )
         }
         Commands::Connect {
             path,
@@ -36,6 +43,7 @@ pub fn run(cli: Cli) -> Result<()> {
                 loaded.as_ref().map(|loaded| &loaded.config),
                 template.as_deref(),
                 session_name.as_deref(),
+                session::ProjectDetection::Enabled,
             )
         }
         Commands::Switch { session } => session::switch_existing(&tmux, &session),
@@ -75,7 +83,12 @@ pub fn run(cli: Cli) -> Result<()> {
     }
 }
 
-fn run_popup(tmux: &Tmux, config: Option<&config::Config>) -> Result<()> {
+fn run_select(
+    tmux: &Tmux,
+    config: Option<&config::Config>,
+    choose_template: bool,
+    no_project_detect: bool,
+) -> Result<()> {
     let mut entries = Vec::new();
 
     for session in tmux.list_sessions()? {
@@ -96,11 +109,46 @@ fn run_popup(tmux: &Tmux, config: Option<&config::Config>) -> Result<()> {
     }
 
     let selection = fzf::select(entries)?.context("fzf returned no selection")?;
+    let project_detection = if no_project_detect {
+        session::ProjectDetection::Disabled
+    } else {
+        session::ProjectDetection::Enabled
+    };
 
     match selection.kind {
         fzf::EntryKind::Session => session::switch_existing(tmux, &selection.value),
         fzf::EntryKind::Directory => {
-            session::connect_path(tmux, Path::new(&selection.value), config, None, None)
+            let template = if choose_template {
+                choose_template_name(config)?
+            } else {
+                None
+            };
+
+            session::connect_path(
+                tmux,
+                Path::new(&selection.value),
+                config,
+                template.as_deref(),
+                None,
+                project_detection,
+            )
         }
+    }
+}
+
+fn choose_template_name(config: Option<&config::Config>) -> Result<Option<String>> {
+    let mut template_names = config
+        .map(|config| config.templates.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    template_names.sort();
+    template_names.insert(0, BUILTIN_TEMPLATE_LABEL.to_owned());
+
+    let choice = fzf::select_value("template> ", template_names)?
+        .context("template selection was cancelled")?;
+
+    if choice == BUILTIN_TEMPLATE_LABEL {
+        Ok(Some(session::BUILTIN_TEMPLATE_NAME.to_owned()))
+    } else {
+        Ok(Some(choice))
     }
 }

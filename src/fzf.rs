@@ -59,6 +59,45 @@ impl Entry {
 }
 
 pub fn select(entries: Vec<Entry>) -> Result<Option<Entry>> {
+    select_with_prompt(entries, "smux> ")
+}
+
+pub fn select_value(prompt: &str, values: Vec<String>) -> Result<Option<String>> {
+    let mut child = Command::new("fzf")
+        .args(["--prompt", prompt, "--no-sort"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("failed to launch fzf")?;
+
+    {
+        let mut stdin = child.stdin.take().context("failed to open fzf stdin")?;
+        for value in values {
+            writeln!(stdin, "{value}").context("failed to write picker value")?;
+        }
+    }
+
+    let output = child.wait_with_output().context("failed to wait for fzf")?;
+
+    if output.status.code() == Some(130) {
+        return Ok(None);
+    }
+
+    if !output.status.success() {
+        bail!("fzf exited with status {}", output.status);
+    }
+
+    let selection = String::from_utf8(output.stdout).context("fzf output was not valid utf-8")?;
+    let selection = selection.trim_end();
+
+    if selection.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(selection.to_owned()))
+}
+
+fn select_with_prompt(entries: Vec<Entry>, prompt: &str) -> Result<Option<Entry>> {
     let mut child = Command::new("fzf")
         .args([
             "--delimiter",
@@ -66,7 +105,7 @@ pub fn select(entries: Vec<Entry>) -> Result<Option<Entry>> {
             "--with-nth",
             "3",
             "--prompt",
-            "smux> ",
+            prompt,
             "--no-sort",
         ])
         .stdin(Stdio::piped())
