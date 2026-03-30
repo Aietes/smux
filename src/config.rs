@@ -3,7 +3,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use directories::ProjectDirs;
 use serde::Deserialize;
 
 use crate::util;
@@ -108,8 +107,14 @@ pub struct ResolvedProject<'a> {
 }
 
 pub fn default_config_path() -> Result<PathBuf> {
-    let dirs = ProjectDirs::from("", "", "swux").context("could not resolve config directory")?;
-    Ok(dirs.config_dir().join("config.toml"))
+    let base = if let Some(config_home) = std::env::var_os("XDG_CONFIG_HOME") {
+        PathBuf::from(config_home)
+    } else {
+        let home = std::env::var_os("HOME").context("could not resolve HOME for config path")?;
+        PathBuf::from(home).join(".config")
+    };
+
+    Ok(base.join("swux").join("config.toml"))
 }
 
 pub fn load(path: Option<&Path>) -> Result<LoadedConfig> {
@@ -306,6 +311,23 @@ template = "default"
 
         let loaded = load(Some(&path))?;
         assert_eq!(loaded.path, path);
+        Ok(())
+    }
+
+    #[test]
+    fn uses_xdg_config_home_when_set() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        unsafe {
+            std::env::set_var("XDG_CONFIG_HOME", tempdir.path());
+        }
+
+        let path = super::default_config_path()?;
+        assert_eq!(path, tempdir.path().join("swux").join("config.toml"));
+
+        unsafe {
+            std::env::remove_var("XDG_CONFIG_HOME");
+        }
+
         Ok(())
     }
 }
