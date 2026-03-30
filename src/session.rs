@@ -198,4 +198,103 @@ mod tests {
         let disabled = super::ProjectDetection::Disabled;
         assert_eq!(disabled, super::ProjectDetection::Disabled);
     }
+
+    #[test]
+    fn explicit_template_overrides_project_and_default() -> Result<()> {
+        let config = Config {
+            settings: Settings {
+                default_template: Some("default".to_owned()),
+            },
+            templates: HashMap::from([
+                (
+                    "default".to_owned(),
+                    Template {
+                        root: None,
+                        startup_window: None,
+                        windows: vec![Window {
+                            name: "default-window".to_owned(),
+                            cwd: None,
+                            command: None,
+                            layout: None,
+                            panes: None,
+                        }],
+                    },
+                ),
+                (
+                    "project".to_owned(),
+                    Template {
+                        root: None,
+                        startup_window: None,
+                        windows: vec![Window {
+                            name: "project-window".to_owned(),
+                            cwd: None,
+                            command: None,
+                            layout: None,
+                            panes: None,
+                        }],
+                    },
+                ),
+                (
+                    "explicit".to_owned(),
+                    Template {
+                        root: None,
+                        startup_window: None,
+                        windows: vec![Window {
+                            name: "explicit-window".to_owned(),
+                            cwd: None,
+                            command: None,
+                            layout: None,
+                            panes: None,
+                        }],
+                    },
+                ),
+            ]),
+            projects: HashMap::from([(
+                "demo".to_owned(),
+                Project {
+                    path: "/tmp/demo".to_owned(),
+                    template: Some("project".to_owned()),
+                    session_name: None,
+                },
+            )]),
+        };
+
+        let project = ResolvedProject {
+            name: "demo",
+            project: config.projects.get("demo").expect("project exists"),
+            normalized_path: PathBuf::from("/tmp/demo"),
+        };
+
+        let template = super::resolve_template(Some(&config), Some("explicit"), Some(&project))?;
+        assert_eq!(template.windows[0].name, "explicit-window");
+        Ok(())
+    }
+
+    #[test]
+    fn default_template_applies_without_project_or_override() -> Result<()> {
+        let config = Config {
+            settings: Settings {
+                default_template: Some("default".to_owned()),
+            },
+            templates: HashMap::from([(
+                "default".to_owned(),
+                Template {
+                    root: None,
+                    startup_window: None,
+                    windows: vec![Window {
+                        name: "default-window".to_owned(),
+                        cwd: None,
+                        command: None,
+                        layout: None,
+                        panes: None,
+                    }],
+                },
+            )]),
+            projects: HashMap::new(),
+        };
+
+        let template = super::resolve_template(Some(&config), None, None)?;
+        assert_eq!(template.windows[0].name, "default-window");
+        Ok(())
+    }
 }

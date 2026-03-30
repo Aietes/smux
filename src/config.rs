@@ -114,7 +114,7 @@ pub fn default_config_path() -> Result<PathBuf> {
         PathBuf::from(home).join(".config")
     };
 
-    Ok(base.join("swux").join("config.toml"))
+    Ok(base.join("smux").join("config.toml"))
 }
 
 pub fn load(path: Option<&Path>) -> Result<LoadedConfig> {
@@ -322,7 +322,7 @@ template = "default"
         }
 
         let path = super::default_config_path()?;
-        assert_eq!(path, tempdir.path().join("swux").join("config.toml"));
+        assert_eq!(path, tempdir.path().join("smux").join("config.toml"));
 
         unsafe {
             std::env::remove_var("XDG_CONFIG_HOME");

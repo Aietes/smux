@@ -30,7 +30,7 @@ Examples:
 
 - `feat: add tmux session picker`
 - `fix: sanitize derived session names`
-- `docs: refine swux v1 specification`
+- `docs: refine smux v1 specification`
 
 ## Environment Expectations
 
