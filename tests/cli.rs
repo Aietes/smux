@@ -9,7 +9,7 @@ fn help_includes_subcommands() {
     command
         .assert()
         .success()
-        .stdout(contains("list-sessions"))
+        .stdout(contains("select"))
         .stdout(contains("doctor"));
 }
 

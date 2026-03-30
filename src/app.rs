@@ -15,7 +15,7 @@ pub fn run(cli: Cli) -> Result<()> {
     let tmux = Tmux::new();
 
     match cli.command {
-        Commands::Popup {
+        Commands::Select {
             choose_template: _,
             no_project_detect: _,
             config,

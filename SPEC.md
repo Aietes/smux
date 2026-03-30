@@ -39,12 +39,12 @@ The following are explicitly out of scope for v1:
 
 ## Core User Flows
 
-### Popup flow
+### Select flow
 
 Primary usage is from inside tmux, but should also work outside when no tmux session exists.
 
 ```tmux
-bind-key f display-popup -E "swux popup"
+bind-key f display-popup -E "smux select"
 ```
 
 and/or zsh alieas/keybinding.
@@ -52,7 +52,7 @@ and/or zsh alieas/keybinding.
 When the user runs:
 
 ```bash
-swux popup
+smux select
 ```
 
 `swux` must:
@@ -99,7 +99,7 @@ swux switch myapp
 
 ## CLI Surface
 
-### `swux popup`
+### `smux select`
 
 Open the unified interactive picker.
 
@@ -154,7 +154,7 @@ Create a starter config at `~/.config/swux/config.toml` if it does not already e
 Dependency behavior:
 
 - missing `tmux`: hard error
-- missing `fzf`: hard error for `popup`
+- missing `fzf`: hard error for `select`
 - missing `zoxide`: degrade gracefully to session-only mode, with a warning
 
 This behavior must be documented and tested.
@@ -423,7 +423,7 @@ Inside/outside tmux behavior:
 
 ## Interactive Picker
 
-`swux popup` must display a unified list of:
+`smux select` must display a unified list of:
 
 - `session`
 - `directory`
@@ -627,7 +627,7 @@ For v1, pass-through with clear tmux error reporting is acceptable.
 
 v1 must include:
 
-- `swux popup`
+- `smux select`
 - `swux connect`
 - `swux switch`
 - `swux list-sessions`
@@ -681,7 +681,7 @@ Must cover:
 
 ### Manual verification
 
-- run inside tmux popup
+- run inside tmux selector workflow
 - run outside tmux
 - run with missing config
 - run with missing `zoxide`
@@ -691,7 +691,7 @@ Must cover:
 
 The implementation is complete when all of the following are true:
 
-1. `swux popup` shows both tmux sessions and zoxide directories in one `fzf` picker.
+1. `smux select` shows both tmux sessions and zoxide directories in one `fzf` picker.
 2. Selecting a session switches or attaches correctly.
 3. Selecting a directory creates or reuses a session correctly.
 4. Session names default to the sanitized folder basename.
@@ -750,12 +750,12 @@ session_name = "example"
 Quickstart should include:
 
 ```tmux
-bind-key f display-popup -w 70% -h 70% -E "swux popup"
+bind-key f display-popup -w 70% -h 70% -E "smux select"
 ```
 
 ```bash
 swux init
-swux popup
+smux select
 swux connect ~/code/myapp
 swux connect --template rust ~/code/myapp
 ```
@@ -788,7 +788,7 @@ Exit criteria:
 - help output is stable
 - subprocess boundary is testable
 
-### Phase 1: Session discovery and popup MVP
+### Phase 1: Session discovery and selector MVP
 
 Deliver:
 
@@ -800,7 +800,7 @@ Deliver:
 
 Exit criteria:
 
-- `swux popup` can list sessions and directories
+- `smux select` can list sessions and directories
 - selecting a session switches or attaches correctly
 - missing `zoxide` degrades cleanly
 

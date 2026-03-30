@@ -14,8 +14,8 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Open the unified tmux-session and zoxide-directory picker.
-    Popup {
+    /// Open the unified tmux-session and zoxide-directory selector.
+    Select {
         #[arg(long)]
         choose_template: bool,
         #[arg(long)]
