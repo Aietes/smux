@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::cli::{Cli, Commands};
 use crate::config;
+use crate::docs;
 use crate::doctor;
 use crate::fzf;
 use crate::session;
@@ -78,6 +79,20 @@ pub fn run(cli: Cli) -> Result<()> {
         Commands::Init { config } => {
             let path = config::init(config.as_deref())?;
             println!("{}", path.display());
+            Ok(())
+        }
+        Commands::Completions { shell, dir } => {
+            if let Some(path) = docs::generate_completions(shell, dir.as_deref())? {
+                println!("{}", path.display());
+            }
+            Ok(())
+        }
+        Commands::Man { dir } => {
+            if let Some(paths) = docs::generate_man_pages(dir.as_deref())? {
+                for path in paths {
+                    println!("{}", path.display());
+                }
+            }
             Ok(())
         }
     }

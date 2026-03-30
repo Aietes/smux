@@ -85,6 +85,8 @@ smux list-templates
 smux list-projects
 smux doctor
 smux init
+smux completions zsh
+smux man
 ```
 
 Command notes:
@@ -94,6 +96,8 @@ Command notes:
 - `smux switch <session>` switches to or attaches an existing session
 - `smux doctor` validates runtime dependencies and config health
 - `smux init` writes a starter config if one does not already exist
+- `smux completions zsh` prints a zsh completion script or writes it to a directory
+- `smux man` prints a man page or writes man pages to a directory
 
 ## Config
 
@@ -201,6 +205,34 @@ bind-key f display-popup -w 70% -h 70% -E "smux select"
 
 That binding is optional. `smux select` can also be run directly in a pane or outside tmux.
 
+## Shell Completions
+
+Print zsh completions to stdout:
+
+```bash
+smux completions zsh
+```
+
+Write zsh completions to a directory:
+
+```bash
+smux completions zsh --dir ./target/generated/completions
+```
+
+## Man Pages
+
+Print the top-level man page to stdout:
+
+```bash
+smux man
+```
+
+Write man pages for the root command and subcommands to a directory:
+
+```bash
+smux man --dir ./target/generated/man
+```
+
 ## Development
 
 Useful commands during development:
@@ -211,6 +243,14 @@ cargo fmt
 cargo test
 cargo clippy --all-targets --all-features -- -D warnings
 ```
+
+CI also verifies:
+
+- formatting
+- tests
+- clippy
+- zsh completion generation
+- man page generation
 
 ## Status
 

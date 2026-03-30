@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v19
+
+      - name: Configure Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v13
+
+      - name: Format check
+        run: nix develop --command cargo fmt --check
+
+      - name: Test
+        run: nix develop --command cargo test
+
+      - name: Clippy
+        run: nix develop --command cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Generate zsh completions
+        run: nix develop --command cargo run -- completions zsh --dir target/generated/completions
+
+      - name: Generate man pages
+        run: nix develop --command cargo run -- man --dir target/generated/man

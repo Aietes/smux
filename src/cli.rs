@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
+use clap::CommandFactory;
 use clap::{Parser, Subcommand, ValueHint};
+use clap_complete::Shell;
 
 #[derive(Debug, Parser)]
 #[command(name = "smux")]
@@ -10,6 +12,12 @@ use clap::{Parser, Subcommand, ValueHint};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+}
+
+impl Cli {
+    pub fn command() -> clap::Command {
+        <Self as CommandFactory>::command()
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -63,5 +71,18 @@ pub enum Commands {
         #[arg(long)]
         #[arg(value_hint = ValueHint::FilePath)]
         config: Option<PathBuf>,
+    },
+    /// Generate shell completion scripts.
+    Completions {
+        shell: Shell,
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::DirPath)]
+        dir: Option<PathBuf>,
+    },
+    /// Generate man pages.
+    Man {
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::DirPath)]
+        dir: Option<PathBuf>,
     },
 }

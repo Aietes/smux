@@ -56,3 +56,50 @@ fn doctor_fails_with_invalid_config_file() {
         .stdout(contains("config: error"))
         .stderr(contains("doctor checks failed"));
 }
+
+#[test]
+fn completions_command_outputs_zsh_script() {
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["completions", "zsh"]);
+
+    command
+        .assert()
+        .success()
+        .stdout(contains("compdef"))
+        .stdout(contains("smux"));
+}
+
+#[test]
+fn man_command_outputs_manpage() {
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.arg("man");
+
+    command
+        .assert()
+        .success()
+        .stdout(contains(".TH"))
+        .stdout(contains("smux"));
+}
+
+#[test]
+fn completions_command_writes_to_directory() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["completions", "zsh", "--dir"]);
+    command.arg(tempdir.path());
+
+    command.assert().success();
+    assert!(tempdir.path().join("_smux").exists());
+}
+
+#[test]
+fn man_command_writes_to_directory() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["man", "--dir"]);
+    command.arg(tempdir.path());
+
+    command.assert().success();
+    assert!(tempdir.path().join("smux.1").exists());
+    assert!(tempdir.path().join("smux-select.1").exists());
+}

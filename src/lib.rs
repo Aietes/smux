@@ -1,6 +1,7 @@
 pub mod app;
 pub mod cli;
 pub mod config;
+pub mod docs;
 pub mod doctor;
 pub mod fzf;
 pub mod process;
