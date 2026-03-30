@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
 use crate::cli::{Cli, Commands};
 use crate::config;
@@ -125,7 +125,9 @@ fn run_select(
         bail!("no tmux sessions or zoxide directories available");
     }
 
-    let selection = fzf::select(entries)?.context("fzf returned no selection")?;
+    let Some(selection) = fzf::select(entries)? else {
+        return Ok(());
+    };
     let project_detection = if no_project_detect {
         session::ProjectDetection::Disabled
     } else {
@@ -136,7 +138,10 @@ fn run_select(
         fzf::EntryKind::Session => session::switch_existing(tmux, &selection.value),
         fzf::EntryKind::Directory => {
             let template = if choose_template {
-                choose_template_name(config, display_style)?
+                let Some(template) = choose_template_name(config, display_style)? else {
+                    return Ok(());
+                };
+                Some(template)
             } else {
                 None
             };
@@ -168,12 +173,43 @@ fn choose_template_name(
         .map(|name| fzf::Choice::new(display_style.template_label(&name), name))
         .collect();
 
-    let choice =
-        fzf::select_value("template> ", choices)?.context("template selection was cancelled")?;
+    Ok(resolve_template_choice(fzf::select_value(
+        "template> ",
+        choices,
+    )?))
+}
 
-    if choice == BUILTIN_TEMPLATE_LABEL {
-        Ok(Some(session::BUILTIN_TEMPLATE_NAME.to_owned()))
-    } else {
-        Ok(Some(choice))
+fn resolve_template_choice(choice: Option<String>) -> Option<String> {
+    match choice.as_deref() {
+        None => None,
+        Some(BUILTIN_TEMPLATE_LABEL) => Some(session::BUILTIN_TEMPLATE_NAME.to_owned()),
+        Some(choice) => Some(choice.to_owned()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_template_choice;
+    use crate::session;
+
+    #[test]
+    fn cancelling_template_choice_returns_none() {
+        assert_eq!(resolve_template_choice(None), None);
+    }
+
+    #[test]
+    fn builtin_template_choice_maps_to_builtin_template_name() {
+        assert_eq!(
+            resolve_template_choice(Some("<builtin>".to_owned())).as_deref(),
+            Some(session::BUILTIN_TEMPLATE_NAME)
+        );
+    }
+
+    #[test]
+    fn named_template_choice_is_preserved() {
+        assert_eq!(
+            resolve_template_choice(Some("rust".to_owned())).as_deref(),
+            Some("rust")
+        );
     }
 }
