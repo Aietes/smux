@@ -23,6 +23,7 @@ This file records repository-specific working instructions for agents operating 
 - Format commit subjects as `<type>: <summary>`.
 - Preferred types include `feat`, `fix`, `docs`, `refactor`, `test`, `build`, and `chore`.
 - Keep the subject concise and imperative.
+- Commit in small, reasonable groups as work progresses. Do not let large unrelated changes accumulate before committing.
 
 Examples:
 
