@@ -17,6 +17,7 @@ This file records repository-specific working instructions for agents operating 
 - Keep v1 focused. Do not add speculative features outside the spec without user approval.
 - When implementation begins, keep architecture, tests, and docs aligned with the current spec.
 - Before the first release, prefer the correct CLI and naming over compatibility shims. Breaking changes are acceptable while the project is unreleased.
+- Treat shell integration and CLI documentation as product features, not optional polish. Proper man pages and zsh completions are expected deliverables.
 
 ## Commits
 

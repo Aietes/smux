@@ -642,12 +642,13 @@ v1 must include:
 - deterministic session name derivation
 - inside/outside tmux handling
 - graceful operation when `zoxide` is unavailable
+- zsh completion generation
+- proper man pages for the CLI
 
 v1 does not require:
 
 - local per-project config discovery
 - `fzf` preview pane
-- shell completion generation
 - rename/kill session commands
 - tmuxinator import helpers
 - config hot reload
@@ -700,6 +701,7 @@ The implementation is complete when all of the following are true:
 7. The tool works without shell scripts or tmuxinator-style wrappers.
 8. Errors are readable and actionable.
 9. Documentation covers install, config, tmux binding, and examples.
+10. Proper man pages and zsh completions are generated and documented.
 
 ## Starter Config
 
@@ -746,6 +748,8 @@ session_name = "example"
 - quickstart
 - config reference
 - tmux binding example
+- shell completion usage
+- man page usage or installation notes
 
 Quickstart should include:
 
@@ -767,6 +771,8 @@ Additional deliverables:
 - clear user-facing error messages
 - short design note in `docs/design.md`
 - `flake.nix` and `.envrc` for reproducible development
+- generated man pages
+- generated zsh completion scripts
 
 ## Implementation Plan
 
@@ -858,6 +864,8 @@ Deliver:
 - `init`
 - README
 - `docs/design.md`
+- man pages
+- zsh completions
 
 Exit criteria:
 
