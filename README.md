@@ -24,7 +24,7 @@ cargo build
 
 The dev shell provides:
 
-- Rust toolchain
+- a pinned latest stable Rust toolchain
 - `tmux`
 - `fzf`
 - `zoxide`
