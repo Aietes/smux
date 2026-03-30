@@ -20,7 +20,7 @@ impl Entry {
     pub fn session(value: String) -> Self {
         Self {
             kind: EntryKind::Session,
-            label: format!("session\t{value}"),
+            label: format!("session  {value}"),
             value,
         }
     }
@@ -28,7 +28,7 @@ impl Entry {
     pub fn directory(value: String) -> Self {
         Self {
             kind: EntryKind::Directory,
-            label: format!("dir\t{value}"),
+            label: format!("dir      {value}"),
             value,
         }
     }
@@ -148,7 +148,7 @@ mod tests {
     fn entry_round_trip() {
         let entry = Entry {
             kind: EntryKind::Directory,
-            label: "dir\t~/code/example".to_owned(),
+            label: "dir ~/code/example".to_owned(),
             value: "/tmp/example".to_owned(),
         };
 
