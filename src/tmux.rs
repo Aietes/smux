@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 
@@ -127,15 +127,17 @@ impl Tmux {
             command
         };
 
-        let output = command
-            .output()
+        let status = command
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
             .context("failed to execute tmux switch/attach")?;
 
-        if output.status.success() {
+        if status.success() {
             Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("tmux switch/attach failed: {}", stderr.trim())
+            bail!("tmux switch/attach failed with status {status}")
         }
     }
 
