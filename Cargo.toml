@@ -8,7 +8,7 @@ description = "Small Rust CLI for tmux session selection and creation"
 anyhow = "1.0.102"
 clap = { version = "4.6.0", features = ["derive"] }
 clap_complete = "4.6.0"
-clap_mangen = "0.2.31"
+clap_mangen = "0.2.33"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "1.1.0"
 which = "8.0.2"
