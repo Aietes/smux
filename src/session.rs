@@ -204,6 +204,7 @@ mod tests {
         let config = Config {
             settings: Settings {
                 default_template: Some("default".to_owned()),
+                ..Default::default()
             },
             templates: HashMap::from([
                 (
@@ -275,6 +276,7 @@ mod tests {
         let config = Config {
             settings: Settings {
                 default_template: Some("default".to_owned()),
+                ..Default::default()
             },
             templates: HashMap::from([(
                 "default".to_owned(),

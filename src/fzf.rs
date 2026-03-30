@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail};
 
 use crate::process::{CommandRunner, default_runner};
+use crate::ui::DisplayStyle;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EntryKind {
@@ -18,18 +19,18 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub fn session(value: String) -> Self {
+    pub fn session(style: DisplayStyle, value: String) -> Self {
         Self {
             kind: EntryKind::Session,
-            label: format!("session  {value}"),
+            label: style.session_label(&value),
             value,
         }
     }
 
-    pub fn directory(value: String) -> Self {
+    pub fn directory(style: DisplayStyle, value: String) -> Self {
         Self {
             kind: EntryKind::Directory,
-            label: format!("dir      {value}"),
+            label: style.directory_label(&value),
             value,
         }
     }
@@ -59,25 +60,57 @@ impl Entry {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Choice {
+    pub label: String,
+    pub value: String,
+}
+
+impl Choice {
+    pub fn new(label: String, value: String) -> Self {
+        Self { label, value }
+    }
+
+    fn encode(&self) -> String {
+        format!("{}\t{}", self.value, self.label)
+    }
+
+    fn decode(line: &str) -> Result<Self> {
+        let mut parts = line.splitn(2, '\t');
+        let value = parts.next().context("missing choice value")?.to_owned();
+        let label = parts.next().context("missing choice label")?.to_owned();
+        Ok(Self { label, value })
+    }
+}
+
 pub fn select(entries: Vec<Entry>) -> Result<Option<Entry>> {
     select_with_runner(default_runner(), entries, "smux> ")
 }
 
-pub fn select_value(prompt: &str, values: Vec<String>) -> Result<Option<String>> {
-    select_value_with_runner(default_runner(), prompt, values)
+pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>> {
+    select_value_with_runner(default_runner(), prompt, choices)
 }
 
 fn select_value_with_runner(
     runner: Arc<dyn CommandRunner>,
     prompt: &str,
-    values: Vec<String>,
+    choices: Vec<Choice>,
 ) -> Result<Option<String>> {
     let args = vec![
+        "--delimiter".to_owned(),
+        "\t".to_owned(),
+        "--with-nth".to_owned(),
+        "2".to_owned(),
         "--prompt".to_owned(),
         prompt.to_owned(),
         "--no-sort".to_owned(),
     ];
-    let input = values.join("\n") + "\n";
+    let input = choices
+        .into_iter()
+        .map(|choice| choice.encode())
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
@@ -97,7 +130,7 @@ fn select_value_with_runner(
         return Ok(None);
     }
 
-    Ok(Some(selection.to_owned()))
+    Ok(Some(Choice::decode(selection)?.value))
 }
 
 fn select_with_runner(
@@ -148,7 +181,9 @@ mod tests {
 
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner};
 
-    use super::{Entry, EntryKind, select_value_with_runner, select_with_runner};
+    use super::{Choice, Entry, EntryKind, select_value_with_runner, select_with_runner};
+    use crate::config::IconMode;
+    use crate::ui::DisplayStyle;
 
     #[test]
     fn entry_round_trip() {
@@ -176,7 +211,10 @@ mod tests {
 
         let result = select_with_runner(
             runner.clone(),
-            vec![Entry::directory("/tmp/example".to_owned())],
+            vec![Entry::directory(
+                DisplayStyle::from_icon_mode(IconMode::Never),
+                "/tmp/example".to_owned(),
+            )],
             "smux> ",
         )
         .expect("selection should succeed");
@@ -198,19 +236,25 @@ mod tests {
                 success: true,
                 code: Some(0),
             },
-            stdout: b"rust\n".to_vec(),
+            stdout: b"rust\ttemplate rust\n".to_vec(),
             stderr: Vec::new(),
         }));
 
         let result = select_value_with_runner(
             runner.clone(),
             "template> ",
-            vec!["default".to_owned(), "rust".to_owned()],
+            vec![
+                Choice::new("template default".to_owned(), "default".to_owned()),
+                Choice::new("template rust".to_owned(), "rust".to_owned()),
+            ],
         )
         .expect("selection should succeed");
 
         assert_eq!(result.as_deref(), Some("rust"));
         let recorded = runner.recorded();
-        assert_eq!(recorded[0].stdin.as_deref(), Some("default\nrust\n"));
+        assert_eq!(
+            recorded[0].stdin.as_deref(),
+            Some("default\ttemplate default\nrust\ttemplate rust\n")
+        );
     }
 }

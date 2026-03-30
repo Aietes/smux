@@ -9,6 +9,7 @@ use crate::doctor;
 use crate::fzf;
 use crate::session;
 use crate::tmux::Tmux;
+use crate::ui::DisplayStyle;
 use crate::util;
 use crate::zoxide;
 
@@ -105,15 +106,16 @@ fn run_select(
     no_project_detect: bool,
 ) -> Result<()> {
     let mut entries = Vec::new();
+    let display_style = DisplayStyle::from_config(config);
 
     for session in tmux.list_sessions()? {
-        entries.push(fzf::Entry::session(session));
+        entries.push(fzf::Entry::session(display_style, session));
     }
 
     match zoxide::list_directories() {
         Ok(directories) => {
             for directory in directories {
-                entries.push(fzf::Entry::directory(directory));
+                entries.push(fzf::Entry::directory(display_style, directory));
             }
         }
         Err(error) => eprintln!("warning: {error:#}"),
@@ -134,7 +136,7 @@ fn run_select(
         fzf::EntryKind::Session => session::switch_existing(tmux, &selection.value),
         fzf::EntryKind::Directory => {
             let template = if choose_template {
-                choose_template_name(config)?
+                choose_template_name(config, display_style)?
             } else {
                 None
             };
@@ -151,15 +153,23 @@ fn run_select(
     }
 }
 
-fn choose_template_name(config: Option<&config::Config>) -> Result<Option<String>> {
+fn choose_template_name(
+    config: Option<&config::Config>,
+    display_style: DisplayStyle,
+) -> Result<Option<String>> {
     let mut template_names = config
         .map(|config| config.templates.keys().cloned().collect::<Vec<_>>())
         .unwrap_or_default();
     template_names.sort();
     template_names.insert(0, BUILTIN_TEMPLATE_LABEL.to_owned());
 
-    let choice = fzf::select_value("template> ", template_names)?
-        .context("template selection was cancelled")?;
+    let choices = template_names
+        .into_iter()
+        .map(|name| fzf::Choice::new(display_style.template_label(&name), name))
+        .collect();
+
+    let choice =
+        fzf::select_value("template> ", choices)?.context("template selection was cancelled")?;
 
     if choice == BUILTIN_TEMPLATE_LABEL {
         Ok(Some(session::BUILTIN_TEMPLATE_NAME.to_owned()))

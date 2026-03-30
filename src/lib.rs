@@ -8,5 +8,6 @@ pub mod process;
 pub mod session;
 pub mod templates;
 pub mod tmux;
+pub mod ui;
 pub mod util;
 pub mod zoxide;

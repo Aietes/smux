@@ -112,6 +112,7 @@ Example:
 ```toml
 [settings]
 default_template = "default"
+icons = "auto"
 
 [templates.default]
 startup_window = "main"
@@ -130,9 +131,11 @@ session_name = "example"
 ```toml
 [settings]
 default_template = "default"
+icons = "auto"
 ```
 
 - `default_template` sets the template used when no project template or CLI override applies
+- `icons` controls picker icons: `auto`, `always`, or `never`
 
 ### `templates`
 
@@ -204,6 +207,23 @@ bind-key f display-popup -w 70% -h 70% -E "smux select"
 ```
 
 That binding is optional. `smux select` can also be run directly in a pane or outside tmux.
+
+## Icons
+
+The selector can render Nerd Font icons for sessions, directories, and templates.
+
+```toml
+[settings]
+icons = "auto"
+```
+
+Modes:
+
+- `auto` enables icons when the terminal looks Unicode-capable
+- `always` forces icons on
+- `never` forces plain text labels
+
+`smux doctor` reports the configured icon mode and the effective result. Font support itself is not detectable, so `auto` is a best-effort terminal check rather than a guarantee.
 
 ## Shell Completions
 

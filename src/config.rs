@@ -9,6 +9,7 @@ use crate::util;
 
 pub const STARTER_CONFIG: &str = r#"[settings]
 default_template = "default"
+icons = "auto"
 
 [templates.default]
 startup_window = "main"
@@ -53,6 +54,27 @@ pub struct Config {
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Settings {
     pub default_template: Option<String>,
+    #[serde(default)]
+    pub icons: IconMode,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Default, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum IconMode {
+    #[default]
+    Auto,
+    Always,
+    Never,
+}
+
+impl IconMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Always => "always",
+            Self::Never => "never",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -247,7 +269,7 @@ pub fn resolve_project<'a>(config: &'a Config, path: &Path) -> Result<Option<Res
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, STARTER_CONFIG, load, resolve_project, validate};
+    use super::{Config, IconMode, STARTER_CONFIG, load, resolve_project, validate};
     use anyhow::Result;
     use std::fs;
     use std::path::Path;
@@ -258,6 +280,7 @@ mod tests {
         validate(&config)?;
         assert!(config.templates.contains_key("default"));
         assert!(config.projects.contains_key("example"));
+        assert_eq!(config.settings.icons, IconMode::Auto);
         Ok(())
     }
 

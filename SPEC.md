@@ -202,6 +202,7 @@ Top-level config sections:
 ```toml
 [settings]
 default_template = "default"
+icons = "auto"
 
 [templates.default]
 startup_window = "main"
@@ -245,6 +246,14 @@ default_template = "default"
 Fields:
 
 - `default_template: string?`
+- `icons: "auto" | "always" | "never"` default `auto`
+
+Icon behavior:
+
+- session, directory, and template pickers may render Nerd Font icons
+- icon rendering must remain optional
+- `auto` may use terminal capability heuristics, but font support is not reliably detectable
+- `doctor` should report configured icon mode and effective icon enablement
 
 ### `[templates.<name>]`
 

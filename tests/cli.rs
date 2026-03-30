@@ -37,7 +37,8 @@ fn doctor_succeeds_with_missing_config_file() {
     command
         .assert()
         .success()
-        .stdout(contains("config: missing"));
+        .stdout(contains("config: missing"))
+        .stdout(contains("icons:"));
 }
 
 #[test]
