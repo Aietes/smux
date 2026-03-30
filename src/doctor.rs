@@ -3,18 +3,41 @@ use std::path::Path;
 use anyhow::{Result, bail};
 
 use crate::config::{self, IconMode};
+use crate::tmux::Tmux;
 use crate::ui::DisplayStyle;
 use crate::util;
+use crate::zoxide;
 
 pub fn run(config_path: Option<&Path>) -> Result<()> {
     let tmux = util::command_available("tmux");
     let fzf = util::command_available("fzf");
-    let zoxide = util::command_available("zoxide");
+    let zoxide_available = util::command_available("zoxide");
     let mut has_error = false;
 
     println!("tmux: {}", status(tmux));
     println!("fzf: {}", status(fzf));
-    println!("zoxide: {}", status(zoxide));
+    println!("zoxide: {}", status(zoxide_available));
+
+    if tmux {
+        match Tmux::new().list_sessions() {
+            Ok(sessions) => println!("tmux_sessions: {}", sessions.len()),
+            Err(error) => {
+                println!("tmux_sessions: error");
+                println!("tmux_sessions_error: {error:#}");
+            }
+        }
+    } else {
+        println!("tmux_sessions: unavailable");
+    }
+
+    if zoxide_available {
+        match zoxide::list_directories() {
+            Ok(directories) => println!("zoxide_directories: {}", directories.len()),
+            Err(error) => println!("zoxide_directories: error ({error:#})"),
+        }
+    } else {
+        println!("zoxide_directories: unavailable");
+    }
 
     if !tmux || !fzf {
         has_error = true;

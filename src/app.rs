@@ -107,22 +107,34 @@ fn run_select(
 ) -> Result<()> {
     let mut entries = Vec::new();
     let display_style = DisplayStyle::from_config(config);
+    let sessions = tmux.list_sessions()?;
+    let session_count = sessions.len();
 
-    for session in tmux.list_sessions()? {
+    for session in sessions {
         entries.push(fzf::Entry::session(display_style, session));
     }
 
+    let mut zoxide_available = true;
+    let mut directory_count = 0;
+
     match zoxide::list_directories() {
         Ok(directories) => {
+            directory_count = directories.len();
             for directory in directories {
                 entries.push(fzf::Entry::directory(display_style, directory));
             }
         }
-        Err(error) => eprintln!("warning: {error:#}"),
+        Err(error) => {
+            zoxide_available = false;
+            eprintln!("warning: {error:#}");
+        }
     }
 
     if entries.is_empty() {
-        bail!("no tmux sessions or zoxide directories available");
+        bail!(
+            "{}",
+            empty_select_message(session_count, directory_count, zoxide_available)
+        );
     }
 
     let Some(selection) = fzf::select(entries)? else {
@@ -187,9 +199,25 @@ fn resolve_template_choice(choice: Option<String>) -> Option<String> {
     }
 }
 
+fn empty_select_message(
+    session_count: usize,
+    directory_count: usize,
+    zoxide_available: bool,
+) -> String {
+    match (session_count, directory_count, zoxide_available) {
+        (0, 0, true) => {
+            "nothing to select: tmux has no sessions and zoxide has no indexed directories; run `smux connect <path>` or add directories to zoxide first".to_owned()
+        }
+        (0, 0, false) => {
+            "nothing to select: tmux has no sessions and zoxide is unavailable; run `smux connect <path>` or install zoxide".to_owned()
+        }
+        _ => "nothing to select".to_owned(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::resolve_template_choice;
+    use super::{empty_select_message, resolve_template_choice};
     use crate::session;
 
     #[test]
@@ -211,5 +239,16 @@ mod tests {
             resolve_template_choice(Some("rust".to_owned())).as_deref(),
             Some("rust")
         );
+    }
+
+    #[test]
+    fn empty_select_message_is_actionable_with_empty_sources() {
+        assert!(empty_select_message(0, 0, true).contains("smux connect <path>"));
+        assert!(empty_select_message(0, 0, true).contains("zoxide"));
+    }
+
+    #[test]
+    fn empty_select_message_mentions_missing_zoxide() {
+        assert!(empty_select_message(0, 0, false).contains("install zoxide"));
     }
 }
