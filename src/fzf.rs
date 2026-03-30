@@ -1,7 +1,8 @@
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
+
+use crate::process::{CommandRunner, default_runner};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EntryKind {
@@ -59,32 +60,34 @@ impl Entry {
 }
 
 pub fn select(entries: Vec<Entry>) -> Result<Option<Entry>> {
-    select_with_prompt(entries, "smux> ")
+    select_with_runner(default_runner(), entries, "smux> ")
 }
 
 pub fn select_value(prompt: &str, values: Vec<String>) -> Result<Option<String>> {
-    let mut child = Command::new("fzf")
-        .args(["--prompt", prompt, "--no-sort"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
+    select_value_with_runner(default_runner(), prompt, values)
+}
+
+fn select_value_with_runner(
+    runner: Arc<dyn CommandRunner>,
+    prompt: &str,
+    values: Vec<String>,
+) -> Result<Option<String>> {
+    let args = vec![
+        "--prompt".to_owned(),
+        prompt.to_owned(),
+        "--no-sort".to_owned(),
+    ];
+    let input = values.join("\n") + "\n";
+    let output = runner
+        .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
 
-    {
-        let mut stdin = child.stdin.take().context("failed to open fzf stdin")?;
-        for value in values {
-            writeln!(stdin, "{value}").context("failed to write picker value")?;
-        }
-    }
-
-    let output = child.wait_with_output().context("failed to wait for fzf")?;
-
-    if output.status.code() == Some(130) {
+    if output.status.code == Some(130) {
         return Ok(None);
     }
 
-    if !output.status.success() {
-        bail!("fzf exited with status {}", output.status);
+    if !output.status.success {
+        bail!("fzf exited with status {:?}", output.status.code);
     }
 
     let selection = String::from_utf8(output.stdout).context("fzf output was not valid utf-8")?;
@@ -97,37 +100,36 @@ pub fn select_value(prompt: &str, values: Vec<String>) -> Result<Option<String>>
     Ok(Some(selection.to_owned()))
 }
 
-fn select_with_prompt(entries: Vec<Entry>, prompt: &str) -> Result<Option<Entry>> {
-    let mut child = Command::new("fzf")
-        .args([
-            "--delimiter",
-            "\t",
-            "--with-nth",
-            "3",
-            "--prompt",
-            prompt,
-            "--no-sort",
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
+fn select_with_runner(
+    runner: Arc<dyn CommandRunner>,
+    entries: Vec<Entry>,
+    prompt: &str,
+) -> Result<Option<Entry>> {
+    let args = vec![
+        "--delimiter".to_owned(),
+        "\t".to_owned(),
+        "--with-nth".to_owned(),
+        "3".to_owned(),
+        "--prompt".to_owned(),
+        prompt.to_owned(),
+        "--no-sort".to_owned(),
+    ];
+    let input = entries
+        .into_iter()
+        .map(|entry| entry.encode())
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let output = runner
+        .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
 
-    {
-        let mut stdin = child.stdin.take().context("failed to open fzf stdin")?;
-        for entry in entries {
-            writeln!(stdin, "{}", entry.encode()).context("failed to write picker entry")?;
-        }
-    }
-
-    let output = child.wait_with_output().context("failed to wait for fzf")?;
-
-    if output.status.code() == Some(130) {
+    if output.status.code == Some(130) {
         return Ok(None);
     }
 
-    if !output.status.success() {
-        bail!("fzf exited with status {}", output.status);
+    if !output.status.success {
+        bail!("fzf exited with status {:?}", output.status.code);
     }
 
     let selection = String::from_utf8(output.stdout).context("fzf output was not valid utf-8")?;
@@ -142,17 +144,73 @@ fn select_with_prompt(entries: Vec<Entry>, prompt: &str) -> Result<Option<Entry>
 
 #[cfg(test)]
 mod tests {
-    use super::{Entry, EntryKind};
+    use std::sync::Arc;
+
+    use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner};
+
+    use super::{Entry, EntryKind, select_value_with_runner, select_with_runner};
 
     #[test]
     fn entry_round_trip() {
         let entry = Entry {
             kind: EntryKind::Directory,
-            label: "dir ~/code/example".to_owned(),
+            label: "dir      /tmp/example".to_owned(),
             value: "/tmp/example".to_owned(),
         };
 
         let decoded = Entry::decode(&entry.encode()).expect("entry should decode");
         assert_eq!(decoded, entry);
+    }
+
+    #[test]
+    fn selector_passes_entries_to_fzf() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"dir\t/tmp/example\tdir      /tmp/example\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let result = select_with_runner(
+            runner.clone(),
+            vec![Entry::directory("/tmp/example".to_owned())],
+            "smux> ",
+        )
+        .expect("selection should succeed");
+
+        assert!(result.is_some());
+        let recorded = runner.recorded();
+        assert_eq!(recorded[0].program, "fzf");
+        assert_eq!(
+            recorded[0].stdin.as_deref(),
+            Some("dir\t/tmp/example\tdir      /tmp/example\n")
+        );
+    }
+
+    #[test]
+    fn template_selector_returns_selected_value() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"rust\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let result = select_value_with_runner(
+            runner.clone(),
+            "template> ",
+            vec!["default".to_owned(), "rust".to_owned()],
+        )
+        .expect("selection should succeed");
+
+        assert_eq!(result.as_deref(), Some("rust"));
+        let recorded = runner.recorded();
+        assert_eq!(recorded[0].stdin.as_deref(), Some("default\nrust\n"));
     }
 }

@@ -1,27 +1,47 @@
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 
 use crate::config::SplitDirection;
+use crate::process::{CommandOutput, CommandRunner, default_runner};
 use crate::templates::SessionPlan;
 use crate::util;
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct Tmux;
+#[derive(Clone)]
+pub struct Tmux {
+    runner: Arc<dyn CommandRunner>,
+}
+
+impl Default for Tmux {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Tmux {
     pub fn new() -> Self {
-        Self
+        Self {
+            runner: default_runner(),
+        }
+    }
+
+    pub fn with_runner(runner: Arc<dyn CommandRunner>) -> Self {
+        Self { runner }
     }
 
     pub fn list_sessions(&self) -> Result<Vec<String>> {
-        let output = Command::new("tmux")
-            .args(["list-sessions", "-F", "#{session_name}"])
-            .output();
+        let output = self.runner.run_capture(
+            "tmux",
+            &[
+                "list-sessions".to_owned(),
+                "-F".to_owned(),
+                "#{session_name}".to_owned(),
+            ],
+        );
 
         match output {
-            Ok(output) if output.status.success() => {
+            Ok(output) if output.status.success => {
                 let stdout =
                     String::from_utf8(output.stdout).context("tmux output was not utf-8")?;
                 Ok(stdout
@@ -48,12 +68,19 @@ impl Tmux {
     }
 
     pub fn has_session(&self, session: &str) -> Result<bool> {
-        let output = Command::new("tmux")
-            .args(["has-session", "-t", session])
-            .output()
+        let output = self
+            .runner
+            .run_capture(
+                "tmux",
+                &[
+                    "has-session".to_owned(),
+                    "-t".to_owned(),
+                    session.to_owned(),
+                ],
+            )
             .context("failed to execute tmux has-session")?;
 
-        Ok(output.status.success())
+        Ok(output.status.success)
     }
 
     pub fn ensure_session_exists(&self, session: &str) -> Result<()> {
@@ -66,8 +93,8 @@ impl Tmux {
 
     pub fn create_session(&self, session: &str, directory: &Path) -> Result<()> {
         let directory = util::path_to_string(directory)?;
-        let output = Command::new("tmux")
-            .args([
+        let output = self
+            .run_tmux_capture([
                 "new-session",
                 "-d",
                 "-s",
@@ -77,10 +104,9 @@ impl Tmux {
                 "-n",
                 "main",
             ])
-            .output()
             .context("failed to execute tmux new-session")?;
 
-        if output.status.success() {
+        if output.status.success {
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -117,27 +143,29 @@ impl Tmux {
     }
 
     pub fn switch_or_attach(&self, session: &str) -> Result<()> {
-        let mut command = if util::inside_tmux() {
-            let mut command = Command::new("tmux");
-            command.args(["switch-client", "-t", session]);
-            command
+        let args = if util::inside_tmux() {
+            vec![
+                "switch-client".to_owned(),
+                "-t".to_owned(),
+                session.to_owned(),
+            ]
         } else {
-            let mut command = Command::new("tmux");
-            command.args(["attach-session", "-t", session]);
-            command
+            vec![
+                "attach-session".to_owned(),
+                "-t".to_owned(),
+                session.to_owned(),
+            ]
         };
 
-        let status = command
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()
+        let status = self
+            .runner
+            .run_inherit("tmux", &args)
             .context("failed to execute tmux switch/attach")?;
 
-        if status.success() {
+        if status.success {
             Ok(())
         } else {
-            bail!("tmux switch/attach failed with status {status}")
+            bail!("tmux switch/attach failed with status {:?}", status.code)
         }
     }
 
@@ -254,9 +282,9 @@ impl Tmux {
     }
 
     fn run_tmux<const N: usize>(&self, args: [&str; N]) -> Result<()> {
-        let output = Command::new("tmux").args(args).output()?;
+        let output = self.run_tmux_capture(args)?;
 
-        if output.status.success() {
+        if output.status.success {
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -265,13 +293,132 @@ impl Tmux {
     }
 
     fn run_tmux_owned(&self, args: Vec<String>) -> Result<()> {
-        let output = Command::new("tmux").args(&args).output()?;
+        let output = self.runner.run_capture("tmux", &args)?;
 
-        if output.status.success() {
+        if output.status.success {
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
             bail!("{}", stderr.trim())
         }
+    }
+
+    fn run_tmux_capture<const N: usize>(&self, args: [&str; N]) -> Result<CommandOutput> {
+        let args = args.into_iter().map(ToOwned::to_owned).collect::<Vec<_>>();
+        self.runner.run_capture("tmux", &args).map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner, IoMode};
+    use crate::templates::{PanePlan, SessionPlan, WindowPlan};
+
+    use super::Tmux;
+
+    #[test]
+    fn outside_tmux_uses_inherited_stdio_for_attach() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_inherit(Ok(CommandStatus {
+            success: true,
+            code: Some(0),
+        }));
+
+        unsafe {
+            std::env::remove_var("TMUX");
+        }
+
+        let tmux = Tmux::with_runner(runner.clone());
+        tmux.switch_or_attach("demo")
+            .expect("attach should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].program, "tmux");
+        assert_eq!(recorded[0].args, vec!["attach-session", "-t", "demo"]);
+        assert_eq!(recorded[0].io_mode, IoMode::Inherit);
+    }
+
+    #[test]
+    fn session_plan_emits_expected_tmux_commands() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        for _ in 0..8 {
+            runner.push_capture(Ok(CommandOutput {
+                status: CommandStatus {
+                    success: true,
+                    code: Some(0),
+                },
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            }));
+        }
+
+        let tmux = Tmux::with_runner(runner.clone());
+        let plan = SessionPlan {
+            session_name: "demo".to_owned(),
+            startup_window: "editor".to_owned(),
+            windows: vec![
+                WindowPlan {
+                    name: "editor".to_owned(),
+                    cwd: "/tmp/demo".into(),
+                    command: Some("nvim".to_owned()),
+                    layout: None,
+                    panes: Vec::new(),
+                },
+                WindowPlan {
+                    name: "run".to_owned(),
+                    cwd: "/tmp/demo".into(),
+                    command: None,
+                    layout: Some("main-horizontal".to_owned()),
+                    panes: vec![
+                        PanePlan {
+                            split: None,
+                            size: None,
+                            cwd: "/tmp/demo".into(),
+                            command: Some("cargo run".to_owned()),
+                        },
+                        PanePlan {
+                            split: Some(crate::config::SplitDirection::Vertical),
+                            size: None,
+                            cwd: "/tmp/demo".into(),
+                            command: Some("cargo test".to_owned()),
+                        },
+                    ],
+                },
+            ],
+        };
+
+        tmux.create_session_from_plan(&plan)
+            .expect("session plan should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded[0].args[..4], ["new-session", "-d", "-s", "demo"]);
+        assert_eq!(
+            recorded[1].args,
+            vec!["send-keys", "-t", "demo:editor", "nvim", "C-m"]
+        );
+        assert_eq!(
+            recorded[2].args,
+            vec!["new-window", "-t", "demo", "-n", "run", "-c", "/tmp/demo"]
+        );
+        assert_eq!(
+            recorded[3].args,
+            vec!["send-keys", "-t", "demo:run", "cargo run", "C-m"]
+        );
+        assert_eq!(
+            recorded[4].args,
+            vec!["split-window", "-t", "demo:run", "-v", "-c", "/tmp/demo"]
+        );
+        assert_eq!(
+            recorded[5].args,
+            vec!["send-keys", "-t", "demo:run", "cargo test", "C-m"]
+        );
+        assert_eq!(
+            recorded[6].args,
+            vec!["select-layout", "-t", "demo:run", "main-horizontal"]
+        );
+        assert_eq!(recorded[7].args, vec!["select-window", "-t", "demo:editor"]);
     }
 }
