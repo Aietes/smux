@@ -1,28 +1,33 @@
 use std::env;
 
-use crate::config::{Config, IconMode};
+use crate::config::{Config, IconColors, IconMode};
 
 const SESSION_ICON: &str = "";
 const DIRECTORY_ICON: &str = "󰉋";
 const TEMPLATE_ICON: &str = "󰙅";
 const ANSI_RESET: &str = "\x1b[0m";
-const SESSION_COLOR: &str = "\x1b[38;5;75m";
-const DIRECTORY_COLOR: &str = "\x1b[38;5;108m";
-const TEMPLATE_COLOR: &str = "\x1b[38;5;179m";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DisplayStyle {
     icons_enabled: bool,
     icon_mode: IconMode,
+    icon_colors: IconColors,
 }
 
 impl DisplayStyle {
     pub fn from_config(config: Option<&Config>) -> Self {
-        let icon_mode = config.map_or(IconMode::Auto, |config| config.settings.icons);
-        Self::from_icon_mode(icon_mode)
+        let (icon_mode, icon_colors) = config.map_or_else(
+            || (IconMode::Auto, IconColors::default()),
+            |config| (config.settings.icons, config.settings.icon_colors),
+        );
+        Self::new(icon_mode, icon_colors)
     }
 
     pub fn from_icon_mode(icon_mode: IconMode) -> Self {
+        Self::new(icon_mode, IconColors::default())
+    }
+
+    pub fn new(icon_mode: IconMode, icon_colors: IconColors) -> Self {
         let icons_enabled = match icon_mode {
             IconMode::Always => true,
             IconMode::Never => false,
@@ -32,6 +37,7 @@ impl DisplayStyle {
         Self {
             icons_enabled,
             icon_mode,
+            icon_colors,
         }
     }
 
@@ -43,21 +49,25 @@ impl DisplayStyle {
         self.icon_mode
     }
 
+    pub fn icon_colors(self) -> IconColors {
+        self.icon_colors
+    }
+
     pub fn session_label(self, value: &str) -> String {
-        self.label(SESSION_ICON, SESSION_COLOR, "session", value)
+        self.label(SESSION_ICON, self.icon_colors.session, "session", value)
     }
 
     pub fn directory_label(self, value: &str) -> String {
-        self.label(DIRECTORY_ICON, DIRECTORY_COLOR, "dir", value)
+        self.label(DIRECTORY_ICON, self.icon_colors.directory, "dir", value)
     }
 
     pub fn template_label(self, value: &str) -> String {
-        self.label(TEMPLATE_ICON, TEMPLATE_COLOR, "template", value)
+        self.label(TEMPLATE_ICON, self.icon_colors.template, "template", value)
     }
 
-    fn label(self, icon: &str, color: &str, text: &str, value: &str) -> String {
+    fn label(self, icon: &str, color: u8, text: &str, value: &str) -> String {
         if self.icons_enabled {
-            format!("{color}{icon}{ANSI_RESET}  {value}")
+            format!("\x1b[38;5;{color}m{icon}{ANSI_RESET}  {value}")
         } else {
             format!("{text:<8} {value}")
         }
@@ -87,7 +97,7 @@ fn locale_value() -> Option<std::ffi::OsString> {
 #[cfg(test)]
 mod tests {
     use super::DisplayStyle;
-    use crate::config::IconMode;
+    use crate::config::{IconColors, IconMode};
 
     #[test]
     fn always_mode_enables_icons() {
@@ -106,5 +116,25 @@ mod tests {
         assert!(!style.icons_enabled());
         assert_eq!(style.directory_label("/tmp/demo"), "dir      /tmp/demo");
         assert_eq!(style.template_label("rust"), "template rust");
+    }
+
+    #[test]
+    fn custom_palette_changes_icon_colors() {
+        let style = DisplayStyle::new(
+            IconMode::Always,
+            IconColors {
+                session: 33,
+                directory: 44,
+                template: 55,
+            },
+        );
+
+        assert!(style.session_label("demo").starts_with("\u{1b}[38;5;33m"));
+        assert!(
+            style
+                .directory_label("/tmp/demo")
+                .starts_with("\u{1b}[38;5;44m")
+        );
+        assert!(style.template_label("rust").starts_with("\u{1b}[38;5;55m"));
     }
 }

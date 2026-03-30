@@ -114,6 +114,11 @@ Example:
 default_template = "default"
 icons = "auto"
 
+[settings.icon_colors]
+session = 75
+directory = 108
+template = 179
+
 [templates.default]
 startup_window = "main"
 
@@ -136,6 +141,7 @@ icons = "auto"
 
 - `default_template` sets the template used when no project template or CLI override applies
 - `icons` controls picker icons: `auto`, `always`, or `never`
+- `icon_colors` sets ANSI-256 colors for session, directory, and template icons
 
 ### `templates`
 
@@ -215,6 +221,11 @@ The selector can render Nerd Font icons for sessions, directories, and templates
 ```toml
 [settings]
 icons = "auto"
+
+[settings.icon_colors]
+session = 75
+directory = 108
+template = 179
 ```
 
 Modes:
@@ -222,6 +233,8 @@ Modes:
 - `auto` enables icons when the terminal looks Unicode-capable
 - `always` forces icons on
 - `never` forces plain text labels
+
+`icon_colors` uses ANSI-256 color indexes, so you can tune the icon palette to your terminal theme.
 
 `smux doctor` reports the configured icon mode and the effective result. Font support itself is not detectable, so `auto` is a best-effort terminal check rather than a guarantee.
 

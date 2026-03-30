@@ -204,6 +204,11 @@ Top-level config sections:
 default_template = "default"
 icons = "auto"
 
+[settings.icon_colors]
+session = 75
+directory = 108
+template = 179
+
 [templates.default]
 startup_window = "main"
 
@@ -247,12 +252,16 @@ Fields:
 
 - `default_template: string?`
 - `icons: "auto" | "always" | "never"` default `auto`
+- `icon_colors.session: integer?` default `75`
+- `icon_colors.directory: integer?` default `108`
+- `icon_colors.template: integer?` default `179`
 
 Icon behavior:
 
 - session, directory, and template pickers may render Nerd Font icons
 - icon rendering must remain optional
 - `auto` may use terminal capability heuristics, but font support is not reliably detectable
+- icon colors may be configured with ANSI-256 palette indexes
 - `doctor` should report configured icon mode and effective icon enablement
 
 ### `[templates.<name>]`

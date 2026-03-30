@@ -11,6 +11,11 @@ pub const STARTER_CONFIG: &str = r#"[settings]
 default_template = "default"
 icons = "auto"
 
+[settings.icon_colors]
+session = 75
+directory = 108
+template = 179
+
 [templates.default]
 startup_window = "main"
 
@@ -56,6 +61,8 @@ pub struct Settings {
     pub default_template: Option<String>,
     #[serde(default)]
     pub icons: IconMode,
+    #[serde(default)]
+    pub icon_colors: IconColors,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Default, Eq, PartialEq)]
@@ -73,6 +80,23 @@ impl IconMode {
             Self::Auto => "auto",
             Self::Always => "always",
             Self::Never => "never",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq)]
+pub struct IconColors {
+    pub session: u8,
+    pub directory: u8,
+    pub template: u8,
+}
+
+impl Default for IconColors {
+    fn default() -> Self {
+        Self {
+            session: 75,
+            directory: 108,
+            template: 179,
         }
     }
 }
@@ -269,7 +293,7 @@ pub fn resolve_project<'a>(config: &'a Config, path: &Path) -> Result<Option<Res
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, IconMode, STARTER_CONFIG, load, resolve_project, validate};
+    use super::{Config, IconColors, IconMode, STARTER_CONFIG, load, resolve_project, validate};
     use anyhow::Result;
     use std::fs;
     use std::path::Path;
@@ -281,6 +305,7 @@ mod tests {
         assert!(config.templates.contains_key("default"));
         assert!(config.projects.contains_key("example"));
         assert_eq!(config.settings.icons, IconMode::Auto);
+        assert_eq!(config.settings.icon_colors, IconColors::default());
         Ok(())
     }
 
