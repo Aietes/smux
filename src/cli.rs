@@ -41,11 +41,27 @@ pub enum Commands {
     /// Print current tmux session names.
     ListSessions,
     /// Print configured template names.
-    ListTemplates,
+    ListTemplates {
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::FilePath)]
+        config: Option<PathBuf>,
+    },
     /// Print configured project entries.
-    ListProjects,
+    ListProjects {
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::FilePath)]
+        config: Option<PathBuf>,
+    },
     /// Validate runtime dependencies and basic environment state.
-    Doctor,
+    Doctor {
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::FilePath)]
+        config: Option<PathBuf>,
+    },
     /// Write an initial configuration file.
-    Init,
+    Init {
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::FilePath)]
+        config: Option<PathBuf>,
+    },
 }

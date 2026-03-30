@@ -18,6 +18,31 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf> {
         .with_context(|| format!("failed to resolve path {}", expanded.display()))
 }
 
+pub fn expand_and_normalize_path(path: &Path) -> Result<PathBuf> {
+    let expanded = expand_tilde(path);
+    expanded
+        .canonicalize()
+        .with_context(|| format!("failed to resolve path {}", expanded.display()))
+}
+
+pub fn expand_and_absolutize_path(path: &Path) -> Result<PathBuf> {
+    let expanded = expand_tilde(path);
+
+    if expanded.exists() {
+        return expanded
+            .canonicalize()
+            .with_context(|| format!("failed to resolve path {}", expanded.display()));
+    }
+
+    if expanded.is_absolute() {
+        Ok(expanded)
+    } else {
+        let current_dir =
+            std::env::current_dir().context("failed to resolve current working directory")?;
+        Ok(current_dir.join(expanded))
+    }
+}
+
 pub fn session_name_from_path(path: &Path) -> Result<String> {
     let basename = path
         .file_name()
