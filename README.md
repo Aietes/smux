@@ -1,25 +1,61 @@
 # smux
 
-Small Rust CLI for tmux session selection and creation.
+`smux` is a small Rust CLI for tmux session selection and creation.
 
-`smux` is a thin Rust wrapper around:
+It combines:
 
 - `tmux` for session management
 - `fzf` for interactive selection
 - `zoxide` for recent-directory discovery
-- TOML templates for window and pane layout
+- TOML templates for tmux window and pane layouts
 
-It is designed to stay explicit and shell-friendly rather than becoming a TUI framework or tmux replacement.
+The goal is to stay explicit and shell-friendly. `smux` is not a tmux replacement, a general TUI framework, or a tmuxinator clone.
+
+## What It Does
+
+`smux` gives you one fast entrypoint for the common tmux workflow:
+
+- jump to an existing tmux session
+- pick a recent directory and create or reuse a session for it
+- apply a simple template with windows, panes, layouts, and startup commands
+
+The main command is:
+
+```bash
+smux select
+```
+
+Inside tmux, it works well in a popup. Outside tmux, it still works in the terminal.
 
 ## Install
 
-### Development install
+### Runtime Dependencies
+
+`smux` expects:
+
+- `tmux`
+- `fzf`
+- `zoxide` recommended, but optional
+
+If `zoxide` is unavailable, `smux select` still works in session-only mode.
+
+### Download a Release
+
+When release artifacts are published, install `smux` by downloading the matching archive from GitHub Releases and placing the `smux` binary somewhere on your `PATH`.
+
+The release workflow also produces:
+
+- `man` pages
+- zsh completions
+- `SHA256SUMS`
+
+### Build From Source
 
 This repository uses Nix and `nix-direnv`.
 
 ```bash
 direnv allow
-cargo build
+cargo build --release
 ```
 
 The dev shell provides:
@@ -29,31 +65,21 @@ The dev shell provides:
 - `fzf`
 - `zoxide`
 
-### Runtime requirements
-
-`smux` expects these tools to be available at runtime:
-
-- `tmux`
-- `fzf`
-- `zoxide` optional, but recommended
-
-`zoxide` is optional because `smux select` can still work in session-only mode if `zoxide` is unavailable.
-
 ## Quickstart
 
-Initialize the default config:
+Create a starter config:
 
 ```bash
 smux init
 ```
 
-Default config location:
+Default config path:
 
 ```text
 ~/.config/smux/config.toml
 ```
 
-Inside tmux:
+Recommended tmux binding:
 
 ```tmux
 bind-key f display-popup -w 70% -h 70% -E "smux select"
@@ -68,46 +94,40 @@ smux connect --template rust ~/code/myapp
 smux doctor
 ```
 
-`smux select` behaves differently depending on where it is launched:
+`smux select` behavior depends on where it is launched:
 
-- inside a tmux popup wrapper, it appears inside the popup
-- inside a normal tmux pane, it runs `fzf` in that pane
+- inside a tmux popup wrapper, it appears in the popup
+- inside a tmux pane, it runs `fzf` in that pane
 - outside tmux, it runs `fzf` in the terminal
+
+Canceling the picker with `Esc` exits cleanly without creating or switching anything.
 
 ## Commands
 
 ```text
-smux select
-smux connect <path>
+smux select [--choose-template] [--no-project-detect] [--config <path>]
+smux connect [--template <name>] [--session-name <name>] [--config <path>] <path>
 smux switch <session>
 smux list-sessions
-smux list-templates
-smux list-projects
-smux doctor
-smux init
-smux completions zsh
-smux man
+smux list-templates [--config <path>]
+smux list-projects [--config <path>]
+smux doctor [--config <path>]
+smux init [--config <path>]
+smux completions zsh [--dir <path>]
+smux man [--dir <path>]
 ```
 
 Command notes:
 
 - `smux select` shows tmux sessions and zoxide directories in one selector
-- `smux connect <path>` creates or reuses a session for a directory
-- `smux switch <session>` switches to or attaches an existing session
-- `smux doctor` validates runtime dependencies and config health
+- `smux connect` creates or reuses a tmux session for a directory
+- `smux switch` switches to a session inside tmux or attaches outside tmux
+- `smux doctor` validates required tools, config, and reports selector source status
 - `smux init` writes a starter config if one does not already exist
 - `smux completions zsh` prints a zsh completion script or writes it to a directory
 - `smux man` prints a man page or writes man pages to a directory
 
-## Config
-
-The config format is TOML with three top-level sections:
-
-- `settings`
-- `templates`
-- `projects`
-
-Example:
+## Example Config
 
 ```toml
 [settings]
@@ -125,29 +145,6 @@ startup_window = "main"
 [[templates.default.windows]]
 name = "main"
 
-[projects.example]
-path = "~/code/example"
-template = "default"
-session_name = "example"
-```
-
-### `settings`
-
-```toml
-[settings]
-default_template = "default"
-icons = "auto"
-```
-
-- `default_template` sets the template used when no project template or CLI override applies
-- `icons` controls picker icons: `auto`, `always`, or `never`
-- `icon_colors` sets ANSI-256 colors for session, directory, and template icons
-
-### `templates`
-
-Templates define the tmux layout used during session creation.
-
-```toml
 [templates.rust]
 startup_window = "editor"
 
@@ -165,7 +162,41 @@ command = "cargo run"
 [[templates.rust.windows.panes]]
 split = "vertical"
 command = "cargo test"
+
+[projects.example]
+path = "~/code/example"
+template = "rust"
+session_name = "example"
 ```
+
+## Config Reference
+
+The config has three top-level sections:
+
+- `settings`
+- `templates`
+- `projects`
+
+### `settings`
+
+```toml
+[settings]
+default_template = "default"
+icons = "auto"
+
+[settings.icon_colors]
+session = 75
+directory = 108
+template = 179
+```
+
+- `default_template` sets the template used when no project template or CLI override applies
+- `icons` controls picker icons: `auto`, `always`, or `never`
+- `icon_colors` sets ANSI-256 colors for session, directory, and template icons
+
+### `templates`
+
+Templates define the tmux layout used during session creation.
 
 Supported fields:
 
@@ -184,13 +215,6 @@ Rules:
 
 Projects map known directories to template and session-name overrides.
 
-```toml
-[projects.myapp]
-path = "~/code/myapp"
-template = "rust"
-session_name = "myapp"
-```
-
 Template resolution order:
 
 1. `--template`
@@ -203,16 +227,6 @@ Session name resolution order:
 1. `--session-name`
 2. matching project session name
 3. sanitized directory basename
-
-## tmux Integration
-
-Recommended binding:
-
-```tmux
-bind-key f display-popup -w 70% -h 70% -E "smux select"
-```
-
-That binding is optional. `smux select` can also be run directly in a pane or outside tmux.
 
 ## Icons
 
@@ -234,9 +248,9 @@ Modes:
 - `always` forces icons on
 - `never` forces plain text labels
 
-`icon_colors` uses ANSI-256 color indexes, so you can tune the icon palette to your terminal theme.
+`icon_colors` uses ANSI-256 palette indexes, so you can tune the icon palette to your terminal theme.
 
-`smux doctor` reports the configured icon mode and the effective result. Font support itself is not detectable, so `auto` is a best-effort terminal check rather than a guarantee.
+`smux doctor` reports the configured icon mode, palette, and effective result. Font support itself is not reliably detectable, so `auto` is a best-effort terminal check rather than a guarantee.
 
 ## Shell Completions
 
@@ -252,6 +266,13 @@ Write zsh completions to a directory:
 smux completions zsh --dir ./target/generated/completions
 ```
 
+Typical install location:
+
+```bash
+mkdir -p ~/.local/share/zsh/site-functions
+smux completions zsh --dir ~/.local/share/zsh/site-functions
+```
+
 ## Man Pages
 
 Print the top-level man page to stdout:
@@ -260,11 +281,29 @@ Print the top-level man page to stdout:
 smux man
 ```
 
-Write man pages for the root command and subcommands to a directory:
+Write man pages to a directory:
 
 ```bash
 smux man --dir ./target/generated/man
 ```
+
+Typical install location:
+
+```bash
+mkdir -p ~/.local/share/man/man1
+smux man --dir ~/.local/share/man/man1
+```
+
+## Release Artifacts
+
+The GitHub release workflow builds and publishes:
+
+- platform-specific binary archives
+- `SHA256SUMS`
+- generated `man` pages
+- generated zsh completions
+
+That keeps the installation story simple for users who do not want to build from source.
 
 ## Development
 
@@ -277,7 +316,7 @@ cargo test
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-CI also verifies:
+CI verifies:
 
 - formatting
 - tests
@@ -285,7 +324,4 @@ CI also verifies:
 - zsh completion generation
 - man page generation
 
-## Status
-
-Core selector, connect, config, and template workflows are implemented.
-The detailed product scope and implementation notes live in `SPEC.md`.
+The detailed product scope and implementation notes live in `SPEC.md` and `docs/design.md`.
