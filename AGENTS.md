@@ -16,6 +16,7 @@ This file records repository-specific working instructions for agents operating 
 - Prefer small, explicit modules and simple subprocess-based integration with external tools.
 - Keep v1 focused. Do not add speculative features outside the spec without user approval.
 - When implementation begins, keep architecture, tests, and docs aligned with the current spec.
+- Before the first release, prefer the correct CLI and naming over compatibility shims. Breaking changes are acceptable while the project is unreleased.
 
 ## Commits
 
