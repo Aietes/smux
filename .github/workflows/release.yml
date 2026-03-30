@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package release archive
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          bash ./scripts/package-release.sh \
+            "${VERSION}" \
+            "${{ matrix.target }}" \
+            "target/${{ matrix.target }}/release/smux" \
+            dist
+
+      - name: Upload binary archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: smux-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  docs:
+    name: Generate docs artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate completions
+        run: cargo run --locked -- completions zsh --dir dist/completions
+
+      - name: Generate man pages
+        run: cargo run --locked -- man --dir dist/man
+
+      - name: Package docs artifact
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          tar -C dist -czf "dist/smux-${VERSION}-docs.tar.gz" completions man
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smux-docs
+          path: dist/smux-*-docs.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - docs
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Collect release files
+        shell: bash
+        run: |
+          mkdir -p release
+          find dist -type f -name '*.tar.gz' -exec cp {} release/ \;
+          (
+            cd release
+            shasum -a 256 *.tar.gz > SHA256SUMS
+          )
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*

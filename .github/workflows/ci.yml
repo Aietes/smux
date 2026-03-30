@@ -34,3 +34,12 @@ jobs:
 
       - name: Generate man pages
         run: nix develop --command cargo run -- man --dir target/generated/man
+
+      - name: Upload generated docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-docs
+          path: |
+            target/generated/completions
+            target/generated/man
+          if-no-files-found: error
