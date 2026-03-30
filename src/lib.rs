@@ -4,6 +4,7 @@ pub mod config;
 pub mod doctor;
 pub mod fzf;
 pub mod session;
+pub mod templates;
 pub mod tmux;
 pub mod util;
 pub mod zoxide;

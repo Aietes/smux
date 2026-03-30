@@ -1,8 +1,9 @@
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
-use crate::config::Config;
+use crate::config::{Config, Template};
+use crate::templates;
 use crate::tmux::Tmux;
 use crate::util;
 
@@ -19,7 +20,7 @@ pub fn connect_path(
         None => None,
     };
 
-    let _template = resolve_template_name(config, override_template, resolved_project.as_ref())?;
+    let template = resolve_template(config, override_template, resolved_project.as_ref())?;
 
     let session_name = match override_name {
         Some(name) => util::validated_session_name(name)?,
@@ -36,42 +37,44 @@ pub fn connect_path(
         return tmux.switch_or_attach(&session_name);
     }
 
-    tmux.create_session(&session_name, &normalized)?;
+    let plan = templates::build_session_plan(&session_name, &normalized, &template)?;
+    tmux.create_session_from_plan(&plan)?;
     tmux.switch_or_attach(&session_name)
 }
 
-fn resolve_template_name(
+fn resolve_template(
     config: Option<&Config>,
     override_template: Option<&str>,
     project: Option<&crate::config::ResolvedProject<'_>>,
-) -> Result<Option<String>> {
+) -> Result<Template> {
     if let Some(template_name) = override_template {
         let config = config.context("explicit --template requires a config file with templates")?;
-        ensure_template_exists(config, template_name)?;
-        return Ok(Some(template_name.to_owned()));
+        return load_template(config, template_name);
     }
 
     if let Some(project) = project
         && let Some(template_name) = &project.project.template
     {
-        return Ok(Some(template_name.clone()));
+        return config
+            .context("project template resolution requires config")
+            .and_then(|config| load_template(config, template_name));
     }
 
     if let Some(config) = config
         && let Some(template_name) = &config.settings.default_template
     {
-        return Ok(Some(template_name.clone()));
+        return load_template(config, template_name);
     }
 
-    Ok(None)
+    Ok(templates::fallback_template())
 }
 
-fn ensure_template_exists(config: &Config, template_name: &str) -> Result<()> {
-    if config.templates.contains_key(template_name) {
-        Ok(())
-    } else {
-        bail!("unknown template: {template_name}")
-    }
+fn load_template(config: &Config, template_name: &str) -> Result<Template> {
+    config
+        .templates
+        .get(template_name)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("unknown template: {template_name}"))
 }
 
 pub fn switch_existing(tmux: &Tmux, session: &str) -> Result<()> {
@@ -85,6 +88,7 @@ mod tests {
     use anyhow::Result;
 
     use crate::config::{Config, Project, ResolvedProject, Settings, Template, Window};
+    use crate::templates;
     use crate::util;
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -159,8 +163,19 @@ mod tests {
             projects: HashMap::new(),
         };
 
-        let error = super::resolve_template_name(Some(&config), Some("missing"), None)
+        let error = super::resolve_template(Some(&config), Some("missing"), None)
             .expect_err("missing template should fail");
         assert!(error.to_string().contains("unknown template"));
+    }
+
+    #[test]
+    fn falls_back_to_builtin_template_without_config() -> Result<()> {
+        let template = super::resolve_template(None, None, None)?;
+        assert_eq!(template.windows.len(), 1);
+        assert_eq!(
+            template.windows[0].name,
+            templates::fallback_template().windows[0].name
+        );
+        Ok(())
     }
 }
