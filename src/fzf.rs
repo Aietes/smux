@@ -97,6 +97,7 @@ fn select_value_with_runner(
     choices: Vec<Choice>,
 ) -> Result<Option<String>> {
     let args = vec![
+        "--ansi".to_owned(),
         "--delimiter".to_owned(),
         "\t".to_owned(),
         "--with-nth".to_owned(),
@@ -139,6 +140,7 @@ fn select_with_runner(
     prompt: &str,
 ) -> Result<Option<Entry>> {
     let args = vec![
+        "--ansi".to_owned(),
         "--delimiter".to_owned(),
         "\t".to_owned(),
         "--with-nth".to_owned(),
@@ -222,6 +224,7 @@ mod tests {
         assert!(result.is_some());
         let recorded = runner.recorded();
         assert_eq!(recorded[0].program, "fzf");
+        assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert_eq!(
             recorded[0].stdin.as_deref(),
             Some("dir\t/tmp/example\tdir      /tmp/example\n")
@@ -252,6 +255,7 @@ mod tests {
 
         assert_eq!(result.as_deref(), Some("rust"));
         let recorded = runner.recorded();
+        assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert_eq!(
             recorded[0].stdin.as_deref(),
             Some("default\ttemplate default\nrust\ttemplate rust\n")

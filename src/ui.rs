@@ -5,6 +5,10 @@ use crate::config::{Config, IconMode};
 const SESSION_ICON: &str = "";
 const DIRECTORY_ICON: &str = "󰉋";
 const TEMPLATE_ICON: &str = "󰙅";
+const ANSI_RESET: &str = "\x1b[0m";
+const SESSION_COLOR: &str = "\x1b[38;5;75m";
+const DIRECTORY_COLOR: &str = "\x1b[38;5;108m";
+const TEMPLATE_COLOR: &str = "\x1b[38;5;179m";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DisplayStyle {
@@ -40,20 +44,20 @@ impl DisplayStyle {
     }
 
     pub fn session_label(self, value: &str) -> String {
-        self.label(SESSION_ICON, "session", value)
+        self.label(SESSION_ICON, SESSION_COLOR, "session", value)
     }
 
     pub fn directory_label(self, value: &str) -> String {
-        self.label(DIRECTORY_ICON, "dir", value)
+        self.label(DIRECTORY_ICON, DIRECTORY_COLOR, "dir", value)
     }
 
     pub fn template_label(self, value: &str) -> String {
-        self.label(TEMPLATE_ICON, "template", value)
+        self.label(TEMPLATE_ICON, TEMPLATE_COLOR, "template", value)
     }
 
-    fn label(self, icon: &str, text: &str, value: &str) -> String {
+    fn label(self, icon: &str, color: &str, text: &str, value: &str) -> String {
         if self.icons_enabled {
-            format!("{icon}  {value}")
+            format!("{color}{icon}{ANSI_RESET}  {value}")
         } else {
             format!("{text:<8} {value}")
         }
@@ -89,7 +93,11 @@ mod tests {
     fn always_mode_enables_icons() {
         let style = DisplayStyle::from_icon_mode(IconMode::Always);
         assert!(style.icons_enabled());
-        assert!(style.session_label("demo").starts_with(""));
+        assert!(
+            style
+                .session_label("demo")
+                .starts_with("\u{1b}[38;5;75m\u{1b}[0m")
+        );
     }
 
     #[test]
