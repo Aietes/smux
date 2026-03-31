@@ -73,7 +73,7 @@ Registry install will make sense once `smux` is published to crates.io:
 cargo install smux
 ```
 
-That publication path is technically ready in broad terms, but still needs final package metadata like license and repository fields before it should be pushed publicly.
+That publication path is technically ready in broad terms, but still needs a final project license before it should be pushed publicly.
 
 ### Build From Source
 
@@ -363,7 +363,7 @@ Current state:
 Still needed before public distribution:
 
 - choose and add a project license
-- add final Cargo package metadata such as repository and homepage
+- add a project license and license metadata
 - publish the crate for `cargo install smux`
 - submit package updates to Homebrew and nixpkgs
 

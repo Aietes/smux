@@ -8,8 +8,6 @@
 - Add a committed license file.
 - Add final Cargo package metadata in `Cargo.toml`:
   - `license` or `license-file`
-  - `repository`
-  - optionally `homepage`
   - optionally `documentation`
 
 ### crates.io
@@ -56,6 +54,6 @@
 
 ### Documentation
 
-- Update the README once the real license and repository URL are known.
+- Update the README once the real license is known.
 - Replace “planned/pending” publication notes with real install commands once crates.io and package managers are live.
 - Add release-specific install examples once GitHub release artifacts are published.
