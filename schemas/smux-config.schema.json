@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Aietes/smux/main/schemas/smux-config.schema.json",
+  "title": "smux config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "settings": {
+      "$ref": "#/$defs/settings"
+    },
+    "templates": {
+      "type": "object",
+      "description": "Reusable tmux layouts keyed by template name.",
+      "additionalProperties": {
+        "$ref": "#/$defs/template"
+      }
+    }
+  },
+  "$defs": {
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_template": {
+          "type": "string",
+          "description": "Template name used when no CLI or project override applies."
+        },
+        "icons": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "default": "auto",
+          "description": "Controls picker icon rendering."
+        },
+        "icon_colors": {
+          "$ref": "#/$defs/icon_colors"
+        }
+      }
+    },
+    "icon_colors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 75
+        },
+        "directory": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 108
+        },
+        "template": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 179
+        },
+        "project": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 81
+        }
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "windows"
+      ],
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "Optional session root; accepted by smux config."
+        },
+        "startup_window": {
+          "type": "string",
+          "description": "Window name focused after session creation."
+        },
+        "startup_pane": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based pane index within the startup window."
+        },
+        "windows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/window"
+          }
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "pre_command": {
+          "type": "string",
+          "description": "Runs in each pane before the pane or window command."
+        },
+        "command": {
+          "type": "string"
+        },
+        "layout": {
+          "type": "string",
+          "description": "tmux window layout name passed to tmux select-layout."
+        },
+        "synchronize": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enables tmux synchronized panes for the window."
+        },
+        "panes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/pane"
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "command",
+          "panes"
+        ]
+      }
+    },
+    "pane": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "type": "string",
+          "pattern": "^(right|left|bottom|top)( [^\\s].*)?$",
+          "description": "Split direction, optionally followed by a tmux size such as 40%."
+        },
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

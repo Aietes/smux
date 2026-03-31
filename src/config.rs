@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 use crate::util;
 
-pub const STARTER_CONFIG: &str = r#"[settings]
+const STARTER_CONFIG_BODY: &str = r#"[settings]
 default_template = "default"
 icons = "auto"
 
@@ -34,7 +34,7 @@ windows = [
 ]
 "#;
 
-pub const STARTER_PROJECT: &str = r#"path = "~/code/example"
+const STARTER_PROJECT_BODY: &str = r#"path = "~/code/example"
 session_name = "example"
 template = "rust"
 "#;
@@ -148,6 +148,29 @@ pub struct ResolvedProject<'a> {
     pub normalized_path: PathBuf,
 }
 
+pub fn starter_config() -> String {
+    format!(
+        "#:schema {}\n{}",
+        schema_url("smux-config.schema.json"),
+        STARTER_CONFIG_BODY
+    )
+}
+
+pub fn starter_project() -> String {
+    format!(
+        "#:schema {}\n{}",
+        schema_url("smux-project.schema.json"),
+        STARTER_PROJECT_BODY
+    )
+}
+
+pub fn schema_url(filename: &str) -> String {
+    format!(
+        "https://raw.githubusercontent.com/Aietes/smux/v{}/schemas/{filename}",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
 pub fn default_config_dir() -> Result<PathBuf> {
     if let Some(config_home) = std::env::var_os("XDG_CONFIG_HOME") {
         Ok(PathBuf::from(config_home).join("smux"))
@@ -252,11 +275,11 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
         )
     })?;
 
-    fs::write(&path, STARTER_CONFIG)
+    fs::write(&path, starter_config())
         .with_context(|| format!("failed to write starter config to {}", path.display()))?;
 
     let starter_project_path = project_dir.join("example.toml");
-    fs::write(&starter_project_path, STARTER_PROJECT).with_context(|| {
+    fs::write(&starter_project_path, starter_project()).with_context(|| {
         format!(
             "failed to write starter project to {}",
             starter_project_path.display()
@@ -451,17 +474,23 @@ pub fn resolve_project<'a>(
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, IconColors, IconMode, STARTER_CONFIG, STARTER_PROJECT, default_projects_dir, load,
-        load_optional, load_workspace, materialize_project_template, resolve_project,
+        Config, IconColors, IconMode, default_projects_dir, load, load_optional, load_workspace,
+        materialize_project_template, resolve_project, schema_url, starter_config, starter_project,
         validate_config,
     };
     use anyhow::Result;
     use std::fs;
     use std::path::Path;
 
+    fn strip_schema_directive(text: &str) -> String {
+        text.lines().skip(1).collect::<Vec<_>>().join("\n")
+    }
+
     #[test]
     fn parses_starter_config() -> Result<()> {
-        let config: Config = toml::from_str(STARTER_CONFIG)?;
+        let starter = starter_config();
+        assert!(starter.starts_with("#:schema "));
+        let config: Config = toml::from_str(&strip_schema_directive(&starter))?;
         validate_config(&config)?;
         assert!(config.templates.contains_key("default"));
         assert_eq!(config.settings.icons, IconMode::Auto);
@@ -471,10 +500,19 @@ mod tests {
 
     #[test]
     fn parses_starter_project() -> Result<()> {
-        let project: super::Project = toml::from_str(STARTER_PROJECT)?;
+        let starter = starter_project();
+        assert!(starter.starts_with("#:schema "));
+        let project: super::Project = toml::from_str(&strip_schema_directive(&starter))?;
         assert_eq!(project.session_name.as_deref(), Some("example"));
         assert_eq!(project.template.as_deref(), Some("rust"));
         Ok(())
+    }
+
+    #[test]
+    fn schema_urls_are_versioned() {
+        let version = env!("CARGO_PKG_VERSION");
+        assert!(schema_url("smux-config.schema.json").contains(&format!("/v{version}/")));
+        assert!(schema_url("smux-project.schema.json").contains(&format!("/v{version}/")));
     }
 
     #[test]
@@ -580,8 +618,8 @@ windows = [{ name = "editor", command = "nvim" }]
         let path = tempdir.path().join("config.toml");
         let project_dir = tempdir.path().join("projects");
         fs::create_dir(&project_dir)?;
-        fs::write(&path, STARTER_CONFIG)?;
-        fs::write(project_dir.join("example.toml"), STARTER_PROJECT)?;
+        fs::write(&path, starter_config())?;
+        fs::write(project_dir.join("example.toml"), starter_project())?;
 
         let loaded = load(Some(&path))?;
         assert_eq!(loaded.path, path);

@@ -26,6 +26,15 @@ or, when `XDG_CONFIG_HOME` is set:
 $XDG_CONFIG_HOME/smux/projects/*.toml
 ```
 
+`smux init` writes starter files with `#:schema` directives pointing at version-matched JSON Schema files for editor support.
+
+Schema files live in this repo at:
+
+```text
+schemas/smux-config.schema.json
+schemas/smux-project.schema.json
+```
+
 ## Structure
 
 The main config has two top-level sections:
@@ -36,6 +45,7 @@ The main config has two top-level sections:
 Example:
 
 ```toml
+#:schema https://raw.githubusercontent.com/Aietes/smux/vX.Y.Z/schemas/smux-config.schema.json
 [settings]
 default_template = "default"
 icons = "auto"
@@ -65,6 +75,7 @@ windows = [
 Example project file:
 
 ```toml
+#:schema https://raw.githubusercontent.com/Aietes/smux/vX.Y.Z/schemas/smux-project.schema.json
 path = "~/code/example"
 session_name = "example"
 template = "rust"

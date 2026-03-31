@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Aietes/smux/main/schemas/smux-project.schema.json",
+  "title": "smux project",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path"
+  ],
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Workspace path resolved by smux."
+    },
+    "session_name": {
+      "type": "string"
+    },
+    "template": {
+      "type": "string",
+      "description": "Template name from config.toml."
+    },
+    "root": {
+      "type": "string"
+    },
+    "startup_window": {
+      "type": "string"
+    },
+    "startup_pane": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "windows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/window"
+      }
+    }
+  },
+  "$defs": {
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "pre_command": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "layout": {
+          "type": "string"
+        },
+        "synchronize": {
+          "type": "boolean",
+          "default": false
+        },
+        "panes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/pane"
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "command",
+          "panes"
+        ]
+      }
+    },
+    "pane": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "type": "string",
+          "pattern": "^(right|left|bottom|top)( [^\\s].*)?$"
+        },
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
