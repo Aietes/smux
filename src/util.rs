@@ -71,6 +71,27 @@ pub fn validated_session_name(value: &str) -> Result<String> {
     Ok(sanitized)
 }
 
+pub fn validated_project_name(value: &str) -> Result<String> {
+    let trimmed = value.trim().trim_end_matches(".toml");
+
+    if trimmed.is_empty() {
+        bail!("project name resolved to an empty value");
+    }
+
+    if trimmed == "." || trimmed == ".." {
+        bail!("project name must not be . or ..");
+    }
+
+    if trimmed.contains(std::path::MAIN_SEPARATOR)
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+    {
+        bail!("project name must not contain path separators");
+    }
+
+    Ok(trimmed.to_owned())
+}
+
 pub fn sanitize_session_name(value: &str) -> String {
     value
         .trim()
@@ -89,6 +110,21 @@ pub fn path_to_string(path: &Path) -> Result<String> {
     path.to_str()
         .map(ToOwned::to_owned)
         .context("path was not valid utf-8")
+}
+
+pub fn path_to_config_string(path: &Path) -> Result<String> {
+    let path = path_to_string(path)?;
+    if let Ok(home) = std::env::var("HOME") {
+        if path == home {
+            return Ok("~".to_owned());
+        }
+
+        if let Some(stripped) = path.strip_prefix(&(home.clone() + "/")) {
+            return Ok(format!("~/{stripped}"));
+        }
+    }
+
+    Ok(path)
 }
 
 fn expand_tilde(path: &Path) -> PathBuf {
@@ -115,13 +151,28 @@ fn is_tmux_safe(character: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{expand_tilde, sanitize_session_name, validated_session_name};
+    use super::{
+        expand_tilde, path_to_config_string, sanitize_session_name, validated_project_name,
+        validated_session_name,
+    };
     use std::path::Path;
+    use std::sync::Mutex;
+
+    static HOME_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn expands_tilde_paths() {
+        let _guard = HOME_ENV_LOCK.lock().expect("home env lock should work");
+        unsafe {
+            std::env::set_var("HOME", "/Users/stefan");
+        }
+
         let path = expand_tilde(Path::new("~/code"));
         assert!(path.is_absolute());
+
+        unsafe {
+            std::env::remove_var("HOME");
+        }
     }
 
     #[test]
@@ -132,5 +183,37 @@ mod tests {
     #[test]
     fn rejects_empty_session_names() {
         assert!(validated_session_name("...").is_err());
+    }
+
+    #[test]
+    fn rejects_project_names_with_path_separators() {
+        assert!(validated_project_name("foo/bar").is_err());
+    }
+
+    #[test]
+    fn strips_toml_suffix_from_project_name() {
+        assert_eq!(
+            validated_project_name("example.toml").expect("project name should validate"),
+            "example"
+        );
+    }
+
+    #[test]
+    fn collapses_home_for_config_paths() {
+        let _guard = HOME_ENV_LOCK.lock().expect("home env lock should work");
+        unsafe {
+            std::env::set_var("HOME", "/Users/stefan");
+        }
+
+        let home = std::env::var("HOME").expect("HOME should be set");
+        let path = Path::new(&home).join("code").join("smux");
+        assert_eq!(
+            path_to_config_string(&path).expect("path should render"),
+            "~/code/smux"
+        );
+
+        unsafe {
+            std::env::remove_var("HOME");
+        }
     }
 }

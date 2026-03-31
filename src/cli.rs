@@ -66,6 +66,22 @@ pub enum Commands {
         #[arg(value_hint = ValueHint::FilePath)]
         config: Option<PathBuf>,
     },
+    /// Capture a tmux session as a project file.
+    SaveProject {
+        name: String,
+        #[arg(long)]
+        session: Option<String>,
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::DirPath)]
+        path: Option<PathBuf>,
+        #[arg(long)]
+        stdout: bool,
+        #[arg(long)]
+        force: bool,
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::FilePath)]
+        config: Option<PathBuf>,
+    },
     /// Write an initial configuration file.
     Init {
         #[arg(long)]

@@ -21,6 +21,7 @@ Version 1 exists to solve four core problems well:
 2. Reuse an existing session when one already matches the selected directory-derived session name.
 3. Create a new session from a directory when no session exists.
 4. Apply a small, validated TOML template that defines windows, panes, layouts, and startup commands.
+5. Export the current tmux session into a reusable `smux` project definition.
 
 ## Non-Goals
 
@@ -36,6 +37,8 @@ The following are explicitly out of scope for v1:
 - git worktree management
 - project-local config discovery
 - session persistence beyond tmux
+- lossless round-tripping of arbitrary tmux session state
+- reconstructing the exact shell command history of existing panes
 
 ## Core User Flows
 
@@ -97,6 +100,24 @@ smux switch myapp
 - use `tmux switch-client -t <session>` when inside tmux
 - use `tmux attach-session -t <session>` when outside tmux (or create if missing)
 
+### Save project flow
+
+When the user runs:
+
+```bash
+smux save-project myapp
+smux save-project myapp --session api
+smux save-project myapp --stdout
+```
+
+`smux` must:
+
+1. resolve the source tmux session
+2. inspect its windows, panes, startup selection, and working directories
+3. construct a best-effort `smux` project definition
+4. either print the generated TOML or write it to `~/.config/smux/projects/<name>.toml`
+5. refuse to overwrite an existing project file unless `--force` is given
+
 ## CLI Surface
 
 ### `smux select`
@@ -142,6 +163,17 @@ Validate runtime dependencies and config.
 ### `smux init`
 
 Create a starter config at `~/.config/smux/config.toml` if it does not already exist.
+
+### `smux save-project <name>`
+
+Capture the current tmux session, or a named tmux session, as a project file.
+
+Flags:
+
+- `--session <name>`
+- `--path <path>`
+- `--stdout`
+- `--force`
 
 ## Runtime Dependencies
 
@@ -361,6 +393,44 @@ Rules:
 - a project may use a template as a base and override it
 - if a project defines `windows`, they replace template windows instead of merging window-by-window
 
+## Project Capture Rules
+
+`smux save-project` is a best-effort exporter from live tmux state into a `smux` project file.
+
+v1 capture requirements:
+
+- capture `session_name`
+- capture `path`
+- capture `startup_window`
+- capture `startup_pane`
+- capture `windows`
+- capture per-window `layout` when recoverable from tmux
+- capture per-window `synchronize` when recoverable from tmux
+- capture per-pane `cwd`
+
+v1 capture behavior:
+
+- by default, the source session is the current tmux session when inside tmux
+- when outside tmux, `--session` is required
+- `--path` overrides the captured project root path
+- if no explicit path override is given, the exporter should use the current working directory of the active pane as the project `path`
+- the generated project is a concrete project definition under `~/.config/smux/projects/<name>.toml`
+- v1 should prefer inlined `windows` over trying to infer or synthesize template references
+
+v1 capture limitations:
+
+- pane creation commands are not required to be exported
+- shell history is not exported
+- arbitrary tmux pane trees do not need to round-trip perfectly
+- window layout capture may be approximate and should prefer readable `smux` output over tmux-internal exactness
+- exported panes should include `layout` only when `smux` can represent the split direction meaningfully
+
+Overwrite behavior:
+
+- writing to an existing project file without `--force` is an error
+- `--stdout` must not write any files
+- `--stdout` output should be valid standalone TOML suitable for redirecting into a project file
+
 ## Resolution Rules
 
 ### Template resolution
@@ -436,6 +506,8 @@ All tmux interaction must go through subprocess calls. Do not use a Rust tmux cr
 Allowed commands include:
 
 - `tmux list-sessions -F "#{session_name}"`
+- `tmux list-windows -t <session> -F ...`
+- `tmux list-panes -t <session>:<window> -F ...`
 - `tmux has-session -t <name>`
 - `tmux new-session -d -s <name> -c <dir> -n <window>`
 - `tmux new-window -t <session> -n <window> -c <dir>`
@@ -443,6 +515,8 @@ Allowed commands include:
 - `tmux send-keys ... C-m`
 - `tmux select-layout ...`
 - `tmux select-window ...`
+- `tmux show-window-options -t <session>:<window> ...`
+- `tmux display-message -p ...`
 - `tmux switch-client -t <session>`
 - `tmux attach-session -t <session>`
 
@@ -665,6 +739,7 @@ v1 must include:
 - `smux list-projects`
 - `smux doctor`
 - `smux init`
+- `smux save-project`
 - TOML config loading
 - template validation
 - template application for windows, panes, layouts, and commands
@@ -706,6 +781,9 @@ Must cover:
 - selecting an existing session switches or attaches
 - selecting a directory with no session creates and then switches or attaches
 - selecting a directory with an existing session reuses it
+- saving a session to stdout produces valid project TOML
+- saving a session to a file respects `--force`
+- saving a session outside tmux without `--session` fails clearly
 - template with single-command windows
 - template with pane-based windows and layout
 - unknown template error
@@ -733,6 +811,7 @@ The implementation is complete when all of the following are true:
 8. Errors are readable and actionable.
 9. Documentation covers install, config, tmux binding, and examples.
 10. Proper man pages and zsh completions are generated and documented.
+11. `smux save-project` can export a usable project file from a live tmux session.
 
 ## Starter Config
 
@@ -895,6 +974,7 @@ Deliver:
 - `list-projects`
 - `doctor`
 - `init`
+- `save-project`
 - README
 - `docs/design.md`
 - man pages
@@ -904,6 +984,7 @@ Exit criteria:
 
 - doctor reports dependency and config issues
 - init writes the starter config safely
+- save-project exports valid project TOML
 - docs are sufficient for first use
 
 ### Phase 6: Test hardening

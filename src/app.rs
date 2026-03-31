@@ -7,6 +7,7 @@ use crate::config;
 use crate::docs;
 use crate::doctor;
 use crate::fzf;
+use crate::project_export;
 use crate::session;
 use crate::tmux::Tmux;
 use crate::ui::DisplayStyle;
@@ -52,6 +53,27 @@ pub fn run(cli: Cli) -> Result<()> {
             Ok(())
         }
         Commands::Doctor { config } => doctor::run(config.as_deref()),
+        Commands::SaveProject {
+            name,
+            session,
+            path,
+            stdout,
+            force,
+            config,
+        } => {
+            if let Some(path) = project_export::save_project(
+                &tmux,
+                &name,
+                session.as_deref(),
+                path.as_deref(),
+                stdout,
+                force,
+                config.as_deref(),
+            )? {
+                println!("{}", path.display());
+            }
+            Ok(())
+        }
         Commands::ListTemplates { config } => {
             let loaded = config::load(config.as_deref())?;
             let mut names = loaded.config.templates.keys().cloned().collect::<Vec<_>>();

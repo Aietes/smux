@@ -5,6 +5,7 @@ pub mod docs;
 pub mod doctor;
 pub mod fzf;
 pub mod process;
+pub mod project_export;
 pub mod session;
 pub mod templates;
 pub mod tmux;

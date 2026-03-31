@@ -7,6 +7,48 @@ use crate::process::{CommandOutput, CommandRunner, default_runner};
 use crate::templates::{PaneLayout, PanePosition, SessionPlan};
 use crate::util;
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct SessionSnapshot {
+    pub session_name: String,
+    pub active_window: String,
+    pub active_pane: usize,
+    pub active_path: std::path::PathBuf,
+    pub windows: Vec<WindowSnapshot>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct WindowSnapshot {
+    pub name: String,
+    pub synchronize: bool,
+    pub active: bool,
+    pub panes: Vec<PaneSnapshot>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PaneSnapshot {
+    pub cwd: std::path::PathBuf,
+    pub active: bool,
+    pub layout: Option<PaneLayout>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct WindowRecord {
+    id: String,
+    name: String,
+    active: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct PaneRecord {
+    index: usize,
+    cwd: std::path::PathBuf,
+    active: bool,
+    left: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+}
+
 #[derive(Clone)]
 pub struct Tmux {
     runner: Arc<dyn CommandRunner>,
@@ -190,6 +232,57 @@ impl Tmux {
     pub fn kill_session(&self, session: &str) -> Result<()> {
         self.run_tmux(["kill-session", "-t", session])
             .context("failed to execute tmux kill-session")
+    }
+
+    pub fn capture_session(&self, session: &str) -> Result<SessionSnapshot> {
+        self.ensure_session_exists(session)?;
+
+        let windows = self.list_windows(session)?;
+        let active_window_name = windows
+            .iter()
+            .find(|window| window.active)
+            .or_else(|| windows.first())
+            .context("tmux session did not contain any windows")?;
+        let active_window_name = active_window_name.name.clone();
+
+        let mut captured_windows = Vec::with_capacity(windows.len());
+        let mut active_pane = None;
+        let mut active_path = None;
+
+        for window in windows {
+            let synchronize = self.window_synchronize(&window.id)?;
+            let panes = self.list_pane_records(&window.id)?;
+            let panes = infer_pane_layouts(panes);
+
+            if window.active {
+                let active = panes
+                    .iter()
+                    .enumerate()
+                    .find(|(_, pane)| pane.active)
+                    .or_else(|| panes.first().map(|pane| (0, pane)))
+                    .context("active tmux window did not contain any panes")?;
+                active_pane = Some(active.0);
+                active_path = Some(active.1.cwd.clone());
+            }
+
+            captured_windows.push(WindowSnapshot {
+                name: window.name,
+                synchronize,
+                active: window.active,
+                panes,
+            });
+        }
+
+        let active_path =
+            active_path.context("could not determine the active pane path for the tmux session")?;
+
+        Ok(SessionSnapshot {
+            session_name: session.to_owned(),
+            active_window: active_window_name,
+            active_pane: active_pane.unwrap_or(0),
+            active_path,
+            windows: captured_windows,
+        })
     }
 
     fn create_session_with_window(
@@ -407,6 +500,175 @@ impl Tmux {
     fn run_tmux_capture<const N: usize>(&self, args: [&str; N]) -> Result<CommandOutput> {
         let args = args.into_iter().map(ToOwned::to_owned).collect::<Vec<_>>();
         self.runner.run_capture("tmux", &args).map_err(Into::into)
+    }
+
+    fn list_windows(&self, session: &str) -> Result<Vec<WindowRecord>> {
+        let output = self
+            .run_tmux_capture([
+                "list-windows",
+                "-t",
+                session,
+                "-F",
+                "#{window_id}\t#{window_name}\t#{window_active}",
+            ])
+            .context("failed to execute tmux list-windows")?;
+
+        if !output.status.success {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("tmux list-windows failed: {}", stderr.trim());
+        }
+
+        let stdout =
+            String::from_utf8(output.stdout).context("tmux list-windows output was not utf-8")?;
+        stdout
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(parse_window_record)
+            .collect()
+    }
+
+    fn window_synchronize(&self, window_id: &str) -> Result<bool> {
+        let output = self
+            .run_tmux_capture([
+                "show-window-options",
+                "-t",
+                window_id,
+                "-v",
+                "synchronize-panes",
+            ])
+            .context("failed to execute tmux show-window-options")?;
+
+        if !output.status.success {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("tmux show-window-options failed: {}", stderr.trim());
+        }
+
+        let stdout = String::from_utf8(output.stdout)
+            .context("tmux show-window-options output was not utf-8")?;
+        Ok(stdout.trim() == "on")
+    }
+
+    fn list_pane_records(&self, window_id: &str) -> Result<Vec<PaneRecord>> {
+        let output = self
+            .run_tmux_capture([
+                "list-panes",
+                "-t",
+                window_id,
+                "-F",
+                "#{pane_index}\t#{pane_current_path}\t#{pane_active}\t#{pane_left}\t#{pane_top}\t#{pane_width}\t#{pane_height}",
+            ])
+            .context("failed to execute tmux list-panes")?;
+
+        if !output.status.success {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("tmux list-panes failed: {}", stderr.trim());
+        }
+
+        let stdout =
+            String::from_utf8(output.stdout).context("tmux list-panes output was not utf-8")?;
+        let mut panes = stdout
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(parse_pane_record)
+            .collect::<Result<Vec<_>>>()?;
+        panes.sort_by_key(|pane| pane.index);
+        Ok(panes)
+    }
+}
+
+fn parse_window_record(line: &str) -> Result<WindowRecord> {
+    let mut parts = line.splitn(3, '\t');
+    let id = parts.next().context("missing tmux window id")?.to_owned();
+    let name = parts.next().context("missing tmux window name")?.to_owned();
+    let active = match parts.next().context("missing tmux window active flag")? {
+        "1" => true,
+        "0" => false,
+        other => bail!("invalid tmux window active flag: {other}"),
+    };
+
+    Ok(WindowRecord { id, name, active })
+}
+
+fn parse_pane_record(line: &str) -> Result<PaneRecord> {
+    let mut parts = line.splitn(7, '\t');
+    let index = parts
+        .next()
+        .context("missing tmux pane index")?
+        .parse()
+        .context("tmux pane index was not a number")?;
+    let cwd = std::path::PathBuf::from(parts.next().context("missing tmux pane cwd")?);
+    let active = match parts.next().context("missing tmux pane active flag")? {
+        "1" => true,
+        "0" => false,
+        other => bail!("invalid tmux pane active flag: {other}"),
+    };
+    let left = parts
+        .next()
+        .context("missing tmux pane left coordinate")?
+        .parse()
+        .context("tmux pane left was not a number")?;
+    let top = parts
+        .next()
+        .context("missing tmux pane top coordinate")?
+        .parse()
+        .context("tmux pane top was not a number")?;
+    let width = parts
+        .next()
+        .context("missing tmux pane width")?
+        .parse()
+        .context("tmux pane width was not a number")?;
+    let height = parts
+        .next()
+        .context("missing tmux pane height")?
+        .parse()
+        .context("tmux pane height was not a number")?;
+
+    Ok(PaneRecord {
+        index,
+        cwd,
+        active,
+        left,
+        top,
+        width,
+        height,
+    })
+}
+
+fn infer_pane_layouts(panes: Vec<PaneRecord>) -> Vec<PaneSnapshot> {
+    let mut inferred = Vec::with_capacity(panes.len());
+
+    for pane in panes {
+        let layout = if inferred.is_empty() {
+            None
+        } else {
+            Some(PaneLayout {
+                position: infer_pane_position(&pane, &inferred),
+                size: None,
+            })
+        };
+
+        inferred.push(PaneSnapshot {
+            cwd: pane.cwd,
+            active: pane.active,
+            layout,
+        });
+    }
+
+    inferred
+}
+
+fn infer_pane_position(pane: &PaneRecord, previous: &[PaneSnapshot]) -> PanePosition {
+    let _ = previous;
+    if pane.left > 0 && pane.top == 0 {
+        PanePosition::Right
+    } else if pane.top > 0 && pane.left == 0 {
+        PanePosition::Bottom
+    } else if pane.left > 0 {
+        PanePosition::Right
+    } else if pane.top > 0 {
+        PanePosition::Bottom
+    } else {
+        PanePosition::Right
     }
 }
 
@@ -684,6 +946,41 @@ mod tests {
         assert_eq!(recorded[0].program, "tmux");
         assert_eq!(recorded[0].args, vec!["kill-session", "-t", "demo"]);
         assert_eq!(recorded[0].io_mode, IoMode::Capture);
+    }
+
+    #[test]
+    fn capture_session_reads_windows_and_panes() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"@1\teditor\t1\n@2\trun\t0\n".to_vec()));
+        runner.push_capture(ok_capture(b"off\n".to_vec()));
+        runner.push_capture(ok_capture(
+            b"0\t/tmp/demo\t1\t0\t0\t100\t40\n1\t/tmp/demo/server\t0\t50\t0\t50\t40\n".to_vec(),
+        ));
+        runner.push_capture(ok_capture(b"on\n".to_vec()));
+        runner.push_capture(ok_capture(b"0\t/tmp/demo\t1\t0\t0\t100\t40\n".to_vec()));
+
+        let tmux = Tmux::with_runner(runner);
+        let snapshot = tmux
+            .capture_session("demo")
+            .expect("capture should succeed");
+
+        assert_eq!(snapshot.session_name, "demo");
+        assert_eq!(snapshot.active_window, "editor");
+        assert_eq!(snapshot.active_pane, 0);
+        assert_eq!(snapshot.active_path, std::path::PathBuf::from("/tmp/demo"));
+        assert_eq!(snapshot.windows.len(), 2);
+        assert_eq!(snapshot.windows[0].name, "editor");
+        assert!(!snapshot.windows[0].synchronize);
+        assert_eq!(snapshot.windows[0].panes.len(), 2);
+        assert_eq!(
+            snapshot.windows[0].panes[1].layout,
+            Some(PaneLayout {
+                position: PanePosition::Right,
+                size: None,
+            })
+        );
+        assert!(snapshot.windows[1].synchronize);
     }
 
     #[test]
