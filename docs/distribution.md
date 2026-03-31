@@ -42,7 +42,7 @@ Practical next steps:
 
 ## Homebrew
 
-Homebrew packaging should happen after the first tagged release.
+Homebrew packaging is published through the `Aietes/homebrew-smux` tap.
 
 Inputs needed:
 
@@ -53,9 +53,9 @@ Inputs needed:
 
 Practical next steps:
 
-1. create a release tag
-2. use the generated archive and `SHA256SUMS`
-3. prepare a Homebrew formula PR
+1. ensure the `HOMEBREW_TAP_PAT` secret is configured in the `smux` GitHub repo with write access to `Aietes/homebrew-smux`
+2. push a new `v*` tag in `Aietes/smux`, or run `Update Homebrew Tap` manually from the Actions UI with a version input
+3. let the workflow rewrite and push `Formula/smux.rb`
 
 ## nixpkgs
 

@@ -1,0 +1,104 @@
+name: Update Homebrew Tap
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version or tag to publish to the tap (for example 0.1.5 or v0.1.5)"
+        required: true
+        type: string
+
+jobs:
+  update-tap:
+    name: Update Aietes/homebrew-smux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set release variables
+        id: vars
+        shell: bash
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            raw_version="${{ inputs.version }}"
+          else
+            raw_version="${GITHUB_REF_NAME}"
+          fi
+
+          tag="${raw_version#refs/tags/}"
+          tag="${tag#v}"
+          version="${tag}"
+          release_tag="v${version}"
+          url="https://github.com/Aietes/smux/archive/refs/tags/${release_tag}.tar.gz"
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${release_tag}" >> "$GITHUB_OUTPUT"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      - name: Download source tarball
+        shell: bash
+        run: |
+          curl -L "${{ steps.vars.outputs.url }}" -o smux.tar.gz
+
+      - name: Compute SHA256
+        id: sha
+        shell: bash
+        run: |
+          sha="$(sha256sum smux.tar.gz | awk '{print $1}')"
+          echo "sha256=${sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tap repository
+        uses: actions/checkout@v6
+        with:
+          repository: Aietes/homebrew-smux
+          token: ${{ secrets.HOMEBREW_TAP_PAT }}
+          path: homebrew-smux
+
+      - name: Update formula
+        shell: bash
+        run: |
+          cat > homebrew-smux/Formula/smux.rb <<EOF
+          class Smux < Formula
+            desc "Tmux session manager with fzf-powered project and template selection"
+            homepage "https://github.com/Aietes/smux"
+            url "${{ steps.vars.outputs.url }}"
+            sha256 "${{ steps.sha.outputs.sha256 }}"
+            license "MIT"
+            head "https://github.com/Aietes/smux.git", branch: "main"
+
+            depends_on "rust" => :build
+            depends_on "fzf"
+            depends_on "tmux"
+
+            def install
+              system "cargo", "install", *std_cargo_args
+
+              mkdir "completions" do
+                system bin/"smux", "completions", "zsh", "--dir", "."
+                zsh_completion.install "_smux"
+              end
+
+              mkdir "manpages" do
+                system bin/"smux", "man", "--dir", "."
+                man1.install Dir["*.1"]
+                man5.install Dir["*.5"]
+              end
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/smux --version")
+            end
+          end
+          EOF
+
+      - name: Commit and push tap update
+        shell: bash
+        working-directory: homebrew-smux
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/smux.rb
+          git commit -m "smux ${{ steps.vars.outputs.version }}" || exit 0
+          git push
