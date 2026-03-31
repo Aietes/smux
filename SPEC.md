@@ -195,7 +195,12 @@ Top-level config sections:
 
 1. `settings`
 2. `templates`
-3. `projects`
+
+Project definitions live in:
+
+```text
+~/.config/smux/projects/*.toml
+```
 
 ### Example
 
@@ -208,6 +213,7 @@ icons = "auto"
 session = 75
 directory = 108
 template = 179
+project = 81
 
 [templates.default]
 startup_window = "main"
@@ -223,8 +229,11 @@ windows = [
       { layout = "right 40%", command = "cargo test" },
     ] },
 ]
+```
 
-[projects.example]
+Example project file:
+
+```toml
 path = "~/code/example"
 template = "rust"
 session_name = "example"
@@ -246,10 +255,11 @@ Fields:
 - `icon_colors.session: integer?` default `75`
 - `icon_colors.directory: integer?` default `108`
 - `icon_colors.template: integer?` default `179`
+- `icon_colors.project: integer?` default `81`
 
 Icon behavior:
 
-- session, directory, and template pickers may render Nerd Font icons
+- session, project, directory, and template pickers may render Nerd Font icons
 - icon rendering must remain optional
 - `auto` may use terminal capability heuristics, but font support is not reliably detectable
 - icon colors may be configured with ANSI-256 palette indexes
@@ -322,10 +332,12 @@ Rules:
 - supported positions are `right`, `left`, `bottom`, and `top`
 - `startup_pane` is a zero-based pane index within the startup window
 
-### `[projects.<name>]`
+### Project definition files
+
+Project definitions are individual TOML files under `~/.config/smux/projects/`.
+The project name comes from the file name.
 
 ```toml
-[projects.myapp]
 path = "~/code/myapp"
 template = "rust"
 session_name = "myapp"
@@ -334,13 +346,20 @@ session_name = "myapp"
 Fields:
 
 - `path: string` required
-- `template: string?`
 - `session_name: string?`
+- `template: string?`
+- `root: string?`
+- `startup_window: string?`
+- `startup_pane: integer?`
+- `windows: array[window]?`
 
 Rules:
 
-- project names are config-only identifiers
 - project matching is by normalized absolute path
+- a project may point at a reusable template
+- a project may define its own windows directly
+- a project may use a template as a base and override it
+- if a project defines `windows`, they replace template windows instead of merging window-by-window
 
 ## Resolution Rules
 
@@ -349,7 +368,7 @@ Rules:
 When connecting a directory, template resolution order is:
 
 1. CLI `--template`
-2. matching `project.template`
+2. matching project definition
 3. `settings.default_template`
 4. built-in fallback template
 
@@ -559,7 +578,6 @@ Module responsibilities:
 struct Config {
     settings: Option<Settings>,
     templates: HashMap<String, Template>,
-    projects: Option<HashMap<String, Project>>,
 }
 
 struct Settings {
@@ -568,8 +586,12 @@ struct Settings {
 
 struct Project {
     path: String,
-    template: Option<String>,
     session_name: Option<String>,
+    template: Option<String>,
+    root: Option<String>,
+    startup_window: Option<String>,
+    startup_pane: Option<usize>,
+    windows: Option<Vec<Window>>,
 }
 
 struct Template {
@@ -600,6 +622,7 @@ Picker model:
 ```rust
 enum EntryKind {
     Session,
+    Project,
     Directory,
 }
 
@@ -646,6 +669,7 @@ v1 must include:
 - template validation
 - template application for windows, panes, layouts, and commands
 - project path mapping
+- project file loading from `~/.config/smux/projects/`
 - deterministic session name derivation
 - inside/outside tmux handling
 - graceful operation when `zoxide` is unavailable
@@ -699,12 +723,12 @@ Must cover:
 
 The implementation is complete when all of the following are true:
 
-1. `smux select` shows both tmux sessions and zoxide directories in one `fzf` picker.
+1. `smux select` shows tmux sessions, saved projects, and zoxide directories in one `fzf` picker.
 2. Selecting a session switches or attaches correctly.
 3. Selecting a directory creates or reuses a session correctly.
 4. Session names default to the sanitized folder basename.
 5. Templates support windows, panes, pane layouts, window layouts, and commands.
-6. Configured project paths apply template and session-name overrides automatically.
+6. Saved project definitions apply project-specific session and layout behavior automatically.
 7. The tool works without shell scripts or tmuxinator-style wrappers.
 8. Errors are readable and actionable.
 9. Documentation covers install, config, tmux binding, and examples.
@@ -721,6 +745,7 @@ icons = "auto"
 session = 75
 directory = 108
 template = 179
+project = 81
 
 [templates.default]
 startup_window = "main"
@@ -735,8 +760,11 @@ windows = [
       { layout = "right 40%", command = "cargo test" },
     ] },
 ]
+```
 
-[projects.example]
+Starter project file:
+
+```toml
 path = "~/code/example"
 template = "rust"
 session_name = "example"

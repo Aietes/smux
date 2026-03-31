@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 use crate::cli::{Cli, Commands};
 use crate::config;
@@ -25,12 +25,7 @@ pub fn run(cli: Cli) -> Result<()> {
             config,
         } => {
             let loaded = config::load_optional(config.as_deref())?;
-            run_select(
-                &tmux,
-                loaded.as_ref().map(|loaded| &loaded.config),
-                choose_template,
-                no_project_detect,
-            )
+            run_select(&tmux, loaded.as_ref(), choose_template, no_project_detect)
         }
         Commands::Connect {
             path,
@@ -42,7 +37,7 @@ pub fn run(cli: Cli) -> Result<()> {
             session::connect_path(
                 &tmux,
                 &path,
-                loaded.as_ref().map(|loaded| &loaded.config),
+                loaded.as_ref(),
                 template.as_deref(),
                 session_name.as_deref(),
                 session::ProjectDetection::Enabled,
@@ -67,11 +62,11 @@ pub fn run(cli: Cli) -> Result<()> {
             Ok(())
         }
         Commands::ListProjects { config } => {
-            let loaded = config::load(config.as_deref())?;
-            let mut names = loaded.config.projects.keys().cloned().collect::<Vec<_>>();
+            let loaded = config::load_workspace(config.as_deref())?;
+            let mut names = loaded.projects.keys().cloned().collect::<Vec<_>>();
             names.sort();
             for name in names {
-                let project = &loaded.config.projects[&name];
+                let project = &loaded.projects[&name];
                 let resolved = util::expand_and_normalize_path(Path::new(&project.path))?;
                 println!("{name}\t{}", resolved.display());
             }
@@ -101,17 +96,26 @@ pub fn run(cli: Cli) -> Result<()> {
 
 fn run_select(
     tmux: &Tmux,
-    config: Option<&config::Config>,
+    loaded: Option<&config::LoadedConfig>,
     choose_template: bool,
     no_project_detect: bool,
 ) -> Result<()> {
     let mut entries = Vec::new();
+    let config = loaded.map(|loaded| &loaded.config);
     let display_style = DisplayStyle::from_config(config);
     let sessions = tmux.list_sessions()?;
     let session_count = sessions.len();
 
     for session in sessions {
         entries.push(fzf::Entry::session(display_style, session));
+    }
+
+    if let Some(loaded) = loaded {
+        let mut project_names = loaded.projects.keys().cloned().collect::<Vec<_>>();
+        project_names.sort();
+        for project_name in project_names {
+            entries.push(fzf::Entry::project(display_style, project_name));
+        }
     }
 
     let mut zoxide_available = true;
@@ -161,11 +165,15 @@ fn run_select(
             session::connect_path(
                 tmux,
                 Path::new(&selection.value),
-                config,
+                loaded,
                 template.as_deref(),
                 None,
                 project_detection,
             )
+        }
+        fzf::EntryKind::Project => {
+            let loaded = loaded.context("project selection requires config or project files")?;
+            session::connect_project(tmux, loaded, &selection.value)
         }
     }
 }

@@ -9,6 +9,7 @@ use crate::ui::DisplayStyle;
 pub enum EntryKind {
     Session,
     Directory,
+    Project,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -35,10 +36,19 @@ impl Entry {
         }
     }
 
+    pub fn project(style: DisplayStyle, value: String) -> Self {
+        Self {
+            kind: EntryKind::Project,
+            label: style.project_label(&value),
+            value,
+        }
+    }
+
     fn encode(&self) -> String {
         let kind = match self.kind {
             EntryKind::Session => "session",
             EntryKind::Directory => "folder",
+            EntryKind::Project => "project",
         };
 
         format!("{kind}\t{}\t{}", self.value, self.label)
@@ -53,6 +63,7 @@ impl Entry {
         let kind = match kind {
             "session" => EntryKind::Session,
             "folder" => EntryKind::Directory,
+            "project" => EntryKind::Project,
             other => bail!("unknown picker entry kind: {other}"),
         };
 
@@ -168,8 +179,8 @@ fn select_with_runner(
     add_common_picker_args(
         &mut args,
         prompt,
-        "ctrl-a all  ctrl-s sessions  ctrl-f folders",
-        "ctrl-a:change-prompt(smux> )+change-query(),ctrl-s:change-prompt(session> )+change-query(session ),ctrl-f:change-prompt(folder> )+change-query(folder )",
+        "ctrl-a all  ctrl-s sessions  ctrl-f folders  ctrl-p projects",
+        "ctrl-a:change-prompt(smux> )+change-query(),ctrl-s:change-prompt(session> )+change-query(session ),ctrl-f:change-prompt(folder> )+change-query(folder ),ctrl-p:change-prompt(project> )+change-query(project )",
     );
     args.extend(["--nth".to_owned(), "1,3".to_owned()]);
     let input = entries
@@ -250,8 +261,30 @@ mod tests {
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"1,3".to_owned()));
-        assert!(recorded[0].args.iter().any(|arg| arg.contains("ctrl-s sessions")));
-        assert!(recorded[0].args.iter().any(|arg| arg.contains("ctrl-f:change-prompt(folder> )")));
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("ctrl-s sessions"))
+        );
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("ctrl-f:change-prompt(folder> )"))
+        );
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("ctrl-p projects"))
+        );
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("ctrl-p:change-prompt(project> )"))
+        );
         assert_eq!(
             recorded[0].stdin.as_deref(),
             Some("folder\t/tmp/example\tdir      /tmp/example\n")
@@ -289,8 +322,18 @@ mod tests {
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"1,2,3".to_owned()));
-        assert!(recorded[0].args.iter().any(|arg| arg.contains("ctrl-t templates")));
-        assert!(recorded[0].args.iter().any(|arg| arg.contains("ctrl-t:change-prompt(template> )")));
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("ctrl-t templates"))
+        );
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("ctrl-t:change-prompt(template> )"))
+        );
         assert_eq!(
             recorded[0].stdin.as_deref(),
             Some("template\tdefault\ttemplate default\ntemplate\trust\ttemplate rust\n")

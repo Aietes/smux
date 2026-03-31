@@ -5,6 +5,7 @@
 It helps you:
 
 - jump to an existing tmux session
+- launch a named project from a saved project definition
 - pick a recent directory and create or reuse a session for it
 - apply tmux templates with windows, panes, layouts, and startup commands
 
@@ -50,6 +51,12 @@ Default config path:
 
 ```text
 ~/.config/smux/config.toml
+```
+
+Project definitions live in:
+
+```text
+~/.config/smux/projects/*.toml
 ```
 
 Then run:
@@ -101,6 +108,7 @@ The picker keeps the prompt at the top and supports category-aware filtering.
 Type:
 
 - `session` to narrow to tmux sessions
+- `project` to narrow to saved projects
 - `folder` to narrow to directories
 - `template` in the template picker to narrow template choices
 
@@ -108,12 +116,13 @@ Shortcuts:
 
 - `Ctrl-A` resets to the full list
 - `Ctrl-S` filters the main picker to sessions
+- `Ctrl-P` filters the main picker to projects
 - `Ctrl-F` filters the main picker to folders
 - `Ctrl-T` filters the template picker to templates
 
-If you use a Nerd Font, `smux` can show colored icons for sessions, folders, and templates.
+If you use a Nerd Font, `smux` can show colored icons for sessions, projects, folders, and templates.
 
-## Example Config
+## Example Main Config
 
 ```toml
 [settings]
@@ -124,6 +133,7 @@ icons = "auto"
 session = 75
 directory = 108
 template = 179
+project = 81
 
 [templates.default]
 startup_window = "main"
@@ -139,31 +149,45 @@ windows = [
       { layout = "right 40%", command = "cargo test" },
     ] },
 ]
-
-[projects.example]
-path = "~/code/example"
-template = "rust"
-session_name = "example"
 ```
+
+## Example Project File
+
+```toml
+path = "~/code/example"
+session_name = "example"
+template = "rust"
+```
+
+Save that as:
+
+```text
+~/.config/smux/projects/example.toml
+```
+
+Projects can either:
+
+- point at a reusable template
+- define their own windows, panes, commands, and startup behavior directly
+- use a template as a base and override it with project-specific session details
 
 ## Config Overview
 
-The config has three top-level sections:
+The main config has two top-level sections:
 
 - `settings`
 - `templates`
-- `projects`
 
 In short:
 
 - `settings` defines defaults and picker appearance
 - `templates` define tmux windows, panes, and layouts
-- `projects` map known paths to template and session-name overrides
+- project files in `projects/*.toml` define concrete workspaces
 
 Template resolution order:
 
 1. `--template`
-2. matching project template
+2. matching project definition
 3. `settings.default_template`
 4. built-in fallback template
 

@@ -5,6 +5,7 @@ use crate::config::{Config, IconColors, IconMode};
 const SESSION_ICON: &str = "";
 const DIRECTORY_ICON: &str = "󰉋";
 const TEMPLATE_ICON: &str = "󰙅";
+const PROJECT_ICON: &str = "󰏖";
 const ANSI_RESET: &str = "\x1b[0m";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -65,6 +66,10 @@ impl DisplayStyle {
         self.label(TEMPLATE_ICON, self.icon_colors.template, "template", value)
     }
 
+    pub fn project_label(self, value: &str) -> String {
+        self.label(PROJECT_ICON, self.icon_colors.project, "project", value)
+    }
+
     fn label(self, icon: &str, color: u8, text: &str, value: &str) -> String {
         if self.icons_enabled {
             format!("\x1b[38;5;{color}m{icon}{ANSI_RESET}  {value}")
@@ -116,6 +121,7 @@ mod tests {
         assert!(!style.icons_enabled());
         assert_eq!(style.directory_label("/tmp/demo"), "dir      /tmp/demo");
         assert_eq!(style.template_label("rust"), "template rust");
+        assert_eq!(style.project_label("demo"), "project  demo");
     }
 
     #[test]
@@ -126,6 +132,7 @@ mod tests {
                 session: 33,
                 directory: 44,
                 template: 55,
+                project: 66,
             },
         );
 
@@ -136,5 +143,6 @@ mod tests {
                 .starts_with("\u{1b}[38;5;44m")
         );
         assert!(style.template_label("rust").starts_with("\u{1b}[38;5;55m"));
+        assert!(style.project_label("demo").starts_with("\u{1b}[38;5;66m"));
     }
 }

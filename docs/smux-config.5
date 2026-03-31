@@ -4,18 +4,19 @@ smux-config \- configuration file format for smux
 .SH SYNOPSIS
 .B ~/.config/smux/config.toml
 .SH DESCRIPTION
-\fBsmux\fR reads a single TOML configuration file.
+\fBsmux\fR reads a main TOML configuration file plus optional project files.
 By default the file is loaded from \fB~/.config/smux/config.toml\fR.
 If \fBXDG_CONFIG_HOME\fR is set, \fBsmux\fR uses
 \fB$XDG_CONFIG_HOME/smux/config.toml\fR.
+.PP
+Project definitions live in \fB~/.config/smux/projects/*.toml\fR or
+\fB$XDG_CONFIG_HOME/smux/projects/*.toml\fR.
 .SH OVERVIEW
-The configuration has three top-level sections:
+The main configuration has two top-level sections:
 .IP \(bu 2
 \fB[settings]\fR
 .IP \(bu 2
 \fB[templates.<name>]\fR
-.IP \(bu 2
-\fB[projects.<name>]\fR
 .SH SETTINGS
 .SS [settings]
 .nf
@@ -27,6 +28,7 @@ icons = "auto"
 session = 75
 directory = 108
 template = 179
+project = 81
 .fi
 .PP
 \fBdefault_template\fR sets the template used when no CLI override or matching
@@ -36,7 +38,7 @@ project template applies.
 \fBnever\fR.
 .PP
 \fBsettings.icon_colors\fR sets ANSI-256 icon colors for sessions,
-directories, and templates.
+directories, templates, and projects.
 .SH TEMPLATES
 Templates define the tmux layout used when \fBsmux\fR creates a new session.
 The recommended format uses TOML 1.1 inline tables for windows and panes.
@@ -110,9 +112,19 @@ When both pane and window layout are set, pane layout controls split creation
 and window layout is applied afterward with \fBtmux select-layout\fR.
 That means window layout may rearrange the final pane geometry.
 .SH PROJECTS
-Projects map known directories to template and session-name overrides.
+Projects are stored as individual files in \fB~/.config/smux/projects/\fR.
 .nf
-[projects.myapp]
+path = "~/code/myapp"
+template = "rust"
+session_name = "myapp"
+.fi
+.PP
+The project name comes from the file name, for example
+\fB~/.config/smux/projects/myapp.toml\fR.
+.PP
+Project files may either point at a reusable template or define their own
+windows and startup behavior directly.
+.nf
 path = "~/code/myapp"
 template = "rust"
 session_name = "myapp"
@@ -122,15 +134,23 @@ Project fields:
 .IP \(bu 2
 \fBpath\fR (required)
 .IP \(bu 2
+\fBsession_name\fR (optional)
+.IP \(bu 2
 \fBtemplate\fR (optional)
 .IP \(bu 2
-\fBsession_name\fR (optional)
+\fBroot\fR (optional)
+.IP \(bu 2
+\fBstartup_window\fR (optional)
+.IP \(bu 2
+\fBstartup_pane\fR (optional)
+.IP \(bu 2
+\fBwindows\fR (optional; same structure as template windows)
 .SH RESOLUTION ORDER
 Template resolution order:
 .IP "1." 4
 \fB--template\fR
 .IP "2." 4
-matching project template
+matching project definition
 .IP "3." 4
 \fBsettings.default_template\fR
 .IP "4." 4

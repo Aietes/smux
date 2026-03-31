@@ -1,6 +1,6 @@
 # Configuration Reference
 
-`smux` reads a single TOML config file.
+`smux` reads a main TOML config file plus optional project definition files.
 
 Default path:
 
@@ -14,13 +14,24 @@ If `XDG_CONFIG_HOME` is set, `smux` uses:
 $XDG_CONFIG_HOME/smux/config.toml
 ```
 
+Project definitions live in:
+
+```text
+~/.config/smux/projects/*.toml
+```
+
+or, when `XDG_CONFIG_HOME` is set:
+
+```text
+$XDG_CONFIG_HOME/smux/projects/*.toml
+```
+
 ## Structure
 
-The config has three top-level sections:
+The main config has two top-level sections:
 
 - `settings`
 - `templates`
-- `projects`
 
 Example:
 
@@ -33,6 +44,7 @@ icons = "auto"
 session = 75
 directory = 108
 template = 179
+project = 81
 
 [templates.default]
 startup_window = "main"
@@ -48,11 +60,14 @@ windows = [
       { layout = "right 40%", command = "cargo test" },
     ] },
 ]
+```
 
-[projects.example]
+Example project file:
+
+```toml
 path = "~/code/example"
-template = "rust"
 session_name = "example"
+template = "rust"
 ```
 
 ## `[settings]`
@@ -81,6 +96,7 @@ Fields:
 session = 75
 directory = 108
 template = 179
+project = 81
 ```
 
 Fields:
@@ -94,6 +110,9 @@ Fields:
 - `template`
   - type: integer
   - default: `179`
+- `project`
+  - type: integer
+  - default: `81`
 
 These values are ANSI-256 color indexes used for picker icons.
 
@@ -276,32 +295,72 @@ windows = [
 ]
 ```
 
-## `[projects.<name>]`
+## Project Definitions
 
-Projects map known directories to template and session-name overrides.
+Project definitions are stored as individual files in `~/.config/smux/projects/`.
+The project name comes from the file name, for example:
 
-Example:
+```text
+~/.config/smux/projects/myapp.toml
+```
+
+This project appears in `smux select` as `myapp`.
+
+Minimal project file:
 
 ```toml
-[projects.myapp]
 path = "~/code/myapp"
 template = "rust"
 session_name = "myapp"
 ```
 
-Fields:
+Fully defined project file:
+
+```toml
+path = "~/code/myapp"
+session_name = "myapp"
+startup_window = "editor"
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "run", layout = "main-horizontal", panes = [
+      { command = "cargo run" },
+      { layout = "right 40%", command = "cargo test" },
+    ] },
+]
+```
+
+Project fields:
 
 - `path`
   - type: string
   - required
   - expanded and normalized before matching
-- `template`
-  - type: string
-  - optional
-  - must refer to an existing template
 - `session_name`
   - type: string
   - optional
+- `template`
+  - type: string
+  - optional
+  - must refer to an existing template if set
+- `root`
+  - type: string
+  - optional
+- `startup_window`
+  - type: string
+  - optional
+- `startup_pane`
+  - type: integer
+  - optional
+- `windows`
+  - type: array of inline tables
+  - optional
+
+Project behavior:
+
+- a project may point at a template and use it as-is
+- a project may define its own windows directly without using a template
+- a project may use a template as a base and override it with project-specific session details
+- when a project defines `windows`, they replace the template windows rather than merging window-by-window
 
 ## Resolution Order
 
@@ -310,7 +369,7 @@ Fields:
 When creating or connecting to a session, template resolution order is:
 
 1. `--template`
-2. matching project `template`
+2. matching project definition
 3. `settings.default_template`
 4. built-in fallback template
 
@@ -329,12 +388,12 @@ Session name resolution order is:
 Validation includes:
 
 - `default_template` must exist if set
-- project `template` references must exist
 - each template must contain at least one window
 - `startup_window` must refer to an existing template window
 - `startup_pane` must be valid for the chosen startup window
 - a window cannot define both `command` and `panes`
 - a `panes` array cannot be empty
+- project `template` references must exist
 - project paths must be expandable and valid
 
 ## Picker Behavior
@@ -342,6 +401,7 @@ Validation includes:
 The unified picker combines:
 
 - tmux sessions
+- saved projects
 - zoxide directories
 
 The template picker is separate and appears only when `--choose-template` is used.
@@ -350,9 +410,15 @@ Current behavior:
 
 - prompt is shown at the top
 - `Esc` cancels cleanly
+- typing `project` narrows to saved projects
 - typing `session` narrows to sessions
 - typing `folder` narrows to directories
 - typing `template` narrows template choices in the template picker
+- `Ctrl-A` resets the picker
+- `Ctrl-S` filters to sessions
+- `Ctrl-P` filters to projects
+- `Ctrl-F` filters to folders
+- `Ctrl-T` filters to templates in the template picker
 
 ## Related Docs
 

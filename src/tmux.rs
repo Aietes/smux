@@ -341,14 +341,18 @@ impl Tmux {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::Mutex;
 
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner, IoMode};
     use crate::templates::{PaneLayout, PanePlan, PanePosition, SessionPlan, WindowPlan};
 
     use super::Tmux;
 
+    static TMUX_ENV_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn outside_tmux_uses_inherited_stdio_for_attach() {
+        let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
         let runner = Arc::new(FakeCommandRunner::new());
         runner.push_inherit(Ok(CommandStatus {
             success: true,
@@ -372,6 +376,7 @@ mod tests {
 
     #[test]
     fn inside_tmux_uses_switch_client_with_captured_io() {
+        let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
         let runner = Arc::new(FakeCommandRunner::new());
         runner.push_capture(Ok(CommandOutput {
             status: CommandStatus {

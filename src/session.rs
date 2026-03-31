@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::config::{Config, Template};
+use crate::config::{LoadedConfig, Template};
 use crate::templates;
 use crate::tmux::Tmux;
 use crate::util;
@@ -12,19 +12,19 @@ pub const BUILTIN_TEMPLATE_NAME: &str = "__builtin__";
 pub fn connect_path(
     tmux: &Tmux,
     path: &Path,
-    config: Option<&Config>,
+    loaded: Option<&LoadedConfig>,
     override_template: Option<&str>,
     override_name: Option<&str>,
     project_detection: ProjectDetection,
 ) -> Result<()> {
     let normalized = util::normalize_path(path)?;
-    let resolved_project = match (config, project_detection) {
+    let resolved_project = match (loaded, project_detection) {
         (_, ProjectDetection::Disabled) => None,
-        (Some(config), _) => crate::config::resolve_project(config, &normalized)?,
+        (Some(loaded), _) => crate::config::resolve_project(loaded, &normalized)?,
         (None, _) => None,
     };
 
-    let template = resolve_template(config, override_template, resolved_project.as_ref())?;
+    let template = resolve_template(loaded, override_template, resolved_project.as_ref())?;
 
     let session_name = match override_name {
         Some(name) => util::validated_session_name(name)?,
@@ -46,6 +46,21 @@ pub fn connect_path(
     tmux.switch_or_attach(&session_name)
 }
 
+pub fn connect_project(tmux: &Tmux, loaded: &LoadedConfig, project_name: &str) -> Result<()> {
+    let project = loaded
+        .projects
+        .get(project_name)
+        .with_context(|| format!("unknown project: {project_name}"))?;
+    connect_path(
+        tmux,
+        Path::new(&project.path),
+        Some(loaded),
+        None,
+        project.session_name.as_deref(),
+        ProjectDetection::Enabled,
+    )
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ProjectDetection {
     Enabled,
@@ -53,7 +68,7 @@ pub enum ProjectDetection {
 }
 
 fn resolve_template(
-    config: Option<&Config>,
+    loaded: Option<&LoadedConfig>,
     override_template: Option<&str>,
     project: Option<&crate::config::ResolvedProject<'_>>,
 ) -> Result<Template> {
@@ -62,28 +77,29 @@ fn resolve_template(
             return Ok(templates::fallback_template());
         }
 
-        let config = config.context("explicit --template requires a config file with templates")?;
-        return load_template(config, template_name);
+        let loaded = loaded.context("explicit --template requires a config file with templates")?;
+        return load_template(&loaded.config, template_name);
     }
 
-    if let Some(project) = project
-        && let Some(template_name) = &project.project.template
-    {
-        return config
-            .context("project template resolution requires config")
-            .and_then(|config| load_template(config, template_name));
+    if let Some(project) = project {
+        let loaded = loaded.context("project template resolution requires config")?;
+        if let Some(template) =
+            crate::config::materialize_project_template(&loaded.config, project.project)?
+        {
+            return Ok(template);
+        }
     }
 
-    if let Some(config) = config
-        && let Some(template_name) = &config.settings.default_template
+    if let Some(loaded) = loaded
+        && let Some(template_name) = &loaded.config.settings.default_template
     {
-        return load_template(config, template_name);
+        return load_template(&loaded.config, template_name);
     }
 
     Ok(templates::fallback_template())
 }
 
-fn load_template(config: &Config, template_name: &str) -> Result<Template> {
+fn load_template(config: &crate::config::Config, template_name: &str) -> Result<Template> {
     config
         .templates
         .get(template_name)
@@ -101,7 +117,9 @@ pub fn switch_existing(tmux: &Tmux, session: &str) -> Result<()> {
 mod tests {
     use anyhow::Result;
 
-    use crate::config::{Config, Project, ResolvedProject, Settings, Template, Window};
+    use crate::config::{
+        Config, LoadedConfig, Project, ResolvedProject, Settings, Template, Window,
+    };
     use crate::templates;
     use crate::util;
     use std::collections::HashMap;
@@ -128,22 +146,22 @@ mod tests {
 
     #[test]
     fn prefers_project_session_name_when_available() -> Result<()> {
-        let config = Config {
-            settings: Settings::default(),
-            templates: HashMap::new(),
-            projects: HashMap::from([(
-                "demo".to_owned(),
-                Project {
-                    path: "/tmp/demo".to_owned(),
-                    template: None,
-                    session_name: Some("demo-session".to_owned()),
-                },
-            )]),
-        };
+        let projects = HashMap::from([(
+            "demo".to_owned(),
+            Project {
+                path: "/tmp/demo".to_owned(),
+                template: None,
+                session_name: Some("demo-session".to_owned()),
+                root: None,
+                startup_window: None,
+                startup_pane: None,
+                windows: None,
+            },
+        )]);
 
         let project = ResolvedProject {
             name: "demo",
-            project: config.projects.get("demo").expect("project exists"),
+            project: projects.get("demo").expect("project exists"),
             normalized_path: PathBuf::from("/tmp/demo"),
         };
 
@@ -177,10 +195,17 @@ mod tests {
                     }],
                 },
             )]),
+        };
+
+        let loaded = LoadedConfig {
+            path: PathBuf::from("/tmp/config.toml"),
+            config_exists: true,
+            project_dir: PathBuf::from("/tmp/projects"),
+            config,
             projects: HashMap::new(),
         };
 
-        let error = super::resolve_template(Some(&config), Some("missing"), None)
+        let error = super::resolve_template(Some(&loaded), Some("missing"), None)
             .expect_err("missing template should fail");
         assert!(error.to_string().contains("unknown template"));
     }
@@ -204,81 +229,90 @@ mod tests {
 
     #[test]
     fn explicit_template_overrides_project_and_default() -> Result<()> {
-        let config = Config {
-            settings: Settings {
-                default_template: Some("default".to_owned()),
-                ..Default::default()
+        let loaded = LoadedConfig {
+            path: PathBuf::from("/tmp/config.toml"),
+            config_exists: true,
+            project_dir: PathBuf::from("/tmp/projects"),
+            config: Config {
+                settings: Settings {
+                    default_template: Some("default".to_owned()),
+                    ..Default::default()
+                },
+                templates: HashMap::from([
+                    (
+                        "default".to_owned(),
+                        Template {
+                            root: None,
+                            startup_window: None,
+                            startup_pane: None,
+                            windows: vec![Window {
+                                name: "default-window".to_owned(),
+                                cwd: None,
+                                pre_command: None,
+                                command: None,
+                                layout: None,
+                                synchronize: false,
+                                panes: None,
+                            }],
+                        },
+                    ),
+                    (
+                        "project".to_owned(),
+                        Template {
+                            root: None,
+                            startup_window: None,
+                            startup_pane: None,
+                            windows: vec![Window {
+                                name: "project-window".to_owned(),
+                                cwd: None,
+                                pre_command: None,
+                                command: None,
+                                layout: None,
+                                synchronize: false,
+                                panes: None,
+                            }],
+                        },
+                    ),
+                    (
+                        "explicit".to_owned(),
+                        Template {
+                            root: None,
+                            startup_window: None,
+                            startup_pane: None,
+                            windows: vec![Window {
+                                name: "explicit-window".to_owned(),
+                                cwd: None,
+                                pre_command: None,
+                                command: None,
+                                layout: None,
+                                synchronize: false,
+                                panes: None,
+                            }],
+                        },
+                    ),
+                ]),
             },
-            templates: HashMap::from([
-                (
-                    "default".to_owned(),
-                    Template {
-                        root: None,
-                        startup_window: None,
-                        startup_pane: None,
-                        windows: vec![Window {
-                            name: "default-window".to_owned(),
-                            cwd: None,
-                            pre_command: None,
-                            command: None,
-                            layout: None,
-                            synchronize: false,
-                            panes: None,
-                        }],
-                    },
-                ),
-                (
-                    "project".to_owned(),
-                    Template {
-                        root: None,
-                        startup_window: None,
-                        startup_pane: None,
-                        windows: vec![Window {
-                            name: "project-window".to_owned(),
-                            cwd: None,
-                            pre_command: None,
-                            command: None,
-                            layout: None,
-                            synchronize: false,
-                            panes: None,
-                        }],
-                    },
-                ),
-                (
-                    "explicit".to_owned(),
-                    Template {
-                        root: None,
-                        startup_window: None,
-                        startup_pane: None,
-                        windows: vec![Window {
-                            name: "explicit-window".to_owned(),
-                            cwd: None,
-                            pre_command: None,
-                            command: None,
-                            layout: None,
-                            synchronize: false,
-                            panes: None,
-                        }],
-                    },
-                ),
-            ]),
             projects: HashMap::from([(
                 "demo".to_owned(),
                 Project {
                     path: "/tmp/demo".to_owned(),
                     template: Some("project".to_owned()),
                     session_name: None,
+                    root: None,
+                    startup_window: None,
+                    startup_pane: None,
+                    windows: None,
                 },
             )]),
         };
 
         let project = ResolvedProject {
             name: "demo",
-            project: config.projects.get("demo").expect("project exists"),
+            project: loaded.projects.get("demo").expect("project exists"),
             normalized_path: PathBuf::from("/tmp/demo"),
         };
 
-        let template = super::resolve_template(Some(&config), Some("explicit"), Some(&project))?;
+        let template = super::resolve_template(Some(&loaded), Some("explicit"), Some(&project))?;
         assert_eq!(template.windows[0].name, "explicit-window");
         Ok(())
     }
@@ -307,10 +341,17 @@ mod tests {
                     }],
                 },
             )]),
+        };
+
+        let loaded = LoadedConfig {
+            path: PathBuf::from("/tmp/config.toml"),
+            config_exists: true,
+            project_dir: PathBuf::from("/tmp/projects"),
+            config,
             projects: HashMap::new(),
         };
 
-        let template = super::resolve_template(Some(&config), None, None)?;
+        let template = super::resolve_template(Some(&loaded), None, None)?;
         assert_eq!(template.windows[0].name, "default-window");
         Ok(())
     }

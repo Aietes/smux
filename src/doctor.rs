@@ -45,7 +45,16 @@ pub fn run(config_path: Option<&Path>) -> Result<()> {
 
     match config::load_optional(config_path) {
         Ok(Some(loaded)) => {
-            println!("config: ok ({})", loaded.path.display());
+            if loaded.config_exists {
+                println!("config: ok ({})", loaded.path.display());
+            } else {
+                println!("config: missing");
+            }
+            println!(
+                "projects: {} ({})",
+                loaded.projects.len(),
+                loaded.project_dir.display()
+            );
             print_icon_status(
                 loaded.config.settings.icons,
                 loaded.config.settings.icon_colors,
@@ -53,6 +62,9 @@ pub fn run(config_path: Option<&Path>) -> Result<()> {
         }
         Ok(None) => {
             println!("config: missing");
+            if let Ok(project_dir) = config::default_projects_dir() {
+                println!("projects: 0 ({})", project_dir.display());
+            }
             print_icon_status(IconMode::Auto, Default::default());
         }
         Err(error) => {
@@ -86,10 +98,11 @@ fn print_icon_status(icon_mode: IconMode, icon_colors: crate::config::IconColors
     };
 
     println!(
-        "icons: {state} (mode: {}; colors: session={}, directory={}, template={}; Nerd Font support is not auto-detectable)",
+        "icons: {state} (mode: {}; colors: session={}, directory={}, template={}, project={}; Nerd Font support is not auto-detectable)",
         style.icon_mode().as_str(),
         style.icon_colors().session,
         style.icon_colors().directory,
         style.icon_colors().template,
+        style.icon_colors().project,
     );
 }
