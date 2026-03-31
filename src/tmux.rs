@@ -133,29 +133,26 @@ impl Tmux {
     }
 
     pub fn switch_or_attach(&self, session: &str) -> Result<()> {
-        let args = if util::inside_tmux() {
-            vec![
-                "switch-client".to_owned(),
-                "-t".to_owned(),
-                session.to_owned(),
-            ]
+        if util::inside_tmux() {
+            self.run_tmux(["switch-client", "-t", session])
+                .context("failed to execute tmux switch-client")
         } else {
-            vec![
+            let args = vec![
                 "attach-session".to_owned(),
                 "-t".to_owned(),
                 session.to_owned(),
-            ]
-        };
+            ];
 
-        let status = self
-            .runner
-            .run_inherit("tmux", &args)
-            .context("failed to execute tmux switch/attach")?;
+            let status = self
+                .runner
+                .run_inherit("tmux", &args)
+                .context("failed to execute tmux attach-session")?;
 
-        if status.success {
-            Ok(())
-        } else {
-            bail!("tmux switch/attach failed with status {:?}", status.code)
+            if status.success {
+                Ok(())
+            } else {
+                bail!("tmux attach-session failed with status {:?}", status.code)
+            }
         }
     }
 
@@ -371,6 +368,37 @@ mod tests {
         assert_eq!(recorded[0].program, "tmux");
         assert_eq!(recorded[0].args, vec!["attach-session", "-t", "demo"]);
         assert_eq!(recorded[0].io_mode, IoMode::Inherit);
+    }
+
+    #[test]
+    fn inside_tmux_uses_switch_client_with_captured_io() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }));
+
+        unsafe {
+            std::env::set_var("TMUX", "/tmp/tmux-test,123,0");
+        }
+
+        let tmux = Tmux::with_runner(runner.clone());
+        tmux.switch_or_attach("demo")
+            .expect("switch-client should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].program, "tmux");
+        assert_eq!(recorded[0].args, vec!["switch-client", "-t", "demo"]);
+        assert_eq!(recorded[0].io_mode, IoMode::Capture);
+
+        unsafe {
+            std::env::remove_var("TMUX");
+        }
     }
 
     #[test]
