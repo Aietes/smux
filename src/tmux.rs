@@ -195,9 +195,16 @@ impl Tmux {
         self.create_session_with_window(&plan.session_name, &first_window.name, &first_window.cwd)?;
         self.configure_panes(&plan.session_name, &first_window.name, first_window)?;
 
+        let mut previous_window = first_window.name.as_str();
         for window in plan.windows.iter().skip(1) {
-            self.new_window(&plan.session_name, &window.name, &window.cwd)?;
+            self.new_window_after(
+                &plan.session_name,
+                previous_window,
+                &window.name,
+                &window.cwd,
+            )?;
             self.configure_panes(&plan.session_name, &window.name, window)?;
+            previous_window = &window.name;
         }
 
         self.select_window(&plan.session_name, &plan.startup_window)?;
@@ -305,10 +312,26 @@ impl Tmux {
         .context("failed to execute tmux new-session")
     }
 
-    fn new_window(&self, session: &str, window: &str, directory: &Path) -> Result<()> {
+    fn new_window_after(
+        &self,
+        session: &str,
+        after_window: &str,
+        window: &str,
+        directory: &Path,
+    ) -> Result<()> {
         let directory = util::path_to_string(directory)?;
-        self.run_tmux(["new-window", "-t", session, "-n", window, "-c", &directory])
-            .context("failed to execute tmux new-window")
+        let target = format!("{session}:{after_window}");
+        self.run_tmux([
+            "new-window",
+            "-a",
+            "-t",
+            &target,
+            "-n",
+            window,
+            "-c",
+            &directory,
+        ])
+        .context("failed to execute tmux new-window")
     }
 
     fn send_keys_to_target(&self, target: &str, command: &str) -> Result<()> {
@@ -871,7 +894,16 @@ mod tests {
         );
         assert_eq!(
             recorded[4].args,
-            vec!["new-window", "-t", "demo", "-n", "run", "-c", "/tmp/demo"]
+            vec![
+                "new-window",
+                "-a",
+                "-t",
+                "demo:editor",
+                "-n",
+                "run",
+                "-c",
+                "/tmp/demo"
+            ]
         );
         assert_eq!(
             recorded[5].args,

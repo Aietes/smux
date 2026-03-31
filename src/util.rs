@@ -12,21 +12,21 @@ pub fn inside_tmux() -> bool {
 }
 
 pub fn normalize_path(path: &Path) -> Result<PathBuf> {
-    let expanded = expand_tilde(path);
+    let expanded = expand_tilde_path(path);
     expanded
         .canonicalize()
         .with_context(|| format!("failed to resolve path {}", expanded.display()))
 }
 
 pub fn expand_and_normalize_path(path: &Path) -> Result<PathBuf> {
-    let expanded = expand_tilde(path);
+    let expanded = expand_tilde_path(path);
     expanded
         .canonicalize()
         .with_context(|| format!("failed to resolve path {}", expanded.display()))
 }
 
 pub fn expand_and_absolutize_path(path: &Path) -> Result<PathBuf> {
-    let expanded = expand_tilde(path);
+    let expanded = expand_tilde_path(path);
 
     if expanded.exists() {
         return expanded
@@ -127,7 +127,7 @@ pub fn path_to_config_string(path: &Path) -> Result<String> {
     Ok(path)
 }
 
-fn expand_tilde(path: &Path) -> PathBuf {
+pub fn expand_tilde_path(path: &Path) -> PathBuf {
     let text = path.to_string_lossy();
     if !text.starts_with("~/") && text != "~" {
         return path.to_path_buf();
@@ -152,7 +152,7 @@ fn is_tmux_safe(character: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        expand_tilde, path_to_config_string, sanitize_session_name, validated_project_name,
+        expand_tilde_path, path_to_config_string, sanitize_session_name, validated_project_name,
         validated_session_name,
     };
     use std::path::Path;
@@ -167,7 +167,7 @@ mod tests {
             std::env::set_var("HOME", "/Users/stefan");
         }
 
-        let path = expand_tilde(Path::new("~/code"));
+        let path = expand_tilde_path(Path::new("~/code"));
         assert!(path.is_absolute());
 
         unsafe {

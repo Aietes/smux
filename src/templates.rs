@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, bail};
 
 use crate::config::{Pane, Template, Window};
+use crate::util;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionPlan {
@@ -201,7 +202,8 @@ fn resolve_relative(
     window_root: &Path,
     value: &str,
 ) -> Result<PathBuf> {
-    let path = Path::new(value);
+    let expanded = util::expand_tilde_path(Path::new(value));
+    let path = expanded.as_path();
     let base = if path.is_absolute() {
         PathBuf::new()
     } else if value.starts_with("./") || value.starts_with("../") {
@@ -227,6 +229,9 @@ mod tests {
     use crate::config::{Pane, Template, Window};
     use anyhow::Result;
     use std::path::Path;
+    use std::sync::Mutex;
+
+    static HOME_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn fallback_template_has_main_window() {
@@ -348,5 +353,55 @@ mod tests {
         let error = build_session_plan("demo", Path::new("/tmp/demo"), &template)
             .expect_err("pane layout should be validated");
         assert!(error.to_string().contains("unknown pane layout position"));
+    }
+
+    #[test]
+    fn expands_tilde_window_and_pane_paths() -> Result<()> {
+        let _guard = HOME_ENV_LOCK.lock().expect("home env lock should work");
+        unsafe {
+            std::env::set_var("HOME", "/Users/stefan");
+        }
+
+        let template = Template {
+            root: None,
+            startup_window: Some("main".to_owned()),
+            startup_pane: Some(0),
+            windows: vec![Window {
+                name: "main".to_owned(),
+                cwd: Some("~/Development/smux".to_owned()),
+                pre_command: None,
+                command: None,
+                layout: None,
+                synchronize: false,
+                panes: Some(vec![
+                    Pane {
+                        layout: None,
+                        cwd: None,
+                        command: None,
+                    },
+                    Pane {
+                        layout: Some("right".to_owned()),
+                        cwd: Some("~/Development/nixpkgs".to_owned()),
+                        command: None,
+                    },
+                ]),
+            }],
+        };
+
+        let plan = build_session_plan("demo", Path::new("/tmp/demo"), &template)?;
+        assert_eq!(
+            plan.windows[0].cwd,
+            Path::new("/Users/stefan/Development/smux")
+        );
+        assert_eq!(
+            plan.windows[0].panes[1].cwd,
+            Path::new("/Users/stefan/Development/nixpkgs")
+        );
+
+        unsafe {
+            std::env::remove_var("HOME");
+        }
+
+        Ok(())
     }
 }
