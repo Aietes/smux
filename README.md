@@ -98,12 +98,16 @@ zsh `Ctrl-T`:
 
 ```zsh
 smux-select-widget() {
-  smux select
-  zle reset-prompt
+  zle push-line
+  BUFFER="smux select"
+  zle accept-line
 }
 zle -N smux-select-widget
-bindkey '^T' smux-select-widget
+bindkey -M emacs '^T' smux-select-widget
+bindkey -M viins '^T' smux-select-widget
 ```
+
+This runs `smux select` as a normal shell command after leaving zsh's line editor. That is more reliable than trying to run tmux attach/switch directly from inside the widget.
 
 ## Picker Behavior
 
