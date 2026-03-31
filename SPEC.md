@@ -785,7 +785,9 @@ session_name = "example"
 Quickstart should include:
 
 ```tmux
-bind-key f display-popup -w 70% -h 70% -E "smux select"
+set -g detach-on-destroy off
+bind-key t display-popup -w 70% -h 70% -E "smux select"
+bind-key T display-popup -w 70% -h 70% -E "smux select --choose-template"
 ```
 
 ```bash

@@ -84,11 +84,15 @@ Canceling the picker with `Esc` exits cleanly without creating or switching anyt
 
 ## tmux And zsh Bindings
 
-tmux popup on `prefix t`:
+Recommended tmux settings:
 
 ```tmux
+set -g detach-on-destroy off
 bind-key t display-popup -w 70% -h 70% -E "smux select"
+bind-key T display-popup -w 70% -h 70% -E "smux select --choose-template"
 ```
+
+`detach-on-destroy off` keeps tmux running when you close a session instead of dropping you out of tmux entirely.
 
 zsh `Ctrl-T`:
 
