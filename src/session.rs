@@ -209,6 +209,7 @@ mod tests {
             project_dir: PathBuf::from("/tmp/projects"),
             config,
             projects: HashMap::new(),
+            invalid_projects: Vec::new(),
         };
 
         let error = super::resolve_template(Some(&loaded), Some("missing"), None)
@@ -310,6 +311,7 @@ mod tests {
                     windows: None,
                 },
             )]),
+            invalid_projects: Vec::new(),
         };
 
         let project = ResolvedProject {
@@ -355,6 +357,7 @@ mod tests {
             project_dir: PathBuf::from("/tmp/projects"),
             config,
             projects: HashMap::new(),
+            invalid_projects: Vec::new(),
         };
 
         let template = super::resolve_template(Some(&loaded), None, None)?;

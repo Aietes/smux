@@ -55,6 +55,7 @@ pub fn run(config_path: Option<&Path>) -> Result<()> {
                 loaded.projects.len(),
                 loaded.project_dir.display()
             );
+            println!("invalid_projects: {}", loaded.invalid_projects.len());
             print_icon_status(
                 loaded.config.settings.icons,
                 loaded.config.settings.icon_colors,
@@ -65,6 +66,7 @@ pub fn run(config_path: Option<&Path>) -> Result<()> {
             if let Ok(project_dir) = config::default_projects_dir() {
                 println!("projects: 0 ({})", project_dir.display());
             }
+            println!("invalid_projects: 0");
             print_icon_status(IconMode::Auto, Default::default());
         }
         Err(error) => {

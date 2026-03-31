@@ -47,6 +47,7 @@ template = "rust"
 "#;
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
     pub settings: Settings,
@@ -55,6 +56,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Settings {
     pub default_template: Option<String>,
     #[serde(default)]
@@ -85,6 +87,7 @@ impl IconMode {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct IconColors {
     pub session: u8,
     pub directory: u8,
@@ -104,12 +107,14 @@ impl Default for IconColors {
 }
 
 #[derive(Debug, Clone, Deserialize, Default, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct PickerSettings {
     #[serde(default)]
     pub bindings: PickerBindings,
 }
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct PickerBindings {
     #[serde(default = "default_picker_reset")]
     pub reset: String,
@@ -156,6 +161,7 @@ fn default_picker_delete_session() -> String {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Project {
     pub path: String,
     pub session_name: Option<String>,
@@ -167,6 +173,7 @@ pub struct Project {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Template {
     pub root: Option<String>,
     pub startup_window: Option<String>,
@@ -175,6 +182,7 @@ pub struct Template {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Window {
     pub name: String,
     pub cwd: Option<String>,
@@ -187,6 +195,7 @@ pub struct Window {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Pane {
     pub layout: Option<String>,
     pub command: Option<String>,
@@ -200,6 +209,7 @@ pub struct LoadedConfig {
     pub project_dir: PathBuf,
     pub config: Config,
     pub projects: HashMap<String, Project>,
+    pub invalid_projects: Vec<InvalidProject>,
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +217,13 @@ pub struct ResolvedProject<'a> {
     pub name: &'a str,
     pub project: &'a Project,
     pub normalized_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct InvalidProject {
+    pub name: String,
+    pub path: PathBuf,
+    pub error: String,
 }
 
 pub fn starter_config() -> String {
@@ -287,7 +304,7 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
         Config::default()
     };
 
-    let projects = load_projects(&project_dir, &config)?;
+    let (projects, invalid_projects) = load_projects(&project_dir, &config)?;
 
     Ok(LoadedConfig {
         path,
@@ -295,6 +312,7 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
         project_dir,
         config,
         projects,
+        invalid_projects,
     })
 }
 
@@ -432,9 +450,12 @@ fn validate_window(owner_name: &str, window: &Window) -> Result<()> {
     Ok(())
 }
 
-fn load_projects(project_dir: &Path, config: &Config) -> Result<HashMap<String, Project>> {
+fn load_projects(
+    project_dir: &Path,
+    config: &Config,
+) -> Result<(HashMap<String, Project>, Vec<InvalidProject>)> {
     if !project_dir.exists() {
-        return Ok(HashMap::new());
+        return Ok((HashMap::new(), Vec::new()));
     }
 
     let mut files = fs::read_dir(project_dir)
@@ -444,6 +465,7 @@ fn load_projects(project_dir: &Path, config: &Config) -> Result<HashMap<String, 
     files.sort_by_key(|entry| entry.file_name());
 
     let mut projects = HashMap::new();
+    let mut invalid_projects = Vec::new();
 
     for entry in files {
         let path = entry.path();
@@ -457,15 +479,28 @@ fn load_projects(project_dir: &Path, config: &Config) -> Result<HashMap<String, 
             .context("project file name was not valid utf-8")?
             .to_owned();
 
-        let text = fs::read_to_string(&path)
-            .with_context(|| format!("failed to read project {}", path.display()))?;
-        let project: Project = toml::from_str(&text)
-            .with_context(|| format!("failed to parse project {}", path.display()))?;
-        validate_project(&name, &project, config)?;
-        projects.insert(name, project);
+        match load_project_file(&path, &name, config) {
+            Ok(project) => {
+                projects.insert(name, project);
+            }
+            Err(error) => invalid_projects.push(InvalidProject {
+                name,
+                path: path.clone(),
+                error: error.to_string(),
+            }),
+        }
     }
 
-    Ok(projects)
+    Ok((projects, invalid_projects))
+}
+
+fn load_project_file(path: &Path, name: &str, config: &Config) -> Result<Project> {
+    let text = fs::read_to_string(path)
+        .with_context(|| format!("failed to read project {}", path.display()))?;
+    let project: Project = toml::from_str(&text)
+        .with_context(|| format!("failed to parse project {}", path.display()))?;
+    validate_project(name, &project, config)?;
+    Ok(project)
 }
 
 fn validate_project(name: &str, project: &Project, config: &Config) -> Result<()> {
@@ -679,6 +714,17 @@ windows = [
         let error =
             super::validate_project("demo", &project, &config).expect_err("validation should fail");
         assert!(error.to_string().contains("referenced by project"));
+    }
+
+    #[test]
+    fn rejects_unknown_project_fields() {
+        let error = toml::from_str::<super::Project>(
+            "path = \"/tmp/demo\"\nwindows = [{ name = \"main\", panes = [{ cmd = \"nvim\" }] }]\n",
+        )
+        .expect_err("unknown fields should fail");
+
+        assert!(error.to_string().contains("unknown field"));
+        assert!(error.to_string().contains("cmd"));
     }
 
     #[test]

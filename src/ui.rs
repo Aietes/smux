@@ -8,6 +8,7 @@ const TEMPLATE_ICON: &str = "󰙅";
 const PROJECT_ICON: &str = "󰏖";
 const ANSI_RESET: &str = "\x1b[0m";
 const ANSI_BOLD: &str = "\x1b[1m";
+const ANSI_RED: &str = "\x1b[31m";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DisplayStyle {
@@ -83,6 +84,17 @@ impl DisplayStyle {
         self.label(PROJECT_ICON, self.icon_colors.project, "project", value)
     }
 
+    pub fn invalid_project_label(self, name: &str, error: &str) -> String {
+        let summary = single_line(error);
+        if self.icons_enabled {
+            format!(
+                "{ANSI_RED}{PROJECT_ICON}{ANSI_RESET}  {ANSI_RED}{name}{ANSI_RESET}  {ANSI_RED}[invalid: {summary}]{ANSI_RESET}"
+            )
+        } else {
+            format!("invalid  {name} [{summary}]")
+        }
+    }
+
     fn label(self, icon: &str, color: u8, text: &str, value: &str) -> String {
         if self.icons_enabled {
             format!("\x1b[38;5;{color}m{icon}{ANSI_RESET}  {value}")
@@ -110,6 +122,10 @@ fn locale_value() -> Option<std::ffi::OsString> {
     ["LC_ALL", "LC_CTYPE", "LANG"]
         .into_iter()
         .find_map(env::var_os)
+}
+
+fn single_line(value: &str) -> &str {
+    value.lines().next().unwrap_or(value).trim()
 }
 
 #[cfg(test)]

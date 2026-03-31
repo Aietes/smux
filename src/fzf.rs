@@ -14,6 +14,7 @@ pub enum EntryKind {
     Session,
     Directory,
     Project,
+    InvalidProject,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,11 +55,20 @@ impl Entry {
         }
     }
 
+    pub fn invalid_project(style: DisplayStyle, value: String, error: &str) -> Self {
+        Self {
+            kind: EntryKind::InvalidProject,
+            label: style.invalid_project_label(&value, error),
+            value,
+        }
+    }
+
     fn encode(&self) -> String {
         let kind = match self.kind {
             EntryKind::Session => "session",
             EntryKind::Directory => "folder",
             EntryKind::Project => "project",
+            EntryKind::InvalidProject => "project-broken",
         };
 
         format!("{kind}\t{}\t{}", self.value, self.label)
@@ -74,6 +84,7 @@ impl Entry {
             "session" => EntryKind::Session,
             "folder" => EntryKind::Directory,
             "project" => EntryKind::Project,
+            "project-broken" => EntryKind::InvalidProject,
             other => bail!("unknown picker entry kind: {other}"),
         };
 
@@ -162,10 +173,17 @@ fn cat_command(file: &TempInputFile) -> String {
 }
 
 fn filter_command(file: &TempInputFile, kind: &str) -> String {
-    format!(
-        "awk -F '\\t' '$1 == \"{kind}\"' {}",
-        file.shell_quoted_path()
-    )
+    if kind == "project" {
+        format!(
+            "awk -F '\\t' '$1 == \"project\" || $1 == \"project-broken\"' {}",
+            file.shell_quoted_path()
+        )
+    } else {
+        format!(
+            "awk -F '\\t' '$1 == \"{kind}\"' {}",
+            file.shell_quoted_path()
+        )
+    }
 }
 
 fn add_common_picker_args(args: &mut Vec<String>, prompt: &str, header: &str, bindings: &str) {

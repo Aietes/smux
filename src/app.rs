@@ -175,6 +175,7 @@ fn run_select(
                     loaded.context("project selection requires config or project files")?;
                 return session::connect_project(tmux, loaded, &selection.entry.value);
             }
+            (fzf::SelectAction::Open, fzf::EntryKind::InvalidProject) => continue,
             (fzf::SelectAction::Delete, _) => continue,
         }
     }
@@ -208,6 +209,15 @@ fn select_entries(
         project_names.sort();
         for project_name in project_names {
             entries.push(fzf::Entry::project(display_style, project_name));
+        }
+        let mut invalid_projects = loaded.invalid_projects.clone();
+        invalid_projects.sort_by(|left, right| left.name.cmp(&right.name));
+        for project in invalid_projects {
+            entries.push(fzf::Entry::invalid_project(
+                display_style,
+                project.name,
+                &project.error,
+            ));
         }
     }
 
