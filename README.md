@@ -20,7 +20,7 @@ It works both inside and outside tmux. Inside tmux, it fits naturally in a popup
 With Homebrew:
 
 ```bash
-brew install smux
+brew install Aietes/homebrew-smux/smux
 ```
 
 With Nix:
