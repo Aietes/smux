@@ -195,6 +195,14 @@ windows = [
 ]
 ```
 
+If you use `folke/persistence.nvim`, a practical editor command is:
+
+```toml
+{ name = "editor", command = "nvim -c 'lua require(\"persistence\").load({ last = true })'" }
+```
+
+That restores the last saved Neovim session when the window opens.
+
 Template fields:
 
 - `root`

@@ -143,6 +143,12 @@ Launch a saved project definition:
 smux select
 ```
 
+Launch Neovim and restore the last `persistence.nvim` session:
+
+```toml
+{ name = "editor", command = "nvim -c 'lua require(\"persistence\").load({ last = true })'" }
+```
+
 Export the current tmux session as a project definition:
 
 ```bash
@@ -271,6 +277,12 @@ Example project file:
 path = "~/code/example"
 session_name = "example"
 template = "rust"
+```
+
+If you use `folke/persistence.nvim`, this is a practical editor window command:
+
+```toml
+{ name = "editor", command = "nvim -c 'lua require(\"persistence\").load({ last = true })'" }
 ```
 
 Save that as:
