@@ -38,6 +38,7 @@ pub fn generate_man_pages(dir: Option<&Path>) -> Result<Option<Vec<PathBuf>>> {
             })?;
             let mut paths = Vec::new();
             write_man_tree(command, dir, &["smux".to_owned()], &mut paths)?;
+            copy_static_man_page(dir, "smux-config.5", &mut paths)?;
             Ok(Some(paths))
         }
         None => {
@@ -79,5 +80,19 @@ fn write_man_tree(
         write_man_tree(subcommand, dir, &next_lineage, paths)?;
     }
 
+    Ok(())
+}
+
+fn copy_static_man_page(dir: &Path, filename: &str, paths: &mut Vec<PathBuf>) -> Result<()> {
+    let source = Path::new("docs").join(filename);
+    let destination = dir.join(filename);
+    fs::copy(&source, &destination).with_context(|| {
+        format!(
+            "failed to copy static man page {} to {}",
+            source.display(),
+            destination.display()
+        )
+    })?;
+    paths.push(destination);
     Ok(())
 }

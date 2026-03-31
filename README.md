@@ -237,7 +237,7 @@ template = "rust"
 session_name = "example"
 ```
 
-## Config Reference
+## Config Overview
 
 The config has three top-level sections:
 
@@ -245,43 +245,11 @@ The config has three top-level sections:
 - `templates`
 - `projects`
 
-### `settings`
+Short version:
 
-```toml
-[settings]
-default_template = "default"
-icons = "auto"
-
-[settings.icon_colors]
-session = 75
-directory = 108
-template = 179
-```
-
-- `default_template` sets the template used when no project template or CLI override applies
-- `icons` controls picker icons: `auto`, `always`, or `never`
-- `icon_colors` sets ANSI-256 colors for session, directory, and template icons
-
-### `templates`
-
-Templates define the tmux layout used during session creation.
-
-Supported fields:
-
-- template: `root`, `startup_window`
-- window: `name`, `cwd`, `command`, `layout`, `panes`
-- pane: `split`, `size`, `cwd`, `command`
-
-Rules:
-
-- a window may define `command`
-- a window may define `panes`
-- a window may define neither
-- a window may not define both `command` and `panes`
-
-### `projects`
-
-Projects map known directories to template and session-name overrides.
+- `settings` defines defaults and picker appearance
+- `templates` define tmux windows, panes, and layouts
+- `projects` map known paths to template and session-name overrides
 
 Template resolution order:
 
@@ -295,6 +263,11 @@ Session name resolution order:
 1. `--session-name`
 2. matching project session name
 3. sanitized directory basename
+
+For the full config reference, see:
+
+- [docs/configuration.md](/Users/stefan/Development/smux/docs/configuration.md)
+- `smux-config(5)` in generated man pages
 
 ## Icons
 
@@ -353,6 +326,12 @@ Write man pages to a directory:
 
 ```bash
 smux man --dir ./target/generated/man
+```
+
+This also includes the static config man page:
+
+```text
+smux-config.5
 ```
 
 Typical install location:

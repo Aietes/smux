@@ -135,4 +135,5 @@ fn man_command_writes_to_directory() {
     command.assert().success();
     assert!(tempdir.path().join("smux.1").exists());
     assert!(tempdir.path().join("smux-select.1").exists());
+    assert!(tempdir.path().join("smux-config.5").exists());
 }

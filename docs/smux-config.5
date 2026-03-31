@@ -1,0 +1,117 @@
+.TH SMUX-CONFIG 5
+.SH NAME
+smux-config \- configuration file format for smux
+.SH SYNOPSIS
+.B ~/.config/smux/config.toml
+.SH DESCRIPTION
+\fBsmux\fR reads a single TOML configuration file.
+By default the file is loaded from \fB~/.config/smux/config.toml\fR.
+If \fBXDG_CONFIG_HOME\fR is set, \fBsmux\fR uses
+\fB$XDG_CONFIG_HOME/smux/config.toml\fR.
+.SH OVERVIEW
+The configuration has three top-level sections:
+.IP \(bu 2
+\fB[settings]\fR
+.IP \(bu 2
+\fB[templates.<name>]\fR
+.IP \(bu 2
+\fB[projects.<name>]\fR
+.SH SETTINGS
+.SS [settings]
+.nf
+[settings]
+default_template = "default"
+icons = "auto"
+
+[settings.icon_colors]
+session = 75
+directory = 108
+template = 179
+.fi
+.PP
+\fBdefault_template\fR sets the template used when no CLI override or matching
+project template applies.
+.PP
+\fBicons\fR controls picker icons and accepts \fBauto\fR, \fBalways\fR, or
+\fBnever\fR.
+.PP
+\fBsettings.icon_colors\fR sets ANSI-256 icon colors for sessions,
+directories, and templates.
+.SH TEMPLATES
+Templates define the tmux layout used when \fBsmux\fR creates a new session.
+.PP
+Template fields:
+.IP \(bu 2
+\fBroot\fR
+.IP \(bu 2
+\fBstartup_window\fR
+.IP \(bu 2
+\fBwindows\fR
+.PP
+Window fields:
+.IP \(bu 2
+\fBname\fR
+.IP \(bu 2
+\fBcwd\fR
+.IP \(bu 2
+\fBcommand\fR
+.IP \(bu 2
+\fBlayout\fR
+.IP \(bu 2
+\fBpanes\fR
+.PP
+Pane fields:
+.IP \(bu 2
+\fBsplit\fR
+.IP \(bu 2
+\fBsize\fR
+.IP \(bu 2
+\fBcwd\fR
+.IP \(bu 2
+\fBcommand\fR
+.PP
+Rules:
+.IP \(bu 2
+A template must contain at least one window.
+.IP \(bu 2
+\fBstartup_window\fR must match an existing template window if set.
+.IP \(bu 2
+A window may define \fBcommand\fR or \fBpanes\fR or neither, but not both.
+.IP \(bu 2
+A \fBpanes\fR array cannot be empty.
+.SH PROJECTS
+Projects map known directories to template and session-name overrides.
+.nf
+[projects.myapp]
+path = "~/code/myapp"
+template = "rust"
+session_name = "myapp"
+.fi
+.PP
+Project fields:
+.IP \(bu 2
+\fBpath\fR (required)
+.IP \(bu 2
+\fBtemplate\fR (optional)
+.IP \(bu 2
+\fBsession_name\fR (optional)
+.SH RESOLUTION ORDER
+Template resolution order:
+.IP "1." 4
+\fB--template\fR
+.IP "2." 4
+matching project template
+.IP "3." 4
+\fBsettings.default_template\fR
+.IP "4." 4
+built-in fallback template
+.PP
+Session name resolution order:
+.IP "1." 4
+\fB--session-name\fR
+.IP "2." 4
+matching project \fBsession_name\fR
+.IP "3." 4
+sanitized directory basename
+.SH SEE ALSO
+.BR smux (1)
