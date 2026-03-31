@@ -97,27 +97,40 @@ pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>
     select_value_with_runner(default_runner(), prompt, choices)
 }
 
-fn select_value_with_runner(
-    runner: Arc<dyn CommandRunner>,
-    prompt: &str,
-    choices: Vec<Choice>,
-) -> Result<Option<String>> {
-    let args = vec![
+fn add_common_picker_args(args: &mut Vec<String>, prompt: &str, header: &str, bindings: &str) {
+    args.extend([
         "--ansi".to_owned(),
         "--delimiter".to_owned(),
         "\t".to_owned(),
         "--layout".to_owned(),
         "reverse".to_owned(),
         "--header".to_owned(),
-        "filter: template".to_owned(),
+        header.to_owned(),
+        "--bind".to_owned(),
+        "tab:down,btab:up".to_owned(),
+        "--bind".to_owned(),
+        bindings.to_owned(),
         "--with-nth".to_owned(),
         "3".to_owned(),
-        "--nth".to_owned(),
-        "1,2,3".to_owned(),
         "--prompt".to_owned(),
         prompt.to_owned(),
         "--no-sort".to_owned(),
-    ];
+    ]);
+}
+
+fn select_value_with_runner(
+    runner: Arc<dyn CommandRunner>,
+    prompt: &str,
+    choices: Vec<Choice>,
+) -> Result<Option<String>> {
+    let mut args = Vec::new();
+    add_common_picker_args(
+        &mut args,
+        prompt,
+        "ctrl-a all  ctrl-t templates",
+        "ctrl-a:change-prompt(template> )+change-query(),ctrl-t:change-prompt(template> )+change-query(template )",
+    );
+    args.extend(["--nth".to_owned(), "1,2,3".to_owned()]);
     let input = choices
         .into_iter()
         .map(|choice| choice.encode())
@@ -151,22 +164,14 @@ fn select_with_runner(
     entries: Vec<Entry>,
     prompt: &str,
 ) -> Result<Option<Entry>> {
-    let args = vec![
-        "--ansi".to_owned(),
-        "--delimiter".to_owned(),
-        "\t".to_owned(),
-        "--layout".to_owned(),
-        "reverse".to_owned(),
-        "--header".to_owned(),
-        "filter: session | folder".to_owned(),
-        "--with-nth".to_owned(),
-        "3".to_owned(),
-        "--nth".to_owned(),
-        "1,3".to_owned(),
-        "--prompt".to_owned(),
-        prompt.to_owned(),
-        "--no-sort".to_owned(),
-    ];
+    let mut args = Vec::new();
+    add_common_picker_args(
+        &mut args,
+        prompt,
+        "ctrl-a all  ctrl-s sessions  ctrl-f folders",
+        "ctrl-a:change-prompt(smux> )+change-query(),ctrl-s:change-prompt(session> )+change-query(session ),ctrl-f:change-prompt(folder> )+change-query(folder )",
+    );
+    args.extend(["--nth".to_owned(), "1,3".to_owned()]);
     let input = entries
         .into_iter()
         .map(|entry| entry.encode())
@@ -245,6 +250,8 @@ mod tests {
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"1,3".to_owned()));
+        assert!(recorded[0].args.iter().any(|arg| arg.contains("ctrl-s sessions")));
+        assert!(recorded[0].args.iter().any(|arg| arg.contains("ctrl-f:change-prompt(folder> )")));
         assert_eq!(
             recorded[0].stdin.as_deref(),
             Some("folder\t/tmp/example\tdir      /tmp/example\n")
@@ -282,6 +289,8 @@ mod tests {
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"1,2,3".to_owned()));
+        assert!(recorded[0].args.iter().any(|arg| arg.contains("ctrl-t templates")));
+        assert!(recorded[0].args.iter().any(|arg| arg.contains("ctrl-t:change-prompt(template> )")));
         assert_eq!(
             recorded[0].stdin.as_deref(),
             Some("template\tdefault\ttemplate default\ntemplate\trust\ttemplate rust\n")

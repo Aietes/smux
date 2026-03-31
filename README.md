@@ -104,6 +104,13 @@ Type:
 - `folder` to narrow to directories
 - `template` in the template picker to narrow template choices
 
+Shortcuts:
+
+- `Ctrl-A` resets to the full list
+- `Ctrl-S` filters the main picker to sessions
+- `Ctrl-F` filters the main picker to folders
+- `Ctrl-T` filters the template picker to templates
+
 If you use a Nerd Font, `smux` can show colored icons for sessions, folders, and templates.
 
 ## Example Config
