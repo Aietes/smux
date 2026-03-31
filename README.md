@@ -32,8 +32,10 @@ nix profile install nixpkgs#smux
 With Cargo:
 
 ```bash
-cargo install smux
+cargo install smux-cli
 ```
+
+The published crates.io package is `smux-cli`, but the installed command is still `smux`.
 
 Runtime dependencies:
 

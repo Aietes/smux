@@ -7,7 +7,7 @@ This document tracks the external distribution work for `smux`.
 Planned distribution channels:
 
 - GitHub Releases
-- crates.io for `cargo install smux`
+- crates.io for `cargo install smux-cli`
 - Homebrew
 - nixpkgs
 
@@ -38,6 +38,7 @@ Practical next steps:
 
 1. optionally add `documentation`
 2. publish with `cargo publish`
+3. verify `cargo install smux-cli` installs the `smux` binary
 
 ## Homebrew
 
