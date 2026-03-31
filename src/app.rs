@@ -182,7 +182,7 @@ fn choose_template_name(
 
     let choices = template_names
         .into_iter()
-        .map(|name| fzf::Choice::new(display_style.template_label(&name), name))
+        .map(|name| fzf::Choice::new("template", display_style.template_label(&name), name))
         .collect();
 
     Ok(resolve_template_choice(fzf::select_value(

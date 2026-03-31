@@ -108,7 +108,22 @@ Default config path:
 Recommended tmux binding:
 
 ```tmux
-bind-key f display-popup -w 70% -h 70% -E "smux select"
+bind-key t display-popup -w 70% -h 70% -E "smux select"
+```
+
+That gives you:
+
+- `prefix` then `t` to open `smux select` in a tmux popup
+
+Example zsh keybind:
+
+```zsh
+smux-select-widget() {
+  smux select
+  zle reset-prompt
+}
+zle -N smux-select-widget
+bindkey '^T' smux-select-widget
 ```
 
 Basic usage:
@@ -127,6 +142,12 @@ smux doctor
 - outside tmux, it runs `fzf` in the terminal
 
 Canceling the picker with `Esc` exits cleanly without creating or switching anything.
+
+The picker is configured with the prompt at the top and category-aware filtering:
+
+- type `session` to narrow to tmux sessions
+- type `folder` to narrow to directories
+- type `template` in the template picker to narrow template choices
 
 ## Commands
 
@@ -152,6 +173,27 @@ Command notes:
 - `smux init` writes a starter config if one does not already exist
 - `smux completions zsh` prints a zsh completion script or writes it to a directory
 - `smux man` prints a man page or writes man pages to a directory
+
+## Shell Integration
+
+### tmux popup via `prefix t`
+
+```tmux
+bind-key t display-popup -w 70% -h 70% -E "smux select"
+```
+
+### zsh `Ctrl-T`
+
+```zsh
+smux-select-widget() {
+  smux select
+  zle reset-prompt
+}
+zle -N smux-select-widget
+bindkey '^T' smux-select-widget
+```
+
+This mirrors the common `Ctrl-T` muscle memory while keeping the implementation simple.
 
 ## Example Config
 

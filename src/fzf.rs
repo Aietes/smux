@@ -38,7 +38,7 @@ impl Entry {
     fn encode(&self) -> String {
         let kind = match self.kind {
             EntryKind::Session => "session",
-            EntryKind::Directory => "dir",
+            EntryKind::Directory => "folder",
         };
 
         format!("{kind}\t{}\t{}", self.value, self.label)
@@ -52,7 +52,7 @@ impl Entry {
 
         let kind = match kind {
             "session" => EntryKind::Session,
-            "dir" => EntryKind::Directory,
+            "folder" => EntryKind::Directory,
             other => bail!("unknown picker entry kind: {other}"),
         };
 
@@ -62,24 +62,30 @@ impl Entry {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Choice {
+    pub kind: String,
     pub label: String,
     pub value: String,
 }
 
 impl Choice {
-    pub fn new(label: String, value: String) -> Self {
-        Self { label, value }
+    pub fn new(kind: impl Into<String>, label: String, value: String) -> Self {
+        Self {
+            kind: kind.into(),
+            label,
+            value,
+        }
     }
 
     fn encode(&self) -> String {
-        format!("{}\t{}", self.value, self.label)
+        format!("{}\t{}\t{}", self.kind, self.value, self.label)
     }
 
     fn decode(line: &str) -> Result<Self> {
-        let mut parts = line.splitn(2, '\t');
+        let mut parts = line.splitn(3, '\t');
+        let kind = parts.next().context("missing choice kind")?.to_owned();
         let value = parts.next().context("missing choice value")?.to_owned();
         let label = parts.next().context("missing choice label")?.to_owned();
-        Ok(Self { label, value })
+        Ok(Self { kind, label, value })
     }
 }
 
@@ -100,8 +106,14 @@ fn select_value_with_runner(
         "--ansi".to_owned(),
         "--delimiter".to_owned(),
         "\t".to_owned(),
+        "--layout".to_owned(),
+        "reverse".to_owned(),
+        "--header".to_owned(),
+        "filter: template".to_owned(),
         "--with-nth".to_owned(),
-        "2".to_owned(),
+        "3".to_owned(),
+        "--nth".to_owned(),
+        "1,2,3".to_owned(),
         "--prompt".to_owned(),
         prompt.to_owned(),
         "--no-sort".to_owned(),
@@ -143,8 +155,14 @@ fn select_with_runner(
         "--ansi".to_owned(),
         "--delimiter".to_owned(),
         "\t".to_owned(),
+        "--layout".to_owned(),
+        "reverse".to_owned(),
+        "--header".to_owned(),
+        "filter: session | folder".to_owned(),
         "--with-nth".to_owned(),
         "3".to_owned(),
+        "--nth".to_owned(),
+        "1,3".to_owned(),
         "--prompt".to_owned(),
         prompt.to_owned(),
         "--no-sort".to_owned(),
@@ -207,7 +225,7 @@ mod tests {
                 success: true,
                 code: Some(0),
             },
-            stdout: b"dir\t/tmp/example\tdir      /tmp/example\n".to_vec(),
+            stdout: b"folder\t/tmp/example\tdir      /tmp/example\n".to_vec(),
             stderr: Vec::new(),
         }));
 
@@ -225,9 +243,11 @@ mod tests {
         let recorded = runner.recorded();
         assert_eq!(recorded[0].program, "fzf");
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
+        assert!(recorded[0].args.contains(&"reverse".to_owned()));
+        assert!(recorded[0].args.contains(&"1,3".to_owned()));
         assert_eq!(
             recorded[0].stdin.as_deref(),
-            Some("dir\t/tmp/example\tdir      /tmp/example\n")
+            Some("folder\t/tmp/example\tdir      /tmp/example\n")
         );
     }
 
@@ -239,7 +259,7 @@ mod tests {
                 success: true,
                 code: Some(0),
             },
-            stdout: b"rust\ttemplate rust\n".to_vec(),
+            stdout: b"template\trust\ttemplate rust\n".to_vec(),
             stderr: Vec::new(),
         }));
 
@@ -247,8 +267,12 @@ mod tests {
             runner.clone(),
             "template> ",
             vec![
-                Choice::new("template default".to_owned(), "default".to_owned()),
-                Choice::new("template rust".to_owned(), "rust".to_owned()),
+                Choice::new(
+                    "template",
+                    "template default".to_owned(),
+                    "default".to_owned(),
+                ),
+                Choice::new("template", "template rust".to_owned(), "rust".to_owned()),
             ],
         )
         .expect("selection should succeed");
@@ -256,9 +280,11 @@ mod tests {
         assert_eq!(result.as_deref(), Some("rust"));
         let recorded = runner.recorded();
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
+        assert!(recorded[0].args.contains(&"reverse".to_owned()));
+        assert!(recorded[0].args.contains(&"1,2,3".to_owned()));
         assert_eq!(
             recorded[0].stdin.as_deref(),
-            Some("default\ttemplate default\nrust\ttemplate rust\n")
+            Some("template\tdefault\ttemplate default\ntemplate\trust\ttemplate rust\n")
         );
     }
 }
