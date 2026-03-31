@@ -101,6 +101,7 @@ Good first commands:
 smux select
 smux connect ~/code/myapp
 smux connect --template rust ~/code/myapp
+smux save-project myapp --stdout
 smux doctor
 ```
 
@@ -140,6 +141,18 @@ Launch a saved project definition:
 
 ```bash
 smux select
+```
+
+Export the current tmux session as a project definition:
+
+```bash
+smux save-project myapp
+```
+
+Preview the generated project without writing a file:
+
+```bash
+smux save-project myapp --stdout
 ```
 
 ## Projects Vs Templates
@@ -184,6 +197,17 @@ The main config has two top-level sections:
 - `templates`
 
 Project files in `projects/*.toml` define concrete workspaces.
+
+`smux save-project` writes project files into that same directory and captures:
+
+- `path`
+- `session_name`
+- `startup_window`
+- `startup_pane`
+- windows and pane `cwd`
+- best-effort pane split direction
+
+It intentionally does not try to export shell history or reconstruct original pane commands.
 
 Schema files are published in this repo under `schemas/`:
 
@@ -277,6 +301,7 @@ smux list-sessions
 smux list-templates [--config <path>]
 smux list-projects [--config <path>]
 smux doctor [--config <path>]
+smux save-project <name> [--session <name>] [--path <path>] [--stdout] [--force] [--config <path>]
 smux init [--config <path>]
 smux completions zsh [--dir <path>]
 smux man [--dir <path>]

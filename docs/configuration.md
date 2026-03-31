@@ -364,6 +364,13 @@ The project name comes from the file name, for example:
 
 This project appears in `smux select` as `myapp`.
 
+Project files can be written manually or exported from a live tmux session with:
+
+```bash
+smux save-project myapp
+smux save-project myapp --stdout
+```
+
 Minimal project file:
 
 ```toml
@@ -419,6 +426,7 @@ Project behavior:
 - a project may define its own windows directly without using a template
 - a project may use a template as a base and override it with project-specific session details
 - when a project defines `windows`, they replace the template windows rather than merging window-by-window
+- `smux save-project` exports concrete project files with inline `windows` instead of trying to infer template references
 
 ## Resolution Order
 

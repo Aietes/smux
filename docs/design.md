@@ -68,18 +68,24 @@ The config is intentionally small and centered on three sections:
 
 - `settings`
 - `templates`
-- `projects`
+- project definition files under `projects/`
 
 This keeps the behavior understandable:
 
 - `settings` defines global defaults
 - `templates` describe tmux layouts
-- `projects` bind known paths to overrides
+- project files define concrete named workspaces with a path and optional inline tmux layout
 
 The config path follows an XDG-style CLI convention:
 
 ```text
 ~/.config/smux/config.toml
+```
+
+Project definitions live alongside it:
+
+```text
+~/.config/smux/projects/*.toml
 ```
 
 ## CLI Semantics
@@ -93,7 +99,10 @@ The command model is:
 - `select`: interactive entrypoint
 - `connect`: direct path-based session creation/reuse
 - `switch`: direct session switch/attach
+- `save-project`: best-effort export of a live tmux session into a project file
 - `doctor`: environment and config diagnostics
+
+`save-project` is intentionally scoped as a project exporter, not a tmux session serializer. It captures stable structural data such as the active path, startup selection, windows, panes, and recoverable split direction, but it does not try to reconstruct shell history or arbitrary original pane commands.
 
 ## Error Philosophy
 
