@@ -211,27 +211,17 @@ template = 179
 
 [templates.default]
 startup_window = "main"
-
-[[templates.default.windows]]
-name = "main"
+windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
-
-[[templates.rust.windows]]
-name = "editor"
-command = "nvim"
-
-[[templates.rust.windows]]
-name = "run"
-layout = "main-horizontal"
-
-[[templates.rust.windows.panes]]
-command = "cargo run"
-
-[[templates.rust.windows.panes]]
-split = "vertical"
-command = "cargo test"
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "run", layout = "main-horizontal", panes = [
+      { command = "cargo run" },
+      { split = "vertical", command = "cargo test" },
+    ] },
+]
 
 [projects.example]
 path = "~/code/example"
@@ -270,6 +260,7 @@ Icon behavior:
 [templates.default]
 root = "."
 startup_window = "editor"
+windows = [{ name = "editor" }]
 ```
 
 Fields:
@@ -277,15 +268,14 @@ Fields:
 - `root: string?`
 - `startup_window: string?`
 - `windows: array[window]` required
+  The recommended format uses TOML 1.1 inline tables for `windows` and nested `panes`.
 
-### `[[templates.<name>.windows]]`
+### `windows = [{ ... }]`
 
 ```toml
-[[templates.default.windows]]
-name = "editor"
-cwd = "."
-command = "nvim"
-layout = "main-horizontal"
+windows = [
+  { name = "editor", cwd = ".", command = "nvim", layout = "main-horizontal" },
+]
 ```
 
 Fields:
@@ -303,17 +293,13 @@ Rules:
 - a window may define neither for an empty window
 - a window must not define both `command` and `panes`
 
-### `[[templates.<name>.windows.panes]]`
+### `panes = [{ ... }]`
 
 ```toml
-[[templates.default.windows.panes]]
-command = "pnpm dev"
-
-[[templates.default.windows.panes]]
-split = "vertical"
-size = "30%"
-command = "pnpm test --watch"
-cwd = "./server"
+panes = [
+  { command = "pnpm dev" },
+  { split = "vertical", size = "30%", command = "pnpm test --watch", cwd = "./server" },
+]
 ```
 
 Fields:
@@ -726,30 +712,26 @@ The implementation is complete when all of the following are true:
 ```toml
 [settings]
 default_template = "default"
+icons = "auto"
+
+[settings.icon_colors]
+session = 75
+directory = 108
+template = 179
 
 [templates.default]
 startup_window = "main"
-
-[[templates.default.windows]]
-name = "main"
+windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
-
-[[templates.rust.windows]]
-name = "editor"
-command = "nvim"
-
-[[templates.rust.windows]]
-name = "run"
-layout = "main-horizontal"
-
-[[templates.rust.windows.panes]]
-command = "cargo run"
-
-[[templates.rust.windows.panes]]
-split = "vertical"
-command = "cargo test"
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "run", layout = "main-horizontal", panes = [
+      { command = "cargo run" },
+      { split = "vertical", command = "cargo test" },
+    ] },
+]
 
 [projects.example]
 path = "~/code/example"

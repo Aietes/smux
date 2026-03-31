@@ -36,27 +36,17 @@ template = 179
 
 [templates.default]
 startup_window = "main"
-
-[[templates.default.windows]]
-name = "main"
+windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
-
-[[templates.rust.windows]]
-name = "editor"
-command = "nvim"
-
-[[templates.rust.windows]]
-name = "run"
-layout = "main-horizontal"
-
-[[templates.rust.windows.panes]]
-command = "cargo run"
-
-[[templates.rust.windows.panes]]
-split = "vertical"
-command = "cargo test"
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "run", layout = "main-horizontal", panes = [
+      { command = "cargo run" },
+      { split = "vertical", command = "cargo test" },
+    ] },
+]
 
 [projects.example]
 path = "~/code/example"
@@ -109,29 +99,20 @@ These values are ANSI-256 color indexes used for picker icons.
 ## `[templates.<name>]`
 
 Templates describe the tmux layout applied when `smux` creates a new session.
+The recommended format uses TOML 1.1 inline tables for `windows` and nested `panes`.
 
 Example:
 
 ```toml
 [templates.rust]
 startup_window = "editor"
-
-[[templates.rust.windows]]
-name = "editor"
-cwd = "~/code/example"
-command = "nvim"
-
-[[templates.rust.windows]]
-name = "run"
-layout = "main-horizontal"
-
-[[templates.rust.windows.panes]]
-command = "cargo run"
-
-[[templates.rust.windows.panes]]
-split = "vertical"
-size = "40%"
-command = "cargo test"
+windows = [
+  { name = "editor", cwd = "~/code/example", command = "nvim" },
+  { name = "run", layout = "main-horizontal", panes = [
+      { command = "cargo run" },
+      { split = "vertical", size = "40%", command = "cargo test" },
+    ] },
+]
 ```
 
 Template fields:
@@ -145,11 +126,11 @@ Template fields:
   - optional
   - must match one of the template window names if set
 - `windows`
-  - type: array
+  - type: array of inline tables
   - required
   - must contain at least one window
 
-### `[[templates.<name>.windows]]`
+### `windows = [{ ... }]`
 
 Window fields:
 
@@ -166,7 +147,7 @@ Window fields:
   - type: string
   - optional
 - `panes`
-  - type: array
+  - type: array of inline tables
   - optional
 
 Rules:
@@ -177,7 +158,7 @@ Rules:
 - a window may not define both `command` and `panes`
 - if `panes` is present, it must not be empty
 
-### `[[templates.<name>.windows.panes]]`
+### `panes = [{ ... }]`
 
 Pane fields:
 

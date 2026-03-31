@@ -39,6 +39,7 @@ project template applies.
 directories, and templates.
 .SH TEMPLATES
 Templates define the tmux layout used when \fBsmux\fR creates a new session.
+The recommended format uses TOML 1.1 inline tables for windows and panes.
 .PP
 Template fields:
 .IP \(bu 2
@@ -46,7 +47,7 @@ Template fields:
 .IP \(bu 2
 \fBstartup_window\fR
 .IP \(bu 2
-\fBwindows\fR
+\fBwindows\fR (array of inline tables)
 .PP
 Window fields:
 .IP \(bu 2
@@ -58,7 +59,7 @@ Window fields:
 .IP \(bu 2
 \fBlayout\fR
 .IP \(bu 2
-\fBpanes\fR
+\fBpanes\fR (array of inline tables)
 .PP
 Pane fields:
 .IP \(bu 2

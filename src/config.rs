@@ -18,27 +18,17 @@ template = 179
 
 [templates.default]
 startup_window = "main"
-
-[[templates.default.windows]]
-name = "main"
+windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
-
-[[templates.rust.windows]]
-name = "editor"
-command = "nvim"
-
-[[templates.rust.windows]]
-name = "run"
-layout = "main-horizontal"
-
-[[templates.rust.windows.panes]]
-command = "cargo run"
-
-[[templates.rust.windows.panes]]
-split = "vertical"
-command = "cargo test"
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "run", layout = "main-horizontal", panes = [
+      { command = "cargo run" },
+      { split = "vertical", command = "cargo test" },
+    ] },
+]
 
 [projects.example]
 path = "~/code/example"
@@ -306,6 +296,34 @@ mod tests {
         assert!(config.projects.contains_key("example"));
         assert_eq!(config.settings.icons, IconMode::Auto);
         assert_eq!(config.settings.icon_colors, IconColors::default());
+        Ok(())
+    }
+
+    #[test]
+    fn parses_inline_table_windows_and_panes() -> Result<()> {
+        let input = r#"
+[templates.default]
+startup_window = "main"
+windows = [
+  { name = "main" },
+  { name = "run", panes = [
+      { command = "cargo run" },
+      { split = "vertical", command = "cargo test" },
+    ] },
+]
+"#;
+
+        let config: Config = toml::from_str(input)?;
+        validate(&config)?;
+        assert_eq!(config.templates["default"].windows.len(), 2);
+        assert_eq!(
+            config.templates["default"].windows[1]
+                .panes
+                .as_ref()
+                .expect("panes should exist")
+                .len(),
+            2
+        );
         Ok(())
     }
 

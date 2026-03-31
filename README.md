@@ -209,27 +209,17 @@ template = 179
 
 [templates.default]
 startup_window = "main"
-
-[[templates.default.windows]]
-name = "main"
+windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
-
-[[templates.rust.windows]]
-name = "editor"
-command = "nvim"
-
-[[templates.rust.windows]]
-name = "run"
-layout = "main-horizontal"
-
-[[templates.rust.windows.panes]]
-command = "cargo run"
-
-[[templates.rust.windows.panes]]
-split = "vertical"
-command = "cargo test"
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "run", layout = "main-horizontal", panes = [
+      { command = "cargo run" },
+      { split = "vertical", command = "cargo test" },
+    ] },
+]
 
 [projects.example]
 path = "~/code/example"
@@ -250,6 +240,7 @@ Short version:
 - `settings` defines defaults and picker appearance
 - `templates` define tmux windows, panes, and layouts
 - `projects` map known paths to template and session-name overrides
+- the recommended format uses TOML 1.1 inline tables for `windows` and `panes`
 
 Template resolution order:
 
