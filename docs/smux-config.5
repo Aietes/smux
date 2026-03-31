@@ -72,9 +72,7 @@ Window fields:
 .PP
 Pane fields:
 .IP \(bu 2
-\fBsplit\fR
-.IP \(bu 2
-\fBsize\fR
+\fBlayout\fR
 .IP \(bu 2
 \fBcwd\fR
 .IP \(bu 2
@@ -93,6 +91,10 @@ A window may define \fBcommand\fR or \fBpanes\fR or neither, but not both.
 A \fBpanes\fR array cannot be empty.
 .IP \(bu 2
 \fBpre_command\fR runs before the pane or window command.
+.PP
+Pane \fBlayout\fR values use the form \fB<position>\fR or
+\fB<position> <size>\fR where position is one of \fBright\fR, \fBleft\fR,
+\fBbottom\fR, or \fBtop\fR.
 .SH PROJECTS
 Projects map known directories to template and session-name overrides.
 .nf

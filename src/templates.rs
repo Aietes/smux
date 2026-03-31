@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 
-use crate::config::{Pane, SplitDirection, Template, Window};
+use crate::config::{Pane, Template, Window};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionPlan {
@@ -25,10 +25,23 @@ pub struct WindowPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PanePlan {
-    pub split: Option<SplitDirection>,
-    pub size: Option<String>,
+    pub layout: Option<PaneLayout>,
     pub cwd: PathBuf,
     pub command: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaneLayout {
+    pub position: PanePosition,
+    pub size: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PanePosition {
+    Right,
+    Left,
+    Bottom,
+    Top,
 }
 
 pub fn fallback_template() -> Template {
@@ -117,11 +130,33 @@ fn build_pane_plan(
     };
 
     Ok(PanePlan {
-        split: pane.split.clone(),
-        size: pane.size.clone(),
+        layout: parse_pane_layout(pane.layout.as_deref())?,
         cwd,
         command: pane.command.clone(),
     })
+}
+
+fn parse_pane_layout(layout: Option<&str>) -> Result<Option<PaneLayout>> {
+    let Some(layout) = layout else {
+        return Ok(None);
+    };
+
+    let mut parts = layout.split_whitespace();
+    let position = match parts.next() {
+        Some("right") => PanePosition::Right,
+        Some("left") => PanePosition::Left,
+        Some("bottom") => PanePosition::Bottom,
+        Some("top") => PanePosition::Top,
+        Some(other) => bail!("unknown pane layout position: {other}"),
+        None => bail!("pane layout cannot be empty"),
+    };
+
+    let size = parts.next().map(ToOwned::to_owned);
+    if parts.next().is_some() {
+        bail!("pane layout must be in the form '<position>' or '<position> <size>'");
+    }
+
+    Ok(Some(PaneLayout { position, size }))
 }
 
 fn resolve_root(session_root: &Path, root: Option<&str>) -> Result<PathBuf> {
@@ -189,7 +224,7 @@ fn resolve_relative(
 #[cfg(test)]
 mod tests {
     use super::{build_session_plan, fallback_template};
-    use crate::config::{Pane, SplitDirection, Template, Window};
+    use crate::config::{Pane, Template, Window};
     use anyhow::Result;
     use std::path::Path;
 
@@ -225,14 +260,12 @@ mod tests {
                     synchronize: true,
                     panes: Some(vec![
                         Pane {
-                            split: None,
-                            size: None,
+                            layout: None,
                             cwd: None,
                             command: Some("cargo run".to_owned()),
                         },
                         Pane {
-                            split: Some(SplitDirection::Vertical),
-                            size: Some("30%".to_owned()),
+                            layout: Some("right 30%".to_owned()),
                             cwd: Some("./server".to_owned()),
                             command: Some("cargo test".to_owned()),
                         },
@@ -272,8 +305,7 @@ mod tests {
                 layout: None,
                 synchronize: false,
                 panes: Some(vec![Pane {
-                    split: None,
-                    size: None,
+                    layout: None,
                     cwd: None,
                     command: None,
                 }]),
@@ -283,5 +315,38 @@ mod tests {
         let error = build_session_plan("demo", Path::new("/tmp/demo"), &template)
             .expect_err("startup pane should be validated");
         assert!(error.to_string().contains("startup_pane"));
+    }
+
+    #[test]
+    fn rejects_invalid_pane_layout_string() {
+        let template = Template {
+            root: None,
+            startup_window: Some("main".to_owned()),
+            startup_pane: Some(0),
+            windows: vec![Window {
+                name: "main".to_owned(),
+                cwd: None,
+                pre_command: None,
+                command: None,
+                layout: None,
+                synchronize: false,
+                panes: Some(vec![
+                    Pane {
+                        layout: None,
+                        cwd: None,
+                        command: None,
+                    },
+                    Pane {
+                        layout: Some("diagonal 30%".to_owned()),
+                        cwd: None,
+                        command: None,
+                    },
+                ]),
+            }],
+        };
+
+        let error = build_session_plan("demo", Path::new("/tmp/demo"), &template)
+            .expect_err("pane layout should be validated");
+        assert!(error.to_string().contains("unknown pane layout position"));
     }
 }

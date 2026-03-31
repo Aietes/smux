@@ -220,7 +220,7 @@ windows = [
   { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
-      { split = "vertical", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test" },
     ] },
 ]
 
@@ -304,23 +304,22 @@ Rules:
 ```toml
 panes = [
   { command = "pnpm dev" },
-  { split = "vertical", size = "30%", command = "pnpm test --watch", cwd = "./server" },
+  { layout = "right 30%", command = "pnpm test --watch", cwd = "./server" },
 ]
 ```
 
 Fields:
 
-- `split: "horizontal" | "vertical"?`
-- `size: string?`
+- `layout: string?`
 - `command: string?`
 - `cwd: string?`
 
 Rules:
 
-- the first pane does not require `split`
-- additional panes may specify `split`
-- `size` is optional
-- `size` should only be passed to tmux when supported by the chosen invocation
+- the first pane does not require `layout`
+- additional panes should specify `layout`
+- pane layout syntax is `<position>` or `<position> <size>`
+- supported positions are `right`, `left`, `bottom`, and `top`
 - `startup_pane` is a zero-based pane index within the startup window
 
 ### `[projects.<name>]`
@@ -406,6 +405,7 @@ Pane creation behavior:
 - the first pane is the implicit starting pane
 - each additional pane is created in declared order using `split-window`
 - pane commands are applied after pane creation
+- pane layout strings determine side and optional size for each additional pane
 - window layout is applied last
 
 v1 must use a simple deterministic pane strategy. It must not attempt to model arbitrary nested pane trees.
@@ -581,21 +581,17 @@ struct Template {
 struct Window {
     name: String,
     cwd: Option<String>,
+    pre_command: Option<String>,
     command: Option<String>,
     layout: Option<String>,
+    synchronize: bool,
     panes: Option<Vec<Pane>>,
 }
 
 struct Pane {
-    split: Option<SplitDirection>,
-    size: Option<String>,
+    layout: Option<String>,
     command: Option<String>,
     cwd: Option<String>,
-}
-
-enum SplitDirection {
-    Horizontal,
-    Vertical,
 }
 ```
 
@@ -625,7 +621,7 @@ Validation must enforce:
 - `panes`, if present, is not empty
 - project template references are valid
 - project paths are parseable
-- pane split values are valid
+- pane layout strings are valid
 
 Layout validation may either:
 
@@ -707,7 +703,7 @@ The implementation is complete when all of the following are true:
 2. Selecting a session switches or attaches correctly.
 3. Selecting a directory creates or reuses a session correctly.
 4. Session names default to the sanitized folder basename.
-5. Templates support windows, panes, split directions, layouts, and commands.
+5. Templates support windows, panes, pane layouts, window layouts, and commands.
 6. Configured project paths apply template and session-name overrides automatically.
 7. The tool works without shell scripts or tmuxinator-style wrappers.
 8. Errors are readable and actionable.
@@ -736,7 +732,7 @@ windows = [
   { name = "editor", command = "nvim" },
   { name = "run", layout = "main-horizontal", panes = [
       { command = "cargo run" },
-      { split = "vertical", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test" },
     ] },
 ]
 

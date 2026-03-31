@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 
-use crate::config::SplitDirection;
 use crate::process::{CommandOutput, CommandRunner, default_runner};
-use crate::templates::SessionPlan;
+use crate::templates::{PaneLayout, PanePosition, SessionPlan};
 use crate::util;
 
 #[derive(Clone)]
@@ -191,13 +190,7 @@ impl Tmux {
             .context("failed to execute tmux send-keys")
     }
 
-    fn split_window(
-        &self,
-        target: &str,
-        split: Option<&SplitDirection>,
-        size: Option<&str>,
-        directory: &Path,
-    ) -> Result<()> {
+    fn split_window(&self, target: &str, layout: &PaneLayout, directory: &Path) -> Result<()> {
         let directory = util::path_to_string(directory)?;
         let mut args = vec![
             "split-window".to_owned(),
@@ -205,15 +198,19 @@ impl Tmux {
             target.to_owned(),
         ];
 
-        match split {
-            Some(SplitDirection::Horizontal) => args.push("-h".to_owned()),
-            Some(SplitDirection::Vertical) => args.push("-v".to_owned()),
-            None => {}
+        match layout.position {
+            PanePosition::Right | PanePosition::Left => args.push("-h".to_owned()),
+            PanePosition::Bottom | PanePosition::Top => args.push("-v".to_owned()),
         }
 
-        if let Some(size) = size {
+        match layout.position {
+            PanePosition::Left | PanePosition::Top => args.push("-b".to_owned()),
+            PanePosition::Right | PanePosition::Bottom => {}
+        }
+
+        if let Some(size) = &layout.size {
             args.push("-l".to_owned());
-            args.push(size.to_owned());
+            args.push(size.clone());
         }
 
         args.push("-c".to_owned());
@@ -286,12 +283,14 @@ impl Tmux {
         }
 
         for (pane_index, pane) in plan.panes.iter().enumerate().skip(1) {
-            self.split_window(
-                &target,
-                pane.split.as_ref(),
-                pane.size.as_deref(),
-                &pane.cwd,
-            )?;
+            let layout = pane.layout.as_ref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "pane {} in window \"{}\" is missing a layout",
+                    pane_index,
+                    window
+                )
+            })?;
+            self.split_window(&target, layout, &pane.cwd)?;
             let pane_target = format!("{target}.{pane_index}");
             if let Some(pre_command) = &plan.pre_command {
                 self.send_keys_to_target(&pane_target, pre_command)
@@ -347,7 +346,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner, IoMode};
-    use crate::templates::{PanePlan, SessionPlan, WindowPlan};
+    use crate::templates::{PaneLayout, PanePlan, PanePosition, SessionPlan, WindowPlan};
 
     use super::Tmux;
 
@@ -412,14 +411,15 @@ mod tests {
                     synchronize: true,
                     panes: vec![
                         PanePlan {
-                            split: None,
-                            size: None,
+                            layout: None,
                             cwd: "/tmp/demo".into(),
                             command: Some("cargo run".to_owned()),
                         },
                         PanePlan {
-                            split: Some(crate::config::SplitDirection::Vertical),
-                            size: None,
+                            layout: Some(PaneLayout {
+                                position: PanePosition::Right,
+                                size: None,
+                            }),
                             cwd: "/tmp/demo".into(),
                             command: Some("cargo test".to_owned()),
                         },
@@ -467,7 +467,7 @@ mod tests {
         );
         assert_eq!(
             recorded[6].args,
-            vec!["split-window", "-t", "demo:run", "-v", "-c", "/tmp/demo"]
+            vec!["split-window", "-t", "demo:run", "-h", "-c", "/tmp/demo"]
         );
         assert_eq!(
             recorded[7].args,

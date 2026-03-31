@@ -28,7 +28,7 @@ windows = [
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "source .venv/bin/activate" },
       { command = "cargo run" },
-      { split = "vertical", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test" },
     ] },
 ]
 
@@ -122,17 +122,9 @@ pub struct Window {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Pane {
-    pub split: Option<SplitDirection>,
-    pub size: Option<String>,
+    pub layout: Option<String>,
     pub command: Option<String>,
     pub cwd: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum SplitDirection {
-    Horizontal,
-    Vertical,
 }
 
 #[derive(Debug, Clone)]
@@ -314,7 +306,7 @@ windows = [
   { name = "main" },
   { name = "run", panes = [
       { command = "cargo run" },
-      { split = "vertical", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test" },
     ] },
 ]
 "#;

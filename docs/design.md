@@ -55,7 +55,7 @@ The plan includes:
 
 - session name
 - ordered windows
-- pane split instructions
+- pane layout instructions
 - pane commands
 - window layouts
 - startup window

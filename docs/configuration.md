@@ -45,7 +45,7 @@ windows = [
   { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
-      { split = "vertical", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test" },
     ] },
 ]
 
@@ -113,7 +113,7 @@ windows = [
   { name = "editor", cwd = "~/code/example", pre_command = "source .venv/bin/activate", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
-      { split = "vertical", size = "40%", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test" },
     ] },
 ]
 ```
@@ -179,18 +179,23 @@ Rules:
 
 Pane fields:
 
-- `split`
-  - type: `horizontal` | `vertical`
-  - optional
-- `size`
+- `layout`
   - type: string
   - optional
+  - format: `<position>` or `<position> <size>`
+  - supported positions: `right`, `left`, `bottom`, `top`
 - `cwd`
   - type: string
   - optional
 - `command`
   - type: string
   - optional
+
+Examples:
+
+- `layout = "right 40%"`
+- `layout = "bottom 12"`
+- `layout = "left"`
 
 ## `[projects.<name>]`
 

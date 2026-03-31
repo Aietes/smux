@@ -218,7 +218,7 @@ windows = [
   { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
-      { split = "vertical", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test" },
     ] },
 ]
 
