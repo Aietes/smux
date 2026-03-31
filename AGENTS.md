@@ -26,6 +26,7 @@ This file records repository-specific working instructions for agents operating 
 - Preferred types include `feat`, `fix`, `docs`, `refactor`, `test`, `build`, and `chore`.
 - Keep the subject concise and imperative.
 - Commit in small, reasonable groups as work progresses. Do not let large unrelated changes accumulate before committing.
+- For bug fixes, do not commit immediately after an attempted code change. First run the relevant automated verification, then wait for the user to confirm the fix with a smoke test before creating the `fix:` commit.
 
 Examples:
 
