@@ -22,9 +22,11 @@ windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
+startup_pane = 0
 windows = [
-  { name = "editor", command = "nvim" },
-  { name = "run", layout = "main-horizontal", panes = [
+  { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
+  { name = "run", synchronize = true, layout = "main-horizontal", panes = [
+      { command = "source .venv/bin/activate" },
       { command = "cargo run" },
       { split = "vertical", command = "cargo test" },
     ] },
@@ -102,6 +104,7 @@ pub struct Project {
 pub struct Template {
     pub root: Option<String>,
     pub startup_window: Option<String>,
+    pub startup_pane: Option<usize>,
     pub windows: Vec<Window>,
 }
 
@@ -109,8 +112,11 @@ pub struct Template {
 pub struct Window {
     pub name: String,
     pub cwd: Option<String>,
+    pub pre_command: Option<String>,
     pub command: Option<String>,
     pub layout: Option<String>,
+    #[serde(default)]
+    pub synchronize: bool,
     pub panes: Option<Vec<Pane>>,
 }
 

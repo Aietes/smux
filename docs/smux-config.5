@@ -41,11 +41,16 @@ directories, and templates.
 Templates define the tmux layout used when \fBsmux\fR creates a new session.
 The recommended format uses TOML 1.1 inline tables for windows and panes.
 .PP
+\fBstartup_window\fR selects the window focused after creation.
+\fBstartup_pane\fR selects a zero-based pane index within that startup window.
+.PP
 Template fields:
 .IP \(bu 2
 \fBroot\fR
 .IP \(bu 2
 \fBstartup_window\fR
+.IP \(bu 2
+\fBstartup_pane\fR
 .IP \(bu 2
 \fBwindows\fR (array of inline tables)
 .PP
@@ -55,9 +60,13 @@ Window fields:
 .IP \(bu 2
 \fBcwd\fR
 .IP \(bu 2
+\fBpre_command\fR
+.IP \(bu 2
 \fBcommand\fR
 .IP \(bu 2
 \fBlayout\fR
+.IP \(bu 2
+\fBsynchronize\fR
 .IP \(bu 2
 \fBpanes\fR (array of inline tables)
 .PP
@@ -77,9 +86,13 @@ A template must contain at least one window.
 .IP \(bu 2
 \fBstartup_window\fR must match an existing template window if set.
 .IP \(bu 2
+\fBstartup_pane\fR must be valid for the chosen startup window.
+.IP \(bu 2
 A window may define \fBcommand\fR or \fBpanes\fR or neither, but not both.
 .IP \(bu 2
 A \fBpanes\fR array cannot be empty.
+.IP \(bu 2
+\fBpre_command\fR runs before the pane or window command.
 .SH PROJECTS
 Projects map known directories to template and session-name overrides.
 .nf

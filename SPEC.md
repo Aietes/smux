@@ -215,9 +215,10 @@ windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
+startup_pane = 0
 windows = [
-  { name = "editor", command = "nvim" },
-  { name = "run", layout = "main-horizontal", panes = [
+  { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
+  { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
       { split = "vertical", command = "cargo test" },
     ] },
@@ -260,6 +261,7 @@ Icon behavior:
 [templates.default]
 root = "."
 startup_window = "editor"
+startup_pane = 0
 windows = [{ name = "editor" }]
 ```
 
@@ -267,6 +269,7 @@ Fields:
 
 - `root: string?`
 - `startup_window: string?`
+- `startup_pane: integer?`
 - `windows: array[window]` required
   The recommended and documented format uses TOML 1.1 inline tables for `windows` and nested `panes`.
 
@@ -282,8 +285,10 @@ Fields:
 
 - `name: string` required
 - `cwd: string?`
+- `pre_command: string?`
 - `command: string?`
 - `layout: string?`
+- `synchronize: bool` default `false`
 - `panes: array[pane]?`
 
 Rules:
@@ -292,6 +297,7 @@ Rules:
 - a window may define `panes`
 - a window may define neither for an empty window
 - a window must not define both `command` and `panes`
+- `pre_command` runs before the pane or window command
 
 ### `panes = [{ ... }]`
 
@@ -315,6 +321,7 @@ Rules:
 - additional panes may specify `split`
 - `size` is optional
 - `size` should only be passed to tmux when supported by the chosen invocation
+- `startup_pane` is a zero-based pane index within the startup window
 
 ### `[projects.<name>]`
 

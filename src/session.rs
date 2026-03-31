@@ -165,11 +165,14 @@ mod tests {
                 Template {
                     root: None,
                     startup_window: None,
+                    startup_pane: None,
                     windows: vec![Window {
                         name: "main".to_owned(),
                         cwd: None,
+                        pre_command: None,
                         command: None,
                         layout: None,
+                        synchronize: false,
                         panes: None,
                     }],
                 },
@@ -212,11 +215,14 @@ mod tests {
                     Template {
                         root: None,
                         startup_window: None,
+                        startup_pane: None,
                         windows: vec![Window {
                             name: "default-window".to_owned(),
                             cwd: None,
+                            pre_command: None,
                             command: None,
                             layout: None,
+                            synchronize: false,
                             panes: None,
                         }],
                     },
@@ -226,11 +232,14 @@ mod tests {
                     Template {
                         root: None,
                         startup_window: None,
+                        startup_pane: None,
                         windows: vec![Window {
                             name: "project-window".to_owned(),
                             cwd: None,
+                            pre_command: None,
                             command: None,
                             layout: None,
+                            synchronize: false,
                             panes: None,
                         }],
                     },
@@ -240,11 +249,14 @@ mod tests {
                     Template {
                         root: None,
                         startup_window: None,
+                        startup_pane: None,
                         windows: vec![Window {
                             name: "explicit-window".to_owned(),
                             cwd: None,
+                            pre_command: None,
                             command: None,
                             layout: None,
+                            synchronize: false,
                             panes: None,
                         }],
                     },
@@ -283,11 +295,14 @@ mod tests {
                 Template {
                     root: None,
                     startup_window: None,
+                    startup_pane: None,
                     windows: vec![Window {
                         name: "default-window".to_owned(),
                         cwd: None,
+                        pre_command: None,
                         command: None,
                         layout: None,
+                        synchronize: false,
                         panes: None,
                     }],
                 },

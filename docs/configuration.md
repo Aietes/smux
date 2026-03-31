@@ -40,9 +40,10 @@ windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
+startup_pane = 0
 windows = [
-  { name = "editor", command = "nvim" },
-  { name = "run", layout = "main-horizontal", panes = [
+  { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
+  { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
       { split = "vertical", command = "cargo test" },
     ] },
@@ -107,9 +108,10 @@ Example:
 ```toml
 [templates.rust]
 startup_window = "editor"
+startup_pane = 0
 windows = [
-  { name = "editor", cwd = "~/code/example", command = "nvim" },
-  { name = "run", layout = "main-horizontal", panes = [
+  { name = "editor", cwd = "~/code/example", pre_command = "source .venv/bin/activate", command = "nvim" },
+  { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
       { split = "vertical", size = "40%", command = "cargo test" },
     ] },
@@ -126,6 +128,11 @@ Template fields:
   - type: string
   - optional
   - must match one of the template window names if set
+- `startup_pane`
+  - type: integer
+  - optional
+  - default: `0`
+  - zero-based pane index within the startup window
 - `windows`
   - type: array of inline tables
   - required
@@ -144,9 +151,17 @@ Window fields:
 - `command`
   - type: string
   - optional
+- `pre_command`
+  - type: string
+  - optional
+  - runs in each pane of the window before the pane or window command
 - `layout`
   - type: string
   - optional
+- `synchronize`
+  - type: boolean
+  - default: `false`
+  - enables tmux synchronized panes for that window
 - `panes`
   - type: array of inline tables
   - optional
@@ -158,6 +173,7 @@ Rules:
 - a window may define neither
 - a window may not define both `command` and `panes`
 - if `panes` is present, it must not be empty
+- `pre_command` runs as a separate command before the window or pane command
 
 ### `panes = [{ ... }]`
 
@@ -232,6 +248,7 @@ Validation includes:
 - project `template` references must exist
 - each template must contain at least one window
 - `startup_window` must refer to an existing template window
+- `startup_pane` must be valid for the chosen startup window
 - a window cannot define both `command` and `panes`
 - a `panes` array cannot be empty
 - project paths must be expandable and valid

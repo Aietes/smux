@@ -121,24 +121,15 @@ impl Tmux {
             .context("session plan must contain at least one window")?;
 
         self.create_session_with_window(&plan.session_name, &first_window.name, &first_window.cwd)?;
-
-        if let Some(command) = &first_window.command {
-            self.send_keys_to_window(&plan.session_name, &first_window.name, command)?;
-        }
-
         self.configure_panes(&plan.session_name, &first_window.name, first_window)?;
 
         for window in plan.windows.iter().skip(1) {
             self.new_window(&plan.session_name, &window.name, &window.cwd)?;
-
-            if let Some(command) = &window.command {
-                self.send_keys_to_window(&plan.session_name, &window.name, command)?;
-            }
-
             self.configure_panes(&plan.session_name, &window.name, window)?;
         }
 
         self.select_window(&plan.session_name, &plan.startup_window)?;
+        self.select_pane(&plan.session_name, &plan.startup_window, plan.startup_pane)?;
         Ok(())
     }
 
@@ -195,9 +186,8 @@ impl Tmux {
             .context("failed to execute tmux new-window")
     }
 
-    fn send_keys_to_window(&self, session: &str, window: &str, command: &str) -> Result<()> {
-        let target = format!("{session}:{window}");
-        self.run_tmux(["send-keys", "-t", &target, command, "C-m"])
+    fn send_keys_to_target(&self, target: &str, command: &str) -> Result<()> {
+        self.run_tmux(["send-keys", "-t", target, command, "C-m"])
             .context("failed to execute tmux send-keys")
     }
 
@@ -244,6 +234,25 @@ impl Tmux {
             .context("failed to execute tmux select-window")
     }
 
+    fn select_pane(&self, session: &str, window: &str, pane_index: usize) -> Result<()> {
+        let target = format!("{session}:{window}.{pane_index}");
+        self.run_tmux(["select-pane", "-t", &target])
+            .context("failed to execute tmux select-pane")
+    }
+
+    fn set_synchronize_panes(&self, session: &str, window: &str, enabled: bool) -> Result<()> {
+        let target = format!("{session}:{window}");
+        let value = if enabled { "on" } else { "off" };
+        self.run_tmux([
+            "set-window-option",
+            "-t",
+            &target,
+            "synchronize-panes",
+            value,
+        ])
+        .context("failed to execute tmux set-window-option")
+    }
+
     fn configure_panes(
         &self,
         session: &str,
@@ -251,31 +260,55 @@ impl Tmux {
         plan: &crate::templates::WindowPlan,
     ) -> Result<()> {
         if plan.panes.is_empty() {
+            let target = format!("{session}:{window}.0");
+            if let Some(pre_command) = &plan.pre_command {
+                self.send_keys_to_target(&target, pre_command)?;
+            }
+            if let Some(command) = &plan.command {
+                self.send_keys_to_target(&target, command)?;
+            }
+            if plan.synchronize {
+                self.set_synchronize_panes(session, window, true)?;
+            }
             return Ok(());
         }
 
         let target = format!("{session}:{window}");
+        let first_pane_target = format!("{target}.0");
 
+        if let Some(pre_command) = &plan.pre_command {
+            self.send_keys_to_target(&first_pane_target, pre_command)
+                .context("failed to execute tmux send-keys for first pane pre_command")?;
+        }
         if let Some(command) = &plan.panes[0].command {
-            self.run_tmux(["send-keys", "-t", &target, command, "C-m"])
+            self.send_keys_to_target(&first_pane_target, command)
                 .context("failed to execute tmux send-keys for first pane")?;
         }
 
-        for pane in plan.panes.iter().skip(1) {
+        for (pane_index, pane) in plan.panes.iter().enumerate().skip(1) {
             self.split_window(
                 &target,
                 pane.split.as_ref(),
                 pane.size.as_deref(),
                 &pane.cwd,
             )?;
+            let pane_target = format!("{target}.{pane_index}");
+            if let Some(pre_command) = &plan.pre_command {
+                self.send_keys_to_target(&pane_target, pre_command)
+                    .context("failed to execute tmux send-keys for split pane pre_command")?;
+            }
             if let Some(command) = &pane.command {
-                self.run_tmux(["send-keys", "-t", &target, command, "C-m"])
+                self.send_keys_to_target(&pane_target, command)
                     .context("failed to execute tmux send-keys for split pane")?;
             }
         }
 
         if let Some(layout) = &plan.layout {
             self.select_layout(&target, layout)?;
+        }
+
+        if plan.synchronize {
+            self.set_synchronize_panes(session, window, true)?;
         }
 
         Ok(())
@@ -344,7 +377,7 @@ mod tests {
     #[test]
     fn session_plan_emits_expected_tmux_commands() {
         let runner = Arc::new(FakeCommandRunner::new());
-        for _ in 0..8 {
+        for _ in 0..13 {
             runner.push_capture(Ok(CommandOutput {
                 status: CommandStatus {
                     success: true,
@@ -359,19 +392,24 @@ mod tests {
         let plan = SessionPlan {
             session_name: "demo".to_owned(),
             startup_window: "editor".to_owned(),
+            startup_pane: 0,
             windows: vec![
                 WindowPlan {
                     name: "editor".to_owned(),
                     cwd: "/tmp/demo".into(),
+                    pre_command: Some("source .venv/bin/activate".to_owned()),
                     command: Some("nvim".to_owned()),
                     layout: None,
+                    synchronize: false,
                     panes: Vec::new(),
                 },
                 WindowPlan {
                     name: "run".to_owned(),
                     cwd: "/tmp/demo".into(),
+                    pre_command: Some("source .venv/bin/activate".to_owned()),
                     command: None,
                     layout: Some("main-horizontal".to_owned()),
+                    synchronize: true,
                     panes: vec![
                         PanePlan {
                             split: None,
@@ -397,28 +435,75 @@ mod tests {
         assert_eq!(recorded[0].args[..4], ["new-session", "-d", "-s", "demo"]);
         assert_eq!(
             recorded[1].args,
-            vec!["send-keys", "-t", "demo:editor", "nvim", "C-m"]
+            vec![
+                "send-keys",
+                "-t",
+                "demo:editor.0",
+                "source .venv/bin/activate",
+                "C-m"
+            ]
         );
         assert_eq!(
             recorded[2].args,
-            vec!["new-window", "-t", "demo", "-n", "run", "-c", "/tmp/demo"]
+            vec!["send-keys", "-t", "demo:editor.0", "nvim", "C-m"]
         );
         assert_eq!(
             recorded[3].args,
-            vec!["send-keys", "-t", "demo:run", "cargo run", "C-m"]
+            vec!["new-window", "-t", "demo", "-n", "run", "-c", "/tmp/demo"]
         );
         assert_eq!(
             recorded[4].args,
-            vec!["split-window", "-t", "demo:run", "-v", "-c", "/tmp/demo"]
+            vec![
+                "send-keys",
+                "-t",
+                "demo:run.0",
+                "source .venv/bin/activate",
+                "C-m"
+            ]
         );
         assert_eq!(
             recorded[5].args,
-            vec!["send-keys", "-t", "demo:run", "cargo test", "C-m"]
+            vec!["send-keys", "-t", "demo:run.0", "cargo run", "C-m"]
         );
         assert_eq!(
             recorded[6].args,
+            vec!["split-window", "-t", "demo:run", "-v", "-c", "/tmp/demo"]
+        );
+        assert_eq!(
+            recorded[7].args,
+            vec![
+                "send-keys",
+                "-t",
+                "demo:run.1",
+                "source .venv/bin/activate",
+                "C-m"
+            ]
+        );
+        assert_eq!(
+            recorded[8].args,
+            vec!["send-keys", "-t", "demo:run.1", "cargo test", "C-m"]
+        );
+        assert_eq!(
+            recorded[9].args,
             vec!["select-layout", "-t", "demo:run", "main-horizontal"]
         );
-        assert_eq!(recorded[7].args, vec!["select-window", "-t", "demo:editor"]);
+        assert_eq!(
+            recorded[10].args,
+            vec![
+                "set-window-option",
+                "-t",
+                "demo:run",
+                "synchronize-panes",
+                "on"
+            ]
+        );
+        assert_eq!(
+            recorded[11].args,
+            vec!["select-window", "-t", "demo:editor"]
+        );
+        assert_eq!(
+            recorded[12].args,
+            vec!["select-pane", "-t", "demo:editor.0"]
+        );
     }
 }

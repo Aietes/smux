@@ -213,9 +213,10 @@ windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
+startup_pane = 0
 windows = [
-  { name = "editor", command = "nvim" },
-  { name = "run", layout = "main-horizontal", panes = [
+  { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
+  { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
       { split = "vertical", command = "cargo test" },
     ] },
@@ -239,6 +240,7 @@ Short version:
 
 - `settings` defines defaults and picker appearance
 - `templates` define tmux windows, panes, and layouts
+- templates can also choose `startup_pane`, per-window `pre_command`, and per-window `synchronize`
 - `projects` map known paths to template and session-name overrides
 - the recommended format uses TOML 1.1 inline tables for `windows` and `panes`
 

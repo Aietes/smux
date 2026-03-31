@@ -9,14 +9,17 @@ pub struct SessionPlan {
     pub session_name: String,
     pub windows: Vec<WindowPlan>,
     pub startup_window: String,
+    pub startup_pane: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowPlan {
     pub name: String,
     pub cwd: PathBuf,
+    pub pre_command: Option<String>,
     pub command: Option<String>,
     pub layout: Option<String>,
+    pub synchronize: bool,
     pub panes: Vec<PanePlan>,
 }
 
@@ -32,11 +35,14 @@ pub fn fallback_template() -> Template {
     Template {
         root: None,
         startup_window: Some("main".to_owned()),
+        startup_pane: Some(0),
         windows: vec![Window {
             name: "main".to_owned(),
             cwd: None,
+            pre_command: None,
             command: None,
             layout: None,
+            synchronize: false,
             panes: None,
         }],
     }
@@ -63,10 +69,13 @@ pub fn build_session_plan(
         .clone()
         .unwrap_or_else(|| template.windows[0].name.clone());
 
+    let startup_pane = resolve_startup_pane(template, &windows, &startup_window)?;
+
     Ok(SessionPlan {
         session_name: session_name.to_owned(),
         windows,
         startup_window,
+        startup_pane,
     })
 }
 
@@ -87,8 +96,10 @@ fn build_window_plan(
     Ok(WindowPlan {
         name: window.name.clone(),
         cwd,
+        pre_command: window.pre_command.clone(),
         command: window.command.clone(),
         layout: window.layout.clone(),
+        synchronize: window.synchronize,
         panes,
     })
 }
@@ -118,6 +129,35 @@ fn resolve_root(session_root: &Path, root: Option<&str>) -> Result<PathBuf> {
         Some(root) => resolve_relative(session_root, session_root, session_root, root),
         None => Ok(session_root.to_path_buf()),
     }
+}
+
+fn resolve_startup_pane(
+    template: &Template,
+    windows: &[WindowPlan],
+    startup_window: &str,
+) -> Result<usize> {
+    let startup_pane = template.startup_pane.unwrap_or(0);
+    let window = windows
+        .iter()
+        .find(|window| window.name == startup_window)
+        .ok_or_else(|| anyhow::anyhow!("startup window \"{startup_window}\" was not found"))?;
+
+    let pane_count = if window.panes.is_empty() {
+        1
+    } else {
+        window.panes.len()
+    };
+
+    if startup_pane >= pane_count {
+        bail!(
+            "startup_pane {} is out of range for window \"{}\" with {} pane(s)",
+            startup_pane,
+            startup_window,
+            pane_count
+        );
+    }
+
+    Ok(startup_pane)
 }
 
 fn resolve_relative(
@@ -165,19 +205,24 @@ mod tests {
         let template = Template {
             root: Some("workspace".to_owned()),
             startup_window: Some("editor".to_owned()),
+            startup_pane: Some(0),
             windows: vec![
                 Window {
                     name: "editor".to_owned(),
                     cwd: Some("app".to_owned()),
+                    pre_command: Some("source .venv/bin/activate".to_owned()),
                     command: Some("nvim".to_owned()),
                     layout: None,
+                    synchronize: false,
                     panes: None,
                 },
                 Window {
                     name: "run".to_owned(),
                     cwd: None,
+                    pre_command: None,
                     command: None,
                     layout: Some("main-horizontal".to_owned()),
+                    synchronize: true,
                     panes: Some(vec![
                         Pane {
                             split: None,
@@ -198,12 +243,45 @@ mod tests {
 
         let plan = build_session_plan("demo", Path::new("/tmp/demo"), &template)?;
         assert_eq!(plan.startup_window, "editor");
+        assert_eq!(plan.startup_pane, 0);
         assert_eq!(plan.windows.len(), 2);
         assert_eq!(plan.windows[0].cwd, Path::new("/tmp/demo/workspace/app"));
+        assert_eq!(
+            plan.windows[0].pre_command.as_deref(),
+            Some("source .venv/bin/activate")
+        );
+        assert!(plan.windows[1].synchronize);
         assert_eq!(
             plan.windows[1].panes[1].cwd,
             Path::new("/tmp/demo/workspace/server")
         );
         Ok(())
+    }
+
+    #[test]
+    fn rejects_startup_pane_out_of_range() {
+        let template = Template {
+            root: None,
+            startup_window: Some("main".to_owned()),
+            startup_pane: Some(2),
+            windows: vec![Window {
+                name: "main".to_owned(),
+                cwd: None,
+                pre_command: None,
+                command: None,
+                layout: None,
+                synchronize: false,
+                panes: Some(vec![Pane {
+                    split: None,
+                    size: None,
+                    cwd: None,
+                    command: None,
+                }]),
+            }],
+        };
+
+        let error = build_session_plan("demo", Path::new("/tmp/demo"), &template)
+            .expect_err("startup pane should be validated");
+        assert!(error.to_string().contains("startup_pane"));
     }
 }
