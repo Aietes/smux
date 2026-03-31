@@ -7,6 +7,7 @@ const DIRECTORY_ICON: &str = "󰉋";
 const TEMPLATE_ICON: &str = "󰙅";
 const PROJECT_ICON: &str = "󰏖";
 const ANSI_RESET: &str = "\x1b[0m";
+const ANSI_BOLD: &str = "\x1b[1m";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DisplayStyle {
@@ -56,6 +57,18 @@ impl DisplayStyle {
 
     pub fn session_label(self, value: &str) -> String {
         self.label(SESSION_ICON, self.icon_colors.session, "session", value)
+    }
+
+    pub fn current_session_label(self, value: &str) -> String {
+        if self.icons_enabled {
+            format!(
+                "{ANSI_BOLD}\x1b[38;5;{color}m{icon}{ANSI_RESET}  {ANSI_BOLD}\x1b[38;5;{color}m{value}{ANSI_RESET}",
+                color = self.icon_colors.session,
+                icon = SESSION_ICON,
+            )
+        } else {
+            format!("current  {value}")
+        }
     }
 
     pub fn directory_label(self, value: &str) -> String {
@@ -122,6 +135,7 @@ mod tests {
         assert_eq!(style.directory_label("/tmp/demo"), "dir      /tmp/demo");
         assert_eq!(style.template_label("rust"), "template rust");
         assert_eq!(style.project_label("demo"), "project  demo");
+        assert_eq!(style.current_session_label("demo"), "current  demo");
     }
 
     #[test]
@@ -144,5 +158,13 @@ mod tests {
         );
         assert!(style.template_label("rust").starts_with("\u{1b}[38;5;55m"));
         assert!(style.project_label("demo").starts_with("\u{1b}[38;5;66m"));
+    }
+
+    #[test]
+    fn current_session_label_uses_bold_style() {
+        let style = DisplayStyle::from_icon_mode(IconMode::Always);
+        let label = style.current_session_label("demo");
+        assert!(label.starts_with("\u{1b}[1m\u{1b}[38;5;75m\u{1b}[0m"));
+        assert!(label.ends_with("  \u{1b}[1m\u{1b}[38;5;75mdemo\u{1b}[0m"));
     }
 }

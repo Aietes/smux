@@ -66,6 +66,37 @@ impl Tmux {
         }
     }
 
+    pub fn current_session(&self) -> Result<Option<String>> {
+        if !util::inside_tmux() {
+            return Ok(None);
+        }
+
+        let output = self
+            .runner
+            .run_capture(
+                "tmux",
+                &[
+                    "display-message".to_owned(),
+                    "-p".to_owned(),
+                    "#{session_name}".to_owned(),
+                ],
+            )
+            .context("failed to execute tmux display-message")?;
+
+        if !output.status.success {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("tmux display-message failed: {}", stderr.trim());
+        }
+
+        let stdout = String::from_utf8(output.stdout).context("tmux output was not utf-8")?;
+        let session = stdout.trim();
+        if session.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(session.to_owned()))
+        }
+    }
+
     pub fn has_session(&self, session: &str) -> Result<bool> {
         let output = self
             .runner
@@ -410,6 +441,20 @@ mod tests {
     }
 
     #[test]
+    fn outside_tmux_has_no_current_session() {
+        let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
+        let runner = Arc::new(FakeCommandRunner::new());
+
+        unsafe {
+            std::env::remove_var("TMUX");
+        }
+
+        let tmux = Tmux::with_runner(runner.clone());
+        assert_eq!(tmux.current_session().expect("query should succeed"), None);
+        assert!(runner.recorded().is_empty());
+    }
+
+    #[test]
     fn inside_tmux_uses_switch_client_with_captured_io() {
         let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
         let runner = Arc::new(FakeCommandRunner::new());
@@ -435,6 +480,41 @@ mod tests {
         assert_eq!(recorded[0].program, "tmux");
         assert_eq!(recorded[0].args, vec!["switch-client", "-t", "demo"]);
         assert_eq!(recorded[0].io_mode, IoMode::Capture);
+
+        unsafe {
+            std::env::remove_var("TMUX");
+        }
+    }
+
+    #[test]
+    fn inside_tmux_reads_current_session() {
+        let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"demo\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        unsafe {
+            std::env::set_var("TMUX", "/tmp/tmux-test,123,0");
+        }
+
+        let tmux = Tmux::with_runner(runner.clone());
+        assert_eq!(
+            tmux.current_session().expect("query should succeed").as_deref(),
+            Some("demo")
+        );
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(
+            recorded[0].args,
+            vec!["display-message", "-p", "#{session_name}"]
+        );
 
         unsafe {
             std::env::remove_var("TMUX");

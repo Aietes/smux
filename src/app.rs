@@ -103,11 +103,21 @@ fn run_select(
     let mut entries = Vec::new();
     let config = loaded.map(|loaded| &loaded.config);
     let display_style = DisplayStyle::from_config(config);
+    let current_session = tmux.current_session().ok().flatten();
     let sessions = tmux.list_sessions()?;
     let session_count = sessions.len();
 
     for session in sessions {
-        entries.push(fzf::Entry::session(display_style, session));
+        let entry = if current_session.as_deref() == Some(session.as_str()) {
+            fzf::Entry {
+                kind: fzf::EntryKind::Session,
+                label: display_style.current_session_label(&session),
+                value: session,
+            }
+        } else {
+            fzf::Entry::session(display_style, session)
+        };
+        entries.push(entry);
     }
 
     if let Some(loaded) = loaded {
