@@ -1,15 +1,19 @@
-# smux
+[![CI](https://github.com/Aietes/smux/actions/workflows/ci.yml/badge.svg)](https://github.com/Aietes/smux/actions/workflows/ci.yml)
+[![Release](https://github.com/Aietes/smux/actions/workflows/release.yml/badge.svg)](https://github.com/Aietes/smux/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`smux` is a tmux session manager with `fzf`-powered project and template selection.
+**smux** is a tmux session manager with `fzf`-powered session creation and switching.
 
-It helps you:
+[Install](#install) • [Quick Start](#quick-start) • [Common Workflows](#common-workflows) • [Projects vs Templates](#projects-vs-templates) • [Config](#configuration) • [Commands](#commands)
 
-- jump to an existing tmux session
-- launch a named project from a saved project definition
-- pick a recent directory and create or reuse a session for it
-- apply tmux templates with windows, panes, layouts, and startup commands
+## Highlights:
 
-`smux` works both inside and outside tmux. Inside tmux, it fits naturally in a popup. Outside tmux, it uses the current terminal.
+- quickly switch between existing tmux sessions
+- tmux session from directory - pick a recent directory and create or reuse a tmux session for it
+- tmux session from project - launch a saved project with a defined properties (path, name, windows, panes, layout, commands...)
+- apply reusable tmux templates with windows, panes, layouts, and startup commands
+
+It works both inside and outside tmux. Inside tmux, it fits naturally in a popup. Outside tmux, it uses the current terminal.
 
 ## Install
 
@@ -33,13 +37,12 @@ cargo install smux
 
 Runtime dependencies:
 
-- `tmux`
-- `fzf`
-- `zoxide` recommended, but optional
+- required: `tmux`, `fzf`
+- optional but recommended: `zoxide`
 
-If `zoxide` is unavailable, `smux select` still works with tmux sessions.
+If `zoxide` is unavailable, `smux select` still works with tmux sessions and saved projects.
 
-## Quickstart
+## Quick Start
 
 Create a starter config:
 
@@ -47,25 +50,48 @@ Create a starter config:
 smux init
 ```
 
-Default config path:
+Main config path, following the default XDG config location:
 
 ```text
 ~/.config/smux/config.toml
 ```
 
-Project definitions live in:
+Project definitions live alongside it:
 
 ```text
 ~/.config/smux/projects/*.toml
 ```
 
-Then run:
+Then start using it:
 
 ```bash
 smux select
 ```
 
-Useful commands:
+For normal day-to-day use, wire it into `tmux` and `zsh`:
+
+Recommended `tmux` settings:
+
+```tmux
+set -g detach-on-destroy off # keeps tmux running when you close a session
+bind-key t display-popup -w 70% -h 70% -E "smux select"
+bind-key T display-popup -w 70% -h 70% -E "smux select --choose-template"
+```
+
+zsh `Ctrl-t`:
+
+```zsh
+smux-select-widget() {
+  zle push-line
+  BUFFER="smux select"
+  zle accept-line
+}
+zle -N smux-select-widget
+bindkey -M emacs '^T' smux-select-widget
+bindkey -M viins '^T' smux-select-widget
+```
+
+Good first commands:
 
 ```bash
 smux select
@@ -80,57 +106,94 @@ smux doctor
 - inside a tmux pane, it runs `fzf` in that pane
 - outside tmux, it runs `fzf` in the terminal
 
-Canceling the picker with `Esc` exits cleanly without creating or switching anything.
+## Common Workflows
 
-## tmux And zsh Bindings
+Jump to an existing session:
 
-Recommended tmux settings:
-
-```tmux
-set -g detach-on-destroy off
-bind-key t display-popup -w 70% -h 70% -E "smux select"
-bind-key T display-popup -w 70% -h 70% -E "smux select --choose-template"
+```bash
+smux select
 ```
 
-`detach-on-destroy off` keeps tmux running when you close a session instead of dropping you out of tmux entirely.
+Connect a directory and let `smux` create or reuse the matching tmux session:
 
-zsh `Ctrl-T`:
-
-```zsh
-smux-select-widget() {
-  zle push-line
-  BUFFER="smux select"
-  zle accept-line
-}
-zle -N smux-select-widget
-bindkey -M emacs '^T' smux-select-widget
-bindkey -M viins '^T' smux-select-widget
+```bash
+smux connect ~/code/myapp
 ```
 
-This runs `smux select` as a normal shell command after leaving zsh's line editor. That is more reliable than trying to run tmux attach/switch directly from inside the widget.
+Force a specific template for a directory:
+
+```bash
+smux connect --template rust ~/code/myapp
+```
+
+Choose a template interactively from the selector:
+
+```bash
+smux select --choose-template
+```
+
+Launch a saved project definition:
+
+```bash
+smux select
+```
+
+## Projects Vs Templates
+
+`smux` separates reusable layout from concrete workspace definitions:
+
+- `template`: a reusable tmux layout with windows, panes, layouts, startup behavior, and default commands
+- `project`: a concrete named workspace with a known path, optional session name, and either a template reference or its own tmux definition
+
+Use templates when you want to reuse the same shape across many folders. Use projects when you want one named workspace that already knows where it lives and how it should start.
 
 ## Picker Behavior
 
-The picker keeps the prompt at the top and supports category-aware filtering.
+The unified picker combines:
 
-Type:
+- tmux sessions
+- saved projects
+- `zoxide` directories
 
-- `session` to narrow to tmux sessions
-- `project` to narrow to saved projects
-- `folder` to narrow to directories
-- `template` in the template picker to narrow template choices
+The template picker is separate and appears only when `--choose-template` is used.
 
-Shortcuts:
+Current behavior:
 
+- prompt is shown at the top
+- `Esc` cancels cleanly
+- the current tmux session is highlighted when `smux select` runs inside tmux
+- typing still does normal fuzzy search
 - `Ctrl-X` resets to the full list
-- `Ctrl-S` limits the main picker to sessions and keeps fuzzy search active
-- `Ctrl-P` limits the main picker to projects and keeps fuzzy search active
-- `Ctrl-F` limits the main picker to folders and keeps fuzzy search active
-- `Ctrl-T` limits the template picker to templates and keeps fuzzy search active
+- `Ctrl-S` limits the main picker to sessions
+- `Ctrl-P` limits the main picker to projects
+- `Ctrl-F` limits the main picker to folders
+- `Ctrl-T` limits the template picker to templates
 
 If you use a Nerd Font, `smux` can show colored icons for sessions, projects, folders, and templates.
 
-## Example Main Config
+## Configuration
+
+The main config has two top-level sections:
+
+- `settings`
+- `templates`
+
+Project files in `projects/*.toml` define concrete workspaces.
+
+Template resolution order:
+
+1. `--template`
+2. matching project definition
+3. `settings.default_template`
+4. built-in fallback template
+
+Session name resolution order:
+
+1. `--session-name`
+2. matching project session name
+3. sanitized directory basename
+
+Example main config:
 
 ```toml
 [settings]
@@ -159,7 +222,7 @@ windows = [
 ]
 ```
 
-## Example Project File
+Example project file:
 
 ```toml
 path = "~/code/example"
@@ -173,44 +236,12 @@ Save that as:
 ~/.config/smux/projects/example.toml
 ```
 
-Projects can either:
-
-- point at a reusable template
-- define their own windows, panes, commands, and startup behavior directly
-- use a template as a base and override it with project-specific session details
-
-## Config Overview
-
-The main config has two top-level sections:
-
-- `settings`
-- `templates`
-
-In short:
-
-- `settings` defines defaults and picker appearance
-- `templates` define tmux windows, panes, and layouts
-- project files in `projects/*.toml` define concrete workspaces
-
-Template resolution order:
-
-1. `--template`
-2. matching project definition
-3. `settings.default_template`
-4. built-in fallback template
-
-Session name resolution order:
-
-1. `--session-name`
-2. matching project session name
-3. sanitized directory basename
-
 For the full config reference, see:
 
 - [docs/configuration.md](/Users/stefan/Development/smux/docs/configuration.md)
 - `smux-config(5)` in generated man pages
 
-That reference also includes practical layout recipes, including:
+That reference also includes layout recipes such as:
 
 - 2x2 grid windows
 - one large top pane with two bottom panes
