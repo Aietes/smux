@@ -1,0 +1,67 @@
+name: Publish crates.io
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to publish to crates.io, for example v0.1.6"
+        required: true
+        type: string
+
+jobs:
+  prepare:
+    name: Resolve release ref
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      ref: ${{ steps.resolve.outputs.ref }}
+
+    steps:
+      - name: Resolve release tag
+        id: resolve
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "expected a v-prefixed semantic version tag, got: $VERSION" >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref=refs/tags/$VERSION" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish crates.io package
+    runs-on: ubuntu-latest
+    needs: prepare
+    environment: crates-io
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify tag matches manifest version
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          VERSION="${VERSION#v}"
+          MANIFEST_VERSION="$(cargo pkgid | sed -E 's/.*#([^:]+):.*/\1/')"
+          test "$VERSION" = "$MANIFEST_VERSION"
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked

@@ -40,17 +40,17 @@ Practical next steps:
 2. configure the `crates-io` GitHub Actions environment in `Aietes/smux`
 3. add the `CARGO_REGISTRY_TOKEN` environment secret to that environment
 4. optionally require manual reviewers on the environment
-5. either push a new `v*` tag or run the `Release` workflow manually with a `version` input such as `v0.1.6`
-6. the release workflow will publish to crates.io after the GitHub release job succeeds and the environment is approved
+5. either push a new `v*` tag or run the `Publish crates.io` workflow manually with a `version` input such as `v0.1.6`
+6. approve the `crates-io` environment when prompted
 7. verify `cargo install smux-cli` installs the `smux` binary
 
 Recommended automation model:
 
-- keep crates.io publishing in the release workflow
+- keep crates.io publishing in its own workflow
 - gate it behind the `crates-io` GitHub environment
 - use the environment secret `CARGO_REGISTRY_TOKEN`
 
-That gives an approval-gated publish step instead of requiring a manual local `cargo publish`.
+That gives an approval-gated publish step instead of requiring a manual local `cargo publish`, and keeps channel-specific automation separate from the GitHub release workflow.
 
 ## Homebrew
 
@@ -68,6 +68,16 @@ Practical next steps:
 1. ensure the `HOMEBREW_TAP_PAT` secret is configured in the `smux` GitHub repo with write access to `Aietes/homebrew-smux`
 2. push a new `v*` tag in `Aietes/smux`, or run `Update Homebrew Tap` manually from the Actions UI with a version input
 3. let the workflow rewrite and push `Formula/smux.rb`
+
+## Workflow Split
+
+Distribution automation is intentionally split by channel:
+
+- `Release`: GitHub release artifacts only
+- `Publish crates.io`: crates.io publication only
+- `Update Homebrew Tap`: Homebrew tap update only
+
+This keeps reruns and approvals scoped to a single distribution channel at a time.
 
 ## nixpkgs
 

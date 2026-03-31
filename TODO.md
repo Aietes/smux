@@ -11,6 +11,7 @@
 - Configure the `crates-io` GitHub Actions environment.
 - Add the `CARGO_REGISTRY_TOKEN` environment secret.
 - Optionally require manual approval for that environment.
+- Trigger the `Publish crates.io` workflow for the release tag.
 - Verify `cargo install smux-cli` works from crates.io after the publish propagates.
 
 ### GitHub Releases
