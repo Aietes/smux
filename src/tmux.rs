@@ -128,7 +128,7 @@ impl Tmux {
         }
 
         self.select_window(&plan.session_name, &plan.startup_window)?;
-        self.select_pane(&plan.session_name, &plan.startup_window, plan.startup_pane)?;
+        self.select_pane_by_offset(&plan.session_name, &plan.startup_window, plan.startup_pane)?;
         Ok(())
     }
 
@@ -187,12 +187,15 @@ impl Tmux {
             .context("failed to execute tmux send-keys")
     }
 
-    fn split_window(&self, target: &str, layout: &PaneLayout, directory: &Path) -> Result<()> {
+    fn split_window(&self, target: &str, layout: &PaneLayout, directory: &Path) -> Result<String> {
         let directory = util::path_to_string(directory)?;
         let mut args = vec![
             "split-window".to_owned(),
             "-t".to_owned(),
             target.to_owned(),
+            "-P".to_owned(),
+            "-F".to_owned(),
+            "#{pane_id}".to_owned(),
         ];
 
         match layout.position {
@@ -213,8 +216,19 @@ impl Tmux {
         args.push("-c".to_owned());
         args.push(directory);
 
-        self.run_tmux_owned(args)
-            .context("failed to execute tmux split-window")
+        let output = self
+            .runner
+            .run_capture("tmux", &args)
+            .context("failed to execute tmux split-window")?;
+
+        if !output.status.success {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("tmux split-window failed: {}", stderr.trim());
+        }
+
+        let pane_id =
+            String::from_utf8(output.stdout).context("tmux split-window output was not utf-8")?;
+        Ok(pane_id.trim().to_owned())
     }
 
     fn select_layout(&self, target: &str, layout: &str) -> Result<()> {
@@ -228,9 +242,8 @@ impl Tmux {
             .context("failed to execute tmux select-window")
     }
 
-    fn select_pane(&self, session: &str, window: &str, pane_index: usize) -> Result<()> {
-        let target = format!("{session}:{window}.{pane_index}");
-        self.run_tmux(["select-pane", "-t", &target])
+    fn select_pane_target(&self, target: &str) -> Result<()> {
+        self.run_tmux(["select-pane", "-t", target])
             .context("failed to execute tmux select-pane")
     }
 
@@ -253,22 +266,25 @@ impl Tmux {
         window: &str,
         plan: &crate::templates::WindowPlan,
     ) -> Result<()> {
+        let target = format!("{session}:{window}");
+        let pane_ids = self.list_panes(&target)?;
+        let first_pane_target = pane_ids
+            .first()
+            .cloned()
+            .context("tmux window did not contain an initial pane")?;
+
         if plan.panes.is_empty() {
-            let target = format!("{session}:{window}.0");
             if let Some(pre_command) = &plan.pre_command {
-                self.send_keys_to_target(&target, pre_command)?;
+                self.send_keys_to_target(&first_pane_target, pre_command)?;
             }
             if let Some(command) = &plan.command {
-                self.send_keys_to_target(&target, command)?;
+                self.send_keys_to_target(&first_pane_target, command)?;
             }
             if plan.synchronize {
                 self.set_synchronize_panes(session, window, true)?;
             }
             return Ok(());
         }
-
-        let target = format!("{session}:{window}");
-        let first_pane_target = format!("{target}.0");
 
         if let Some(pre_command) = &plan.pre_command {
             self.send_keys_to_target(&first_pane_target, pre_command)
@@ -287,8 +303,7 @@ impl Tmux {
                     window
                 )
             })?;
-            self.split_window(&target, layout, &pane.cwd)?;
-            let pane_target = format!("{target}.{pane_index}");
+            let pane_target = self.split_window(&target, layout, &pane.cwd)?;
             if let Some(pre_command) = &plan.pre_command {
                 self.send_keys_to_target(&pane_target, pre_command)
                     .context("failed to execute tmux send-keys for split pane pre_command")?;
@@ -310,19 +325,39 @@ impl Tmux {
         Ok(())
     }
 
-    fn run_tmux<const N: usize>(&self, args: [&str; N]) -> Result<()> {
-        let output = self.run_tmux_capture(args)?;
+    fn list_panes(&self, target: &str) -> Result<Vec<String>> {
+        let output = self
+            .run_tmux_capture(["list-panes", "-t", target, "-F", "#{pane_id}"])
+            .context("failed to execute tmux list-panes")?;
 
-        if output.status.success {
-            Ok(())
-        } else {
+        if !output.status.success {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("{}", stderr.trim())
+            bail!("tmux list-panes failed: {}", stderr.trim());
         }
+
+        let stdout = String::from_utf8(output.stdout).context("tmux list-panes output was not utf-8")?;
+        Ok(stdout
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect())
     }
 
-    fn run_tmux_owned(&self, args: Vec<String>) -> Result<()> {
-        let output = self.runner.run_capture("tmux", &args)?;
+    fn select_pane_by_offset(&self, session: &str, window: &str, pane_offset: usize) -> Result<()> {
+        let target = format!("{session}:{window}");
+        let panes = self.list_panes(&target)?;
+        let pane = panes.get(pane_offset).with_context(|| {
+            format!(
+                "startup pane offset {} was not found in window {}",
+                pane_offset, target
+            )
+        })?;
+        self.select_pane_target(pane)
+    }
+
+    fn run_tmux<const N: usize>(&self, args: [&str; N]) -> Result<()> {
+        let output = self.run_tmux_capture(args)?;
 
         if output.status.success {
             Ok(())
@@ -409,16 +444,22 @@ mod tests {
     #[test]
     fn session_plan_emits_expected_tmux_commands() {
         let runner = Arc::new(FakeCommandRunner::new());
-        for _ in 0..13 {
-            runner.push_capture(Ok(CommandOutput {
-                status: CommandStatus {
-                    success: true,
-                    code: Some(0),
-                },
-                stdout: Vec::new(),
-                stderr: Vec::new(),
-            }));
-        }
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%1\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%2\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%3\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%1\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
@@ -468,60 +509,78 @@ mod tests {
         assert_eq!(recorded[0].args[..4], ["new-session", "-d", "-s", "demo"]);
         assert_eq!(
             recorded[1].args,
-            vec![
-                "send-keys",
-                "-t",
-                "demo:editor.0",
-                "source .venv/bin/activate",
-                "C-m"
-            ]
+            vec!["list-panes", "-t", "demo:editor", "-F", "#{pane_id}"]
         );
         assert_eq!(
             recorded[2].args,
-            vec!["send-keys", "-t", "demo:editor.0", "nvim", "C-m"]
+            vec![
+                "send-keys",
+                "-t",
+                "%1",
+                "source .venv/bin/activate",
+                "C-m"
+            ]
         );
         assert_eq!(
             recorded[3].args,
-            vec!["new-window", "-t", "demo", "-n", "run", "-c", "/tmp/demo"]
+            vec!["send-keys", "-t", "%1", "nvim", "C-m"]
         );
         assert_eq!(
             recorded[4].args,
-            vec![
-                "send-keys",
-                "-t",
-                "demo:run.0",
-                "source .venv/bin/activate",
-                "C-m"
-            ]
+            vec!["new-window", "-t", "demo", "-n", "run", "-c", "/tmp/demo"]
         );
         assert_eq!(
             recorded[5].args,
-            vec!["send-keys", "-t", "demo:run.0", "cargo run", "C-m"]
+            vec!["list-panes", "-t", "demo:run", "-F", "#{pane_id}"]
         );
         assert_eq!(
             recorded[6].args,
-            vec!["split-window", "-t", "demo:run", "-h", "-c", "/tmp/demo"]
-        );
-        assert_eq!(
-            recorded[7].args,
             vec![
                 "send-keys",
                 "-t",
-                "demo:run.1",
+                "%2",
                 "source .venv/bin/activate",
                 "C-m"
             ]
         );
         assert_eq!(
+            recorded[7].args,
+            vec!["send-keys", "-t", "%2", "cargo run", "C-m"]
+        );
+        assert_eq!(
             recorded[8].args,
-            vec!["send-keys", "-t", "demo:run.1", "cargo test", "C-m"]
+            vec![
+                "split-window",
+                "-t",
+                "demo:run",
+                "-P",
+                "-F",
+                "#{pane_id}",
+                "-h",
+                "-c",
+                "/tmp/demo"
+            ]
         );
         assert_eq!(
             recorded[9].args,
-            vec!["select-layout", "-t", "demo:run", "main-horizontal"]
+            vec![
+                "send-keys",
+                "-t",
+                "%3",
+                "source .venv/bin/activate",
+                "C-m"
+            ]
         );
         assert_eq!(
             recorded[10].args,
+            vec!["send-keys", "-t", "%3", "cargo test", "C-m"]
+        );
+        assert_eq!(
+            recorded[11].args,
+            vec!["select-layout", "-t", "demo:run", "main-horizontal"]
+        );
+        assert_eq!(
+            recorded[12].args,
             vec![
                 "set-window-option",
                 "-t",
@@ -531,12 +590,74 @@ mod tests {
             ]
         );
         assert_eq!(
-            recorded[11].args,
+            recorded[13].args,
             vec!["select-window", "-t", "demo:editor"]
         );
         assert_eq!(
-            recorded[12].args,
-            vec!["select-pane", "-t", "demo:editor.0"]
+            recorded[14].args,
+            vec!["list-panes", "-t", "demo:editor", "-F", "#{pane_id}"]
         );
+        assert_eq!(recorded[15].args, vec!["select-pane", "-t", "%1"]);
+    }
+
+    #[test]
+    fn startup_pane_uses_zero_based_offset_not_tmux_base_index() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%10\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%11\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%10\n%11\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+
+        let tmux = Tmux::with_runner(runner.clone());
+        let plan = SessionPlan {
+            session_name: "demo".to_owned(),
+            startup_window: "main".to_owned(),
+            startup_pane: 1,
+            windows: vec![WindowPlan {
+                name: "main".to_owned(),
+                cwd: "/tmp/demo".into(),
+                pre_command: None,
+                command: None,
+                layout: None,
+                synchronize: false,
+                panes: vec![
+                    PanePlan {
+                        layout: None,
+                        cwd: "/tmp/demo".into(),
+                        command: Some("shell".to_owned()),
+                    },
+                    PanePlan {
+                        layout: Some(PaneLayout {
+                            position: PanePosition::Right,
+                            size: None,
+                        }),
+                        cwd: "/tmp/demo".into(),
+                        command: Some("tests".to_owned()),
+                    },
+                ],
+            }],
+        };
+
+        tmux.create_session_from_plan(&plan)
+            .expect("session plan should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded[6].args, vec!["list-panes", "-t", "demo:main", "-F", "#{pane_id}"]);
+        assert_eq!(recorded[7].args, vec!["select-pane", "-t", "%11"]);
+    }
+
+    fn ok_capture(stdout: Vec<u8>) -> std::io::Result<CommandOutput> {
+        Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout,
+            stderr: Vec::new(),
+        })
     }
 }
