@@ -187,6 +187,11 @@ impl Tmux {
         }
     }
 
+    pub fn kill_session(&self, session: &str) -> Result<()> {
+        self.run_tmux(["kill-session", "-t", session])
+            .context("failed to execute tmux kill-session")
+    }
+
     fn create_session_with_window(
         &self,
         session: &str,
@@ -663,6 +668,22 @@ mod tests {
             vec!["list-panes", "-t", "demo:editor", "-F", "#{pane_id}"]
         );
         assert_eq!(recorded[15].args, vec!["select-pane", "-t", "%1"]);
+    }
+
+    #[test]
+    fn kill_session_uses_captured_tmux_command() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(Vec::new()));
+
+        let tmux = Tmux::with_runner(runner.clone());
+        tmux.kill_session("demo")
+            .expect("kill-session should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].program, "tmux");
+        assert_eq!(recorded[0].args, vec!["kill-session", "-t", "demo"]);
+        assert_eq!(recorded[0].io_mode, IoMode::Capture);
     }
 
     #[test]

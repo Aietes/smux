@@ -15,6 +15,12 @@ pub enum EntryKind {
     Project,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SelectAction {
+    Open,
+    Delete,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Entry {
     pub kind: EntryKind,
@@ -75,6 +81,12 @@ impl Entry {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Selection {
+    pub action: SelectAction,
+    pub entry: Entry,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Choice {
     pub kind: String,
     pub label: String,
@@ -103,7 +115,7 @@ impl Choice {
     }
 }
 
-pub fn select(entries: Vec<Entry>) -> Result<Option<Entry>> {
+pub fn select(entries: Vec<Entry>) -> Result<Option<Selection>> {
     select_with_runner(default_runner(), entries, "smux> ")
 }
 
@@ -227,7 +239,7 @@ fn select_with_runner(
     runner: Arc<dyn CommandRunner>,
     entries: Vec<Entry>,
     prompt: &str,
-) -> Result<Option<Entry>> {
+) -> Result<Option<Selection>> {
     let mut args = Vec::new();
     let input = entries
         .into_iter()
@@ -243,11 +255,12 @@ fn select_with_runner(
     add_common_picker_args(
         &mut args,
         prompt,
-        "ctrl-x all  ctrl-s sessions  ctrl-f folders  ctrl-p projects",
+        "enter open  ctrl-x kill session  ctrl-c all  ctrl-s sessions  ctrl-f folders  ctrl-p projects",
         &format!(
-            "ctrl-x:change-prompt(smux> )+clear-query+reload({all_command}),ctrl-s:change-prompt(session> )+clear-query+reload({session_command}),ctrl-f:change-prompt(folder> )+clear-query+reload({folder_command}),ctrl-p:change-prompt(project> )+clear-query+reload({project_command})"
+            "ctrl-c:change-prompt(smux> )+clear-query+reload({all_command}),ctrl-s:change-prompt(session> )+clear-query+reload({session_command}),ctrl-f:change-prompt(folder> )+clear-query+reload({folder_command}),ctrl-p:change-prompt(project> )+clear-query+reload({project_command})"
         ),
     );
+    args.extend(["--expect".to_owned(), "ctrl-x".to_owned()]);
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
@@ -267,7 +280,26 @@ fn select_with_runner(
         return Ok(None);
     }
 
-    Ok(Some(Entry::decode(selection)?))
+    let mut lines = selection.lines();
+    let first = lines
+        .next()
+        .context("fzf selection output was unexpectedly empty")?;
+    let (action, encoded_entry) = match lines.next() {
+        Some(encoded_entry) if !first.is_empty() => {
+            let action = match first {
+                "ctrl-x" => SelectAction::Delete,
+                other => bail!("unknown picker action: {other}"),
+            };
+            (action, encoded_entry)
+        }
+        Some(encoded_entry) => (SelectAction::Open, encoded_entry),
+        None => (SelectAction::Open, first),
+    };
+
+    Ok(Some(Selection {
+        action,
+        entry: Entry::decode(encoded_entry)?,
+    }))
 }
 
 #[cfg(test)]
@@ -276,7 +308,9 @@ mod tests {
 
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner};
 
-    use super::{Choice, Entry, EntryKind, select_value_with_runner, select_with_runner};
+    use super::{
+        Choice, Entry, EntryKind, SelectAction, select_value_with_runner, select_with_runner,
+    };
     use crate::config::IconMode;
     use crate::ui::DisplayStyle;
 
@@ -321,17 +355,19 @@ mod tests {
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"3".to_owned()));
         assert!(recorded[0].args.contains(&"1,2".to_owned()));
+        assert!(recorded[0].args.contains(&"--expect".to_owned()));
+        assert!(recorded[0].args.contains(&"ctrl-x".to_owned()));
         assert!(
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("ctrl-s sessions"))
+                .any(|arg| arg.contains("enter open  ctrl-x kill session"))
         );
         assert!(
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("ctrl-f:change-prompt(folder> )+clear-query+reload("))
+                .any(|arg| arg.contains("ctrl-c:change-prompt(smux> )+clear-query+reload("))
         );
         assert!(
             recorded[0]
@@ -349,6 +385,65 @@ mod tests {
             recorded[0].stdin.as_deref(),
             Some("folder\t/tmp/example\tdir      /tmp/example\n")
         );
+        let selection = result.expect("selection should be present");
+        assert_eq!(selection.action, SelectAction::Open);
+        assert_eq!(selection.entry.kind, EntryKind::Directory);
+    }
+
+    #[test]
+    fn selector_supports_delete_action_for_sessions() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"ctrl-x\nsession\tdemo\tsession  demo\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let result = select_with_runner(
+            runner,
+            vec![Entry::session(
+                DisplayStyle::from_icon_mode(IconMode::Never),
+                "demo".to_owned(),
+            )],
+            "smux> ",
+        )
+        .expect("selection should succeed")
+        .expect("selection should be present");
+
+        assert_eq!(result.action, SelectAction::Delete);
+        assert_eq!(result.entry.kind, EntryKind::Session);
+        assert_eq!(result.entry.value, "demo");
+    }
+
+    #[test]
+    fn selector_treats_empty_expect_key_as_open() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"\nfolder\t/tmp/example\tdir      /tmp/example\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let result = select_with_runner(
+            runner,
+            vec![Entry::directory(
+                DisplayStyle::from_icon_mode(IconMode::Never),
+                "/tmp/example".to_owned(),
+            )],
+            "smux> ",
+        )
+        .expect("selection should succeed")
+        .expect("selection should be present");
+
+        assert_eq!(result.action, SelectAction::Open);
+        assert_eq!(result.entry.kind, EntryKind::Directory);
+        assert_eq!(result.entry.value, "/tmp/example");
     }
 
     #[test]

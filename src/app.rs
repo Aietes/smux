@@ -100,15 +100,73 @@ fn run_select(
     choose_template: bool,
     no_project_detect: bool,
 ) -> Result<()> {
-    let mut entries = Vec::new();
     let config = loaded.map(|loaded| &loaded.config);
     let display_style = DisplayStyle::from_config(config);
-    let current_session = tmux.current_session().ok().flatten();
+    let project_detection = if no_project_detect {
+        session::ProjectDetection::Disabled
+    } else {
+        session::ProjectDetection::Enabled
+    };
+
+    loop {
+        let current_session = tmux.current_session().ok().flatten();
+        let entries = select_entries(tmux, loaded, display_style, current_session.as_deref())?;
+
+        let Some(selection) = fzf::select(entries)? else {
+            return Ok(());
+        };
+
+        match (selection.action, selection.entry.kind) {
+            (fzf::SelectAction::Open, fzf::EntryKind::Session) => {
+                return session::switch_existing(tmux, &selection.entry.value);
+            }
+            (fzf::SelectAction::Delete, fzf::EntryKind::Session) => {
+                if current_session.as_deref() == Some(selection.entry.value.as_str()) {
+                    continue;
+                }
+                session::kill_existing(tmux, &selection.entry.value)?;
+            }
+            (fzf::SelectAction::Open, fzf::EntryKind::Directory) => {
+                let template = if choose_template {
+                    let Some(template) = choose_template_name(config, display_style)? else {
+                        return Ok(());
+                    };
+                    Some(template)
+                } else {
+                    None
+                };
+
+                return session::connect_path(
+                    tmux,
+                    Path::new(&selection.entry.value),
+                    loaded,
+                    template.as_deref(),
+                    None,
+                    project_detection,
+                );
+            }
+            (fzf::SelectAction::Open, fzf::EntryKind::Project) => {
+                let loaded =
+                    loaded.context("project selection requires config or project files")?;
+                return session::connect_project(tmux, loaded, &selection.entry.value);
+            }
+            (fzf::SelectAction::Delete, _) => continue,
+        }
+    }
+}
+
+fn select_entries(
+    tmux: &Tmux,
+    loaded: Option<&config::LoadedConfig>,
+    display_style: DisplayStyle,
+    current_session: Option<&str>,
+) -> Result<Vec<fzf::Entry>> {
+    let mut entries = Vec::new();
     let sessions = tmux.list_sessions()?;
     let session_count = sessions.len();
 
     for session in sessions {
-        let entry = if current_session.as_deref() == Some(session.as_str()) {
+        let entry = if current_session == Some(session.as_str()) {
             fzf::Entry {
                 kind: fzf::EntryKind::Session,
                 label: display_style.current_session_label(&session),
@@ -151,41 +209,7 @@ fn run_select(
         );
     }
 
-    let Some(selection) = fzf::select(entries)? else {
-        return Ok(());
-    };
-    let project_detection = if no_project_detect {
-        session::ProjectDetection::Disabled
-    } else {
-        session::ProjectDetection::Enabled
-    };
-
-    match selection.kind {
-        fzf::EntryKind::Session => session::switch_existing(tmux, &selection.value),
-        fzf::EntryKind::Directory => {
-            let template = if choose_template {
-                let Some(template) = choose_template_name(config, display_style)? else {
-                    return Ok(());
-                };
-                Some(template)
-            } else {
-                None
-            };
-
-            session::connect_path(
-                tmux,
-                Path::new(&selection.value),
-                loaded,
-                template.as_deref(),
-                None,
-                project_detection,
-            )
-        }
-        fzf::EntryKind::Project => {
-            let loaded = loaded.context("project selection requires config or project files")?;
-            session::connect_project(tmux, loaded, &selection.value)
-        }
-    }
+    Ok(entries)
 }
 
 fn choose_template_name(

@@ -113,6 +113,12 @@ pub fn switch_existing(tmux: &Tmux, session: &str) -> Result<()> {
     tmux.switch_or_attach(&session)
 }
 
+pub fn kill_existing(tmux: &Tmux, session: &str) -> Result<()> {
+    let session = util::validated_session_name(session)?;
+    tmux.ensure_session_exists(&session)?;
+    tmux.kill_session(&session)
+}
+
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
