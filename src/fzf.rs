@@ -123,7 +123,8 @@ impl TempInputFile {
             .context("system clock should be after unix epoch")?
             .as_nanos();
         path.push(format!("smux-fzf-{}-{nanos}.tsv", std::process::id()));
-        fs::write(&path, contents).with_context(|| format!("failed to write {}", path.display()))?;
+        fs::write(&path, contents)
+            .with_context(|| format!("failed to write {}", path.display()))?;
         Ok(Self { path })
     }
 

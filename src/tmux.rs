@@ -366,7 +366,8 @@ impl Tmux {
             bail!("tmux list-panes failed: {}", stderr.trim());
         }
 
-        let stdout = String::from_utf8(output.stdout).context("tmux list-panes output was not utf-8")?;
+        let stdout =
+            String::from_utf8(output.stdout).context("tmux list-panes output was not utf-8")?;
         Ok(stdout
             .lines()
             .map(str::trim)
@@ -505,7 +506,9 @@ mod tests {
 
         let tmux = Tmux::with_runner(runner.clone());
         assert_eq!(
-            tmux.current_session().expect("query should succeed").as_deref(),
+            tmux.current_session()
+                .expect("query should succeed")
+                .as_deref(),
             Some("demo")
         );
 
@@ -593,13 +596,7 @@ mod tests {
         );
         assert_eq!(
             recorded[2].args,
-            vec![
-                "send-keys",
-                "-t",
-                "%1",
-                "source .venv/bin/activate",
-                "C-m"
-            ]
+            vec!["send-keys", "-t", "%1", "source .venv/bin/activate", "C-m"]
         );
         assert_eq!(
             recorded[3].args,
@@ -615,13 +612,7 @@ mod tests {
         );
         assert_eq!(
             recorded[6].args,
-            vec![
-                "send-keys",
-                "-t",
-                "%2",
-                "source .venv/bin/activate",
-                "C-m"
-            ]
+            vec!["send-keys", "-t", "%2", "source .venv/bin/activate", "C-m"]
         );
         assert_eq!(
             recorded[7].args,
@@ -643,13 +634,7 @@ mod tests {
         );
         assert_eq!(
             recorded[9].args,
-            vec![
-                "send-keys",
-                "-t",
-                "%3",
-                "source .venv/bin/activate",
-                "C-m"
-            ]
+            vec!["send-keys", "-t", "%3", "source .venv/bin/activate", "C-m"]
         );
         assert_eq!(
             recorded[10].args,
@@ -726,7 +711,10 @@ mod tests {
             .expect("session plan should succeed");
 
         let recorded = runner.recorded();
-        assert_eq!(recorded[6].args, vec!["list-panes", "-t", "demo:main", "-F", "#{pane_id}"]);
+        assert_eq!(
+            recorded[6].args,
+            vec!["list-panes", "-t", "demo:main", "-F", "#{pane_id}"]
+        );
         assert_eq!(recorded[7].args, vec!["select-pane", "-t", "%11"]);
     }
 
