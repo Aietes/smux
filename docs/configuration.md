@@ -56,6 +56,13 @@ directory = 108
 template = 179
 project = 81
 
+[settings.picker.bindings]
+reset = "ctrl-c"
+sessions = "ctrl-s"
+folders = "ctrl-f"
+projects = "ctrl-p"
+delete_session = "ctrl-x"
+
 [templates.default]
 startup_window = "main"
 windows = [{ name = "main" }]
@@ -126,6 +133,46 @@ Fields:
   - default: `81`
 
 These values are ANSI-256 color indexes used for picker icons.
+
+### `[settings.picker.bindings]`
+
+```toml
+[settings.picker.bindings]
+reset = "ctrl-c"
+sessions = "ctrl-s"
+folders = "ctrl-f"
+projects = "ctrl-p"
+delete_session = "ctrl-x"
+```
+
+Fields:
+
+- `reset`
+  - type: string
+  - default: `ctrl-c`
+  - resets the main picker to the full list
+- `sessions`
+  - type: string
+  - default: `ctrl-s`
+  - filters the main picker to tmux sessions
+- `folders`
+  - type: string
+  - default: `ctrl-f`
+  - filters the main picker to folders
+- `projects`
+  - type: string
+  - default: `ctrl-p`
+  - filters the main picker to saved projects
+- `delete_session`
+  - type: string
+  - default: `ctrl-x`
+  - closes the selected non-current tmux session and keeps the picker open
+
+Rules:
+
+- picker bindings must not be empty
+- picker bindings must be unique within this block
+- values are passed through as `fzf` key names
 
 ## `[templates.<name>]`
 
@@ -421,15 +468,13 @@ Current behavior:
 
 - prompt is shown at the top
 - `Esc` cancels cleanly
-- typing `project` narrows to saved projects
-- typing `session` narrows to sessions
-- typing `folder` narrows to directories
-- typing `template` narrows template choices in the template picker
-- `Ctrl-X` resets the picker
+- typing still does normal fuzzy search
+- `Ctrl-C` resets the picker
 - `Ctrl-S` limits the main picker to sessions and keeps fuzzy search active
 - `Ctrl-P` limits the main picker to projects and keeps fuzzy search active
 - `Ctrl-F` limits the main picker to folders and keeps fuzzy search active
-- `Ctrl-T` limits the template picker to templates and keeps fuzzy search active
+- `Ctrl-X` closes the selected non-current tmux session and keeps the picker open
+- these keybinds are configurable through `[settings.picker.bindings]`
 
 ## Related Docs
 

@@ -17,6 +17,13 @@ directory = 108
 template = 179
 project = 81
 
+[settings.picker.bindings]
+reset = "ctrl-c"
+sessions = "ctrl-s"
+folders = "ctrl-f"
+projects = "ctrl-p"
+delete_session = "ctrl-x"
+
 [templates.default]
 startup_window = "main"
 windows = [{ name = "main" }]
@@ -54,6 +61,8 @@ pub struct Settings {
     pub icons: IconMode,
     #[serde(default)]
     pub icon_colors: IconColors,
+    #[serde(default)]
+    pub picker: PickerSettings,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Default, Eq, PartialEq)]
@@ -92,6 +101,58 @@ impl Default for IconColors {
             project: 81,
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Default, Eq, PartialEq)]
+pub struct PickerSettings {
+    #[serde(default)]
+    pub bindings: PickerBindings,
+}
+
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+pub struct PickerBindings {
+    #[serde(default = "default_picker_reset")]
+    pub reset: String,
+    #[serde(default = "default_picker_sessions")]
+    pub sessions: String,
+    #[serde(default = "default_picker_folders")]
+    pub folders: String,
+    #[serde(default = "default_picker_projects")]
+    pub projects: String,
+    #[serde(default = "default_picker_delete_session")]
+    pub delete_session: String,
+}
+
+impl Default for PickerBindings {
+    fn default() -> Self {
+        Self {
+            reset: default_picker_reset(),
+            sessions: default_picker_sessions(),
+            folders: default_picker_folders(),
+            projects: default_picker_projects(),
+            delete_session: default_picker_delete_session(),
+        }
+    }
+}
+
+fn default_picker_reset() -> String {
+    "ctrl-c".to_owned()
+}
+
+fn default_picker_sessions() -> String {
+    "ctrl-s".to_owned()
+}
+
+fn default_picker_folders() -> String {
+    "ctrl-f".to_owned()
+}
+
+fn default_picker_projects() -> String {
+    "ctrl-p".to_owned()
+}
+
+fn default_picker_delete_session() -> String {
+    "ctrl-x".to_owned()
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -290,6 +351,8 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
 }
 
 pub fn validate_config(config: &Config) -> Result<()> {
+    validate_picker_bindings(&config.settings.picker.bindings)?;
+
     for (template_name, template) in &config.templates {
         validate_template(template_name, template)?;
     }
@@ -298,6 +361,31 @@ pub fn validate_config(config: &Config) -> Result<()> {
         && !config.templates.contains_key(default_template)
     {
         bail!("default_template \"{default_template}\" was not found");
+    }
+
+    Ok(())
+}
+
+fn validate_picker_bindings(bindings: &PickerBindings) -> Result<()> {
+    let values = [
+        ("reset", bindings.reset.trim()),
+        ("sessions", bindings.sessions.trim()),
+        ("folders", bindings.folders.trim()),
+        ("projects", bindings.projects.trim()),
+        ("delete_session", bindings.delete_session.trim()),
+    ];
+
+    for (name, value) in values {
+        if value.is_empty() {
+            bail!("picker binding \"{name}\" must not be empty");
+        }
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    for (name, value) in values {
+        if !seen.insert(value) {
+            bail!("picker binding \"{name}\" duplicates another picker binding");
+        }
     }
 
     Ok(())
@@ -474,9 +562,9 @@ pub fn resolve_project<'a>(
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, IconColors, IconMode, default_projects_dir, load, load_optional, load_workspace,
-        materialize_project_template, resolve_project, schema_url, starter_config, starter_project,
-        validate_config,
+        Config, IconColors, IconMode, PickerBindings, default_projects_dir, load, load_optional,
+        load_workspace, materialize_project_template, resolve_project, schema_url, starter_config,
+        starter_project, validate_config,
     };
     use anyhow::Result;
     use std::fs;
@@ -495,6 +583,7 @@ mod tests {
         assert!(config.templates.contains_key("default"));
         assert_eq!(config.settings.icons, IconMode::Auto);
         assert_eq!(config.settings.icon_colors, IconColors::default());
+        assert_eq!(config.settings.picker.bindings, PickerBindings::default());
         Ok(())
     }
 
@@ -513,6 +602,44 @@ mod tests {
         let version = env!("CARGO_PKG_VERSION");
         assert!(schema_url("smux-config.schema.json").contains(&format!("/v{version}/")));
         assert!(schema_url("smux-project.schema.json").contains(&format!("/v{version}/")));
+    }
+
+    #[test]
+    fn parses_custom_picker_bindings() -> Result<()> {
+        let input = r#"
+[settings.picker.bindings]
+reset = "alt-a"
+sessions = "alt-s"
+folders = "alt-f"
+projects = "alt-p"
+delete_session = "alt-x"
+"#;
+
+        let config: Config = toml::from_str(input)?;
+        validate_config(&config)?;
+        assert_eq!(config.settings.picker.bindings.reset, "alt-a");
+        assert_eq!(config.settings.picker.bindings.delete_session, "alt-x");
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_duplicate_picker_bindings() {
+        let input = r#"
+[settings.picker.bindings]
+reset = "ctrl-c"
+sessions = "ctrl-s"
+folders = "ctrl-f"
+projects = "ctrl-s"
+delete_session = "ctrl-x"
+"#;
+
+        let config: Config = toml::from_str(input).expect("config should parse");
+        let error = validate_config(&config).expect_err("duplicate picker bindings should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("duplicates another picker binding")
+        );
     }
 
     #[test]

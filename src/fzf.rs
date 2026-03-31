@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 
+use crate::config::PickerBindings;
 use crate::process::{CommandRunner, default_runner};
 use crate::ui::DisplayStyle;
 
@@ -115,8 +116,8 @@ impl Choice {
     }
 }
 
-pub fn select(entries: Vec<Entry>) -> Result<Option<Selection>> {
-    select_with_runner(default_runner(), entries, "smux> ")
+pub fn select(entries: Vec<Entry>, bindings: &PickerBindings) -> Result<Option<Selection>> {
+    select_with_runner(default_runner(), entries, "smux> ", bindings)
 }
 
 pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>> {
@@ -239,6 +240,7 @@ fn select_with_runner(
     runner: Arc<dyn CommandRunner>,
     entries: Vec<Entry>,
     prompt: &str,
+    bindings: &PickerBindings,
 ) -> Result<Option<Selection>> {
     let mut args = Vec::new();
     let input = entries
@@ -255,12 +257,23 @@ fn select_with_runner(
     add_common_picker_args(
         &mut args,
         prompt,
-        "enter open  ctrl-x kill session  ctrl-c all  ctrl-s sessions  ctrl-f folders  ctrl-p projects",
         &format!(
-            "ctrl-c:change-prompt(smux> )+clear-query+reload({all_command}),ctrl-s:change-prompt(session> )+clear-query+reload({session_command}),ctrl-f:change-prompt(folder> )+clear-query+reload({folder_command}),ctrl-p:change-prompt(project> )+clear-query+reload({project_command})"
+            "enter open  {delete} kill session  {reset} all  {sessions} sessions  {folders} folders  {projects} projects",
+            delete = bindings.delete_session,
+            reset = bindings.reset,
+            sessions = bindings.sessions,
+            folders = bindings.folders,
+            projects = bindings.projects,
+        ),
+        &format!(
+            "{reset}:change-prompt(smux> )+clear-query+reload({all_command}),{sessions}:change-prompt(session> )+clear-query+reload({session_command}),{folders}:change-prompt(folder> )+clear-query+reload({folder_command}),{projects}:change-prompt(project> )+clear-query+reload({project_command})",
+            reset = bindings.reset,
+            sessions = bindings.sessions,
+            folders = bindings.folders,
+            projects = bindings.projects,
         ),
     );
-    args.extend(["--expect".to_owned(), "ctrl-x".to_owned()]);
+    args.extend(["--expect".to_owned(), bindings.delete_session.clone()]);
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
@@ -287,7 +300,7 @@ fn select_with_runner(
     let (action, encoded_entry) = match lines.next() {
         Some(encoded_entry) if !first.is_empty() => {
             let action = match first {
-                "ctrl-x" => SelectAction::Delete,
+                key if key == bindings.delete_session => SelectAction::Delete,
                 other => bail!("unknown picker action: {other}"),
             };
             (action, encoded_entry)
@@ -311,7 +324,7 @@ mod tests {
     use super::{
         Choice, Entry, EntryKind, SelectAction, select_value_with_runner, select_with_runner,
     };
-    use crate::config::IconMode;
+    use crate::config::{IconMode, PickerBindings};
     use crate::ui::DisplayStyle;
 
     #[test]
@@ -345,6 +358,7 @@ mod tests {
                 "/tmp/example".to_owned(),
             )],
             "smux> ",
+            &PickerBindings::default(),
         )
         .expect("selection should succeed");
 
@@ -409,6 +423,7 @@ mod tests {
                 "demo".to_owned(),
             )],
             "smux> ",
+            &PickerBindings::default(),
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -437,6 +452,7 @@ mod tests {
                 "/tmp/example".to_owned(),
             )],
             "smux> ",
+            &PickerBindings::default(),
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -444,6 +460,65 @@ mod tests {
         assert_eq!(result.action, SelectAction::Open);
         assert_eq!(result.entry.kind, EntryKind::Directory);
         assert_eq!(result.entry.value, "/tmp/example");
+    }
+
+    #[test]
+    fn selector_uses_configured_picker_bindings() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"\nfolder\t/tmp/example\tdir      /tmp/example\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let bindings = PickerBindings {
+            reset: "alt-a".to_owned(),
+            sessions: "alt-s".to_owned(),
+            folders: "alt-f".to_owned(),
+            projects: "alt-p".to_owned(),
+            delete_session: "alt-x".to_owned(),
+        };
+
+        let _ = select_with_runner(
+            runner.clone(),
+            vec![Entry::directory(
+                DisplayStyle::from_icon_mode(IconMode::Never),
+                "/tmp/example".to_owned(),
+            )],
+            "smux> ",
+            &bindings,
+        )
+        .expect("selection should succeed");
+
+        let recorded = runner.recorded();
+        assert!(recorded[0].args.contains(&"alt-x".to_owned()));
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("alt-a:change-prompt(smux> )+clear-query+reload("))
+        );
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("alt-s:change-prompt(session> )+clear-query+reload("))
+        );
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("alt-f:change-prompt(folder> )+clear-query+reload("))
+        );
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("alt-p:change-prompt(project> )+clear-query+reload("))
+        );
     }
 
     #[test]

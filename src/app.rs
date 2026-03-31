@@ -102,6 +102,9 @@ fn run_select(
 ) -> Result<()> {
     let config = loaded.map(|loaded| &loaded.config);
     let display_style = DisplayStyle::from_config(config);
+    let picker_bindings = config
+        .map(|config| config.settings.picker.bindings.clone())
+        .unwrap_or_default();
     let project_detection = if no_project_detect {
         session::ProjectDetection::Disabled
     } else {
@@ -112,7 +115,7 @@ fn run_select(
         let current_session = tmux.current_session().ok().flatten();
         let entries = select_entries(tmux, loaded, display_style, current_session.as_deref())?;
 
-        let Some(selection) = fzf::select(entries)? else {
+        let Some(selection) = fzf::select(entries, &picker_bindings)? else {
             return Ok(());
         };
 

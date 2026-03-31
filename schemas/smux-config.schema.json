@@ -37,6 +37,49 @@
         },
         "icon_colors": {
           "$ref": "#/$defs/icon_colors"
+        },
+        "picker": {
+          "$ref": "#/$defs/picker"
+        }
+      }
+    },
+    "picker": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bindings": {
+          "$ref": "#/$defs/picker_bindings"
+        }
+      }
+    },
+    "picker_bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reset": {
+          "type": "string",
+          "default": "ctrl-c",
+          "description": "Main picker shortcut that resets the list back to all entries."
+        },
+        "sessions": {
+          "type": "string",
+          "default": "ctrl-s",
+          "description": "Main picker shortcut that filters to tmux sessions."
+        },
+        "folders": {
+          "type": "string",
+          "default": "ctrl-f",
+          "description": "Main picker shortcut that filters to folders."
+        },
+        "projects": {
+          "type": "string",
+          "default": "ctrl-p",
+          "description": "Main picker shortcut that filters to saved projects."
+        },
+        "delete_session": {
+          "type": "string",
+          "default": "ctrl-x",
+          "description": "Main picker shortcut that closes the selected non-current tmux session."
         }
       }
     },
