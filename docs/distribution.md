@@ -37,8 +37,19 @@ Current status:
 Practical next steps:
 
 1. optionally add `documentation`
-2. publish with `cargo publish`
-3. verify `cargo install smux-cli` installs the `smux` binary
+2. configure the `crates-io` GitHub Actions environment in `Aietes/smux`
+3. add the `CARGO_REGISTRY_TOKEN` environment secret to that environment
+4. optionally require manual reviewers on the environment
+5. push a new `v*` tag; the release workflow will publish to crates.io after the GitHub release job succeeds and the environment is approved
+6. verify `cargo install smux-cli` installs the `smux` binary
+
+Recommended automation model:
+
+- keep crates.io publishing in the release workflow
+- gate it behind the `crates-io` GitHub environment
+- use the environment secret `CARGO_REGISTRY_TOKEN`
+
+That gives an approval-gated publish step instead of requiring a manual local `cargo publish`.
 
 ## Homebrew
 

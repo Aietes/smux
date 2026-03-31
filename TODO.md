@@ -8,10 +8,10 @@
 
 ### crates.io
 
-- Verify package contents again with `cargo publish --dry-run` after metadata is added.
-- Authenticate with crates.io.
-- Publish the crate with `cargo publish`.
-- Verify `cargo install smux` works from crates.io after the publish propagates.
+- Configure the `crates-io` GitHub Actions environment.
+- Add the `CARGO_REGISTRY_TOKEN` environment secret.
+- Optionally require manual approval for that environment.
+- Verify `cargo install smux-cli` works from crates.io after the publish propagates.
 
 ### GitHub Releases
 
