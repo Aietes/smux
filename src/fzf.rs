@@ -1,4 +1,7 @@
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 
@@ -108,6 +111,49 @@ pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>
     select_value_with_runner(default_runner(), prompt, choices)
 }
 
+struct TempInputFile {
+    path: PathBuf,
+}
+
+impl TempInputFile {
+    fn new(contents: &str) -> Result<Self> {
+        let mut path = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .context("system clock should be after unix epoch")?
+            .as_nanos();
+        path.push(format!("smux-fzf-{}-{nanos}.tsv", std::process::id()));
+        fs::write(&path, contents).with_context(|| format!("failed to write {}", path.display()))?;
+        Ok(Self { path })
+    }
+
+    fn shell_quoted_path(&self) -> String {
+        shell_quote(&self.path)
+    }
+}
+
+impl Drop for TempInputFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn shell_quote(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn cat_command(file: &TempInputFile) -> String {
+    format!("cat {}", file.shell_quoted_path())
+}
+
+fn filter_command(file: &TempInputFile, kind: &str) -> String {
+    format!(
+        "awk -F '\\t' '$1 == \"{kind}\"' {}",
+        file.shell_quoted_path()
+    )
+}
+
 fn add_common_picker_args(args: &mut Vec<String>, prompt: &str, header: &str, bindings: &str) {
     args.extend([
         "--ansi".to_owned(),
@@ -123,6 +169,8 @@ fn add_common_picker_args(args: &mut Vec<String>, prompt: &str, header: &str, bi
         bindings.to_owned(),
         "--with-nth".to_owned(),
         "3".to_owned(),
+        "--nth".to_owned(),
+        "1,2".to_owned(),
         "--prompt".to_owned(),
         prompt.to_owned(),
         "--no-sort".to_owned(),
@@ -135,19 +183,23 @@ fn select_value_with_runner(
     choices: Vec<Choice>,
 ) -> Result<Option<String>> {
     let mut args = Vec::new();
-    add_common_picker_args(
-        &mut args,
-        prompt,
-        "ctrl-a all  ctrl-t templates",
-        "ctrl-a:change-prompt(template> )+change-query(),ctrl-t:change-prompt(template> )+change-query(template )",
-    );
-    args.extend(["--nth".to_owned(), "1,2,3".to_owned()]);
     let input = choices
         .into_iter()
         .map(|choice| choice.encode())
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
+    let input_file = TempInputFile::new(&input)?;
+    let all_command = cat_command(&input_file);
+    let template_command = filter_command(&input_file, "template");
+    add_common_picker_args(
+        &mut args,
+        prompt,
+        "ctrl-x all  ctrl-t templates",
+        &format!(
+            "ctrl-x:change-prompt(template> )+clear-query+reload({all_command}),ctrl-t:change-prompt(template> )+clear-query+reload({template_command})"
+        ),
+    );
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
@@ -176,19 +228,25 @@ fn select_with_runner(
     prompt: &str,
 ) -> Result<Option<Entry>> {
     let mut args = Vec::new();
-    add_common_picker_args(
-        &mut args,
-        prompt,
-        "ctrl-a all  ctrl-s sessions  ctrl-f folders  ctrl-p projects",
-        "ctrl-a:change-prompt(smux> )+change-query(),ctrl-s:change-prompt(session> )+change-query(session ),ctrl-f:change-prompt(folder> )+change-query(folder ),ctrl-p:change-prompt(project> )+change-query(project )",
-    );
-    args.extend(["--nth".to_owned(), "1,3".to_owned()]);
     let input = entries
         .into_iter()
         .map(|entry| entry.encode())
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
+    let input_file = TempInputFile::new(&input)?;
+    let all_command = cat_command(&input_file);
+    let session_command = filter_command(&input_file, "session");
+    let folder_command = filter_command(&input_file, "folder");
+    let project_command = filter_command(&input_file, "project");
+    add_common_picker_args(
+        &mut args,
+        prompt,
+        "ctrl-x all  ctrl-s sessions  ctrl-f folders  ctrl-p projects",
+        &format!(
+            "ctrl-x:change-prompt(smux> )+clear-query+reload({all_command}),ctrl-s:change-prompt(session> )+clear-query+reload({session_command}),ctrl-f:change-prompt(folder> )+clear-query+reload({folder_command}),ctrl-p:change-prompt(project> )+clear-query+reload({project_command})"
+        ),
+    );
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
@@ -260,7 +318,8 @@ mod tests {
         assert_eq!(recorded[0].program, "fzf");
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
-        assert!(recorded[0].args.contains(&"1,3".to_owned()));
+        assert!(recorded[0].args.contains(&"3".to_owned()));
+        assert!(recorded[0].args.contains(&"1,2".to_owned()));
         assert!(
             recorded[0]
                 .args
@@ -271,7 +330,7 @@ mod tests {
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("ctrl-f:change-prompt(folder> )"))
+                .any(|arg| arg.contains("ctrl-f:change-prompt(folder> )+clear-query+reload("))
         );
         assert!(
             recorded[0]
@@ -283,7 +342,7 @@ mod tests {
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("ctrl-p:change-prompt(project> )"))
+                .any(|arg| arg.contains("ctrl-p:change-prompt(project> )+clear-query+reload("))
         );
         assert_eq!(
             recorded[0].stdin.as_deref(),
@@ -321,7 +380,8 @@ mod tests {
         let recorded = runner.recorded();
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
-        assert!(recorded[0].args.contains(&"1,2,3".to_owned()));
+        assert!(recorded[0].args.contains(&"3".to_owned()));
+        assert!(recorded[0].args.contains(&"1,2".to_owned()));
         assert!(
             recorded[0]
                 .args
@@ -332,7 +392,7 @@ mod tests {
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("ctrl-t:change-prompt(template> )"))
+                .any(|arg| arg.contains("ctrl-t:change-prompt(template> )+clear-query+reload("))
         );
         assert_eq!(
             recorded[0].stdin.as_deref(),

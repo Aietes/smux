@@ -414,11 +414,11 @@ Current behavior:
 - typing `session` narrows to sessions
 - typing `folder` narrows to directories
 - typing `template` narrows template choices in the template picker
-- `Ctrl-A` resets the picker
-- `Ctrl-S` filters to sessions
-- `Ctrl-P` filters to projects
-- `Ctrl-F` filters to folders
-- `Ctrl-T` filters to templates in the template picker
+- `Ctrl-X` resets the picker
+- `Ctrl-S` limits the main picker to sessions and keeps fuzzy search active
+- `Ctrl-P` limits the main picker to projects and keeps fuzzy search active
+- `Ctrl-F` limits the main picker to folders and keeps fuzzy search active
+- `Ctrl-T` limits the template picker to templates and keeps fuzzy search active
 
 ## Related Docs
 

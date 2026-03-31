@@ -114,11 +114,11 @@ Type:
 
 Shortcuts:
 
-- `Ctrl-A` resets to the full list
-- `Ctrl-S` filters the main picker to sessions
-- `Ctrl-P` filters the main picker to projects
-- `Ctrl-F` filters the main picker to folders
-- `Ctrl-T` filters the template picker to templates
+- `Ctrl-X` resets to the full list
+- `Ctrl-S` limits the main picker to sessions and keeps fuzzy search active
+- `Ctrl-P` limits the main picker to projects and keeps fuzzy search active
+- `Ctrl-F` limits the main picker to folders and keeps fuzzy search active
+- `Ctrl-T` limits the template picker to templates and keeps fuzzy search active
 
 If you use a Nerd Font, `smux` can show colored icons for sessions, projects, folders, and templates.
 
