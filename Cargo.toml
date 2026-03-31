@@ -1,6 +1,6 @@
 [package]
 name = "smux-cli"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 description = "Small Rust CLI for tmux session selection and creation"
 readme = "README.md"
