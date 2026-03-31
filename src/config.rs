@@ -200,6 +200,8 @@ pub struct Pane {
     pub layout: Option<String>,
     pub command: Option<String>,
     pub cwd: Option<String>,
+    #[serde(default)]
+    pub zoom: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -445,6 +447,16 @@ fn validate_window(owner_name: &str, window: &Window) -> Result<()> {
             "{owner_name} window \"{}\" cannot define an empty panes array",
             window.name
         );
+    }
+
+    if let Some(panes) = &window.panes {
+        let zoomed = panes.iter().filter(|pane| pane.zoom).count();
+        if zoomed > 1 {
+            bail!(
+                "{owner_name} window \"{}\" may define at most one zoomed pane",
+                window.name
+            );
+        }
     }
 
     Ok(())
@@ -725,6 +737,25 @@ windows = [
 
         assert!(error.to_string().contains("unknown field"));
         assert!(error.to_string().contains("cmd"));
+    }
+
+    #[test]
+    fn rejects_multiple_zoomed_panes_in_window() {
+        let config: Config = toml::from_str(
+            r#"
+[templates.default]
+windows = [
+  { name = "main", panes = [
+      { command = "nvim", zoom = true },
+      { layout = "right", command = "cargo test", zoom = true },
+    ] },
+]
+"#,
+        )
+        .expect("config should parse");
+
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("zoomed pane"));
     }
 
     #[test]

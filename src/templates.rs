@@ -29,6 +29,7 @@ pub struct PanePlan {
     pub layout: Option<PaneLayout>,
     pub cwd: PathBuf,
     pub command: Option<String>,
+    pub zoom: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,6 +135,7 @@ fn build_pane_plan(
         layout: parse_pane_layout(pane.layout.as_deref())?,
         cwd,
         command: pane.command.clone(),
+        zoom: pane.zoom,
     })
 }
 
@@ -268,11 +270,13 @@ mod tests {
                             layout: None,
                             cwd: None,
                             command: Some("cargo run".to_owned()),
+                            zoom: false,
                         },
                         Pane {
                             layout: Some("right 30%".to_owned()),
                             cwd: Some("./server".to_owned()),
                             command: Some("cargo test".to_owned()),
+                            zoom: false,
                         },
                     ]),
                 },
@@ -313,6 +317,7 @@ mod tests {
                     layout: None,
                     cwd: None,
                     command: None,
+                    zoom: false,
                 }]),
             }],
         };
@@ -340,11 +345,13 @@ mod tests {
                         layout: None,
                         cwd: None,
                         command: None,
+                        zoom: false,
                     },
                     Pane {
                         layout: Some("diagonal 30%".to_owned()),
                         cwd: None,
                         command: None,
+                        zoom: false,
                     },
                 ]),
             }],
@@ -378,11 +385,13 @@ mod tests {
                         layout: None,
                         cwd: None,
                         command: None,
+                        zoom: false,
                     },
                     Pane {
                         layout: Some("right".to_owned()),
                         cwd: Some("~/Development/nixpkgs".to_owned()),
                         command: None,
+                        zoom: false,
                     },
                 ]),
             }],

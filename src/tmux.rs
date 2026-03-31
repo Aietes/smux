@@ -412,6 +412,11 @@ impl Tmux {
         .context("failed to execute tmux set-window-option")
     }
 
+    fn zoom_pane(&self, target: &str) -> Result<()> {
+        self.run_tmux(["resize-pane", "-Z", "-t", target])
+            .context("failed to execute tmux resize-pane -Z")
+    }
+
     fn configure_panes(
         &self,
         session: &str,
@@ -424,6 +429,13 @@ impl Tmux {
             .first()
             .cloned()
             .context("tmux window did not contain an initial pane")?;
+        let mut zoom_target = if plan.panes.is_empty() {
+            None
+        } else if plan.panes[0].zoom {
+            Some(first_pane_target.clone())
+        } else {
+            None
+        };
 
         if plan.panes.is_empty() {
             if let Some(pre_command) = &plan.pre_command {
@@ -434,6 +446,9 @@ impl Tmux {
             }
             if plan.synchronize {
                 self.set_synchronize_panes(session, window, true)?;
+            }
+            if let Some(target) = zoom_target.as_deref() {
+                self.zoom_pane(target)?;
             }
             return Ok(());
         }
@@ -464,6 +479,9 @@ impl Tmux {
                 self.send_keys_to_target(&pane_target, command)
                     .context("failed to execute tmux send-keys for split pane")?;
             }
+            if pane.zoom {
+                zoom_target = Some(pane_target.clone());
+            }
         }
 
         if let Some(layout) = &plan.layout {
@@ -472,6 +490,10 @@ impl Tmux {
 
         if plan.synchronize {
             self.set_synchronize_panes(session, window, true)?;
+        }
+
+        if let Some(target) = zoom_target.as_deref() {
+            self.zoom_pane(target)?;
         }
 
         Ok(())
@@ -861,6 +883,7 @@ mod tests {
                             layout: None,
                             cwd: "/tmp/demo".into(),
                             command: Some("cargo run".to_owned()),
+                            zoom: false,
                         },
                         PanePlan {
                             layout: Some(PaneLayout {
@@ -869,6 +892,7 @@ mod tests {
                             }),
                             cwd: "/tmp/demo".into(),
                             command: Some("cargo test".to_owned()),
+                            zoom: false,
                         },
                     ],
                 },
@@ -1044,6 +1068,7 @@ mod tests {
                         layout: None,
                         cwd: "/tmp/demo".into(),
                         command: Some("shell".to_owned()),
+                        zoom: false,
                     },
                     PanePlan {
                         layout: Some(PaneLayout {
@@ -1052,6 +1077,7 @@ mod tests {
                         }),
                         cwd: "/tmp/demo".into(),
                         command: Some("tests".to_owned()),
+                        zoom: false,
                     },
                 ],
             }],
@@ -1066,6 +1092,58 @@ mod tests {
             vec!["list-panes", "-t", "demo:main", "-F", "#{pane_id}"]
         );
         assert_eq!(recorded[7].args, vec!["select-pane", "-t", "%11"]);
+    }
+
+    #[test]
+    fn zoomed_pane_emits_resize_pane_command() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%20\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%21\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%20\n%21\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+
+        let tmux = Tmux::with_runner(runner.clone());
+        let plan = SessionPlan {
+            session_name: "demo".to_owned(),
+            startup_window: "main".to_owned(),
+            startup_pane: 0,
+            windows: vec![WindowPlan {
+                name: "main".to_owned(),
+                cwd: "/tmp/demo".into(),
+                pre_command: None,
+                command: None,
+                layout: None,
+                synchronize: false,
+                panes: vec![
+                    PanePlan {
+                        layout: None,
+                        cwd: "/tmp/demo".into(),
+                        command: Some("shell".to_owned()),
+                        zoom: false,
+                    },
+                    PanePlan {
+                        layout: Some(PaneLayout {
+                            position: PanePosition::Right,
+                            size: None,
+                        }),
+                        cwd: "/tmp/demo".into(),
+                        command: Some("tests".to_owned()),
+                        zoom: true,
+                    },
+                ],
+            }],
+        };
+
+        tmux.create_session_from_plan(&plan)
+            .expect("session plan should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded[5].args, vec!["resize-pane", "-Z", "-t", "%21"]);
     }
 
     fn ok_capture(stdout: Vec<u8>) -> std::io::Result<CommandOutput> {

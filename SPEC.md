@@ -258,7 +258,7 @@ windows = [
   { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
-      { layout = "right 40%", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test", zoom = true },
     ] },
 ]
 ```
@@ -355,6 +355,7 @@ Fields:
 - `layout: string?`
 - `command: string?`
 - `cwd: string?`
+- `zoom: bool` default `false`
 
 Rules:
 
@@ -362,6 +363,7 @@ Rules:
 - additional panes should specify `layout`
 - pane layout syntax is `<position>` or `<position> <size>`
 - supported positions are `right`, `left`, `bottom`, and `top`
+- at most one pane per window may set `zoom = true`
 - `startup_pane` is a zero-based pane index within the startup window
 
 ### Project definition files

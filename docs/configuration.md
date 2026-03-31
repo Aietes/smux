@@ -74,7 +74,7 @@ windows = [
   { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
-      { layout = "right 40%", command = "cargo test" },
+      { layout = "right 40%", command = "cargo test", zoom = true },
     ] },
 ]
 ```
@@ -236,6 +236,11 @@ Window fields:
 - `command`
   - type: string
   - optional
+- `zoom`
+  - type: boolean
+  - default: `false`
+  - zooms that pane after the window has been created
+  - at most one pane per window may set `zoom = true`
 - `pre_command`
   - type: string
   - optional

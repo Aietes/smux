@@ -92,6 +92,11 @@
         },
         "cwd": {
           "type": "string"
+        },
+        "zoom": {
+          "type": "boolean",
+          "default": false,
+          "description": "Zooms this pane after the window has been created. At most one pane per window may set zoom = true."
         }
       }
     }
