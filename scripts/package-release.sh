@@ -13,6 +13,7 @@ archive_path="${out_dir}/smux-${version}-${target}.tar.gz"
 mkdir -p "${stage_dir}"
 cp "${binary_path}" "${stage_dir}/smux"
 cp README.md "${stage_dir}/README.md"
+cp LICENSE "${stage_dir}/LICENSE"
 
 tar -C "${out_dir}" -czf "${archive_path}" "smux-${version}-${target}"
 rm -rf "${stage_dir}"
