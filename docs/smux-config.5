@@ -69,6 +69,8 @@ Window fields:
 tmux window layout name passed to \fBtmux select-layout\fR, for example
 \fBtiled\fR, \fBmain-horizontal\fR, \fBmain-vertical\fR,
 \fBeven-horizontal\fR, or \fBeven-vertical\fR
+.IP
+Applied after pane creation, so it may rearrange the final pane geometry.
 .IP \(bu 2
 \fBsynchronize\fR
 .IP \(bu 2
@@ -77,6 +79,8 @@ tmux window layout name passed to \fBtmux select-layout\fR, for example
 Pane fields:
 .IP \(bu 2
 \fBlayout\fR
+.IP
+Controls how each new pane is created before any window-level tmux layout is applied.
 .IP \(bu 2
 \fBcwd\fR
 .IP \(bu 2
@@ -101,6 +105,10 @@ A \fBpanes\fR array cannot be empty.
 Pane \fBlayout\fR values use the form \fB<position>\fR or
 \fB<position> <size>\fR where position is one of \fBright\fR, \fBleft\fR,
 \fBbottom\fR, or \fBtop\fR.
+.PP
+When both pane and window layout are set, pane layout controls split creation
+and window layout is applied afterward with \fBtmux select-layout\fR.
+That means window layout may rearrange the final pane geometry.
 .SH PROJECTS
 Projects map known directories to template and session-name overrides.
 .nf

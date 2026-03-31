@@ -160,6 +160,7 @@ Window fields:
   - optional
   - tmux window layout name passed to `tmux select-layout`
   - examples: `tiled`, `main-horizontal`, `main-vertical`, `even-horizontal`, `even-vertical`
+  - applied after pane creation, so it may rearrange the final pane geometry
 - `synchronize`
   - type: boolean
   - default: `false`
@@ -187,6 +188,7 @@ Pane fields:
   - optional
   - format: `<position>` or `<position> <size>`
   - supported positions: `right`, `left`, `bottom`, `top`
+  - controls how each new pane is created before any window-level tmux layout is applied
 - `cwd`
   - type: string
   - optional
@@ -199,6 +201,14 @@ Examples:
 - `layout = "right 40%"`
 - `layout = "bottom 12"`
 - `layout = "left"`
+
+Interaction between pane and window layout:
+
+- `pane.layout` controls split direction and optional size during pane creation
+- `window.layout` is applied afterward with `tmux select-layout`
+- if both are set, `window.layout` may rearrange the final pane geometry
+- if you want tmux to normalize the final layout, set `window.layout`
+- if you want to preserve the split sequence more closely, omit `window.layout`
 
 ## Recipes
 
