@@ -158,6 +158,8 @@ Window fields:
 - `layout`
   - type: string
   - optional
+  - tmux window layout name passed to `tmux select-layout`
+  - examples: `tiled`, `main-horizontal`, `main-vertical`, `even-horizontal`, `even-vertical`
 - `synchronize`
   - type: boolean
   - default: `false`
@@ -174,6 +176,7 @@ Rules:
 - a window may not define both `command` and `panes`
 - if `panes` is present, it must not be empty
 - `pre_command` runs as a separate command before the window or pane command
+- `window.layout` is a tmux layout name and is passed through to tmux without additional validation
 
 ### `panes = [{ ... }]`
 

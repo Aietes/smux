@@ -65,6 +65,10 @@ Window fields:
 \fBcommand\fR
 .IP \(bu 2
 \fBlayout\fR
+.IP
+tmux window layout name passed to \fBtmux select-layout\fR, for example
+\fBtiled\fR, \fBmain-horizontal\fR, \fBmain-vertical\fR,
+\fBeven-horizontal\fR, or \fBeven-vertical\fR
 .IP \(bu 2
 \fBsynchronize\fR
 .IP \(bu 2
@@ -91,6 +95,8 @@ A window may define \fBcommand\fR or \fBpanes\fR or neither, but not both.
 A \fBpanes\fR array cannot be empty.
 .IP \(bu 2
 \fBpre_command\fR runs before the pane or window command.
+.IP \(bu 2
+\fBwindow.layout\fR is passed through to tmux without additional validation.
 .PP
 Pane \fBlayout\fR values use the form \fB<position>\fR or
 \fB<position> <size>\fR where position is one of \fBright\fR, \fBleft\fR,
