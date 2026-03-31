@@ -262,6 +262,13 @@ For the full config reference, see:
 - [docs/configuration.md](/Users/stefan/Development/smux/docs/configuration.md)
 - `smux-config(5)` in generated man pages
 
+That reference also includes practical layout recipes, including:
+
+- 2x2 grid windows
+- one large top pane with two bottom panes
+- sidebar layouts
+- vertical pane stacks
+
 ## Icons
 
 The selector can render Nerd Font icons for sessions, directories, and templates.

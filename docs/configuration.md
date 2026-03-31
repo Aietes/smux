@@ -197,6 +197,72 @@ Examples:
 - `layout = "bottom 12"`
 - `layout = "left"`
 
+## Recipes
+
+These examples are meant to show practical combinations of pane `layout` and window `layout`.
+
+### 2x2 grid
+
+Use `tiled` when you want a simple 2x2-style workspace and do not care about preserving a specific split sequence.
+
+```toml
+[templates.grid]
+startup_window = "grid"
+windows = [
+  { name = "grid", layout = "tiled", panes = [
+      { command = "nvim" },
+      { layout = "right", command = "cargo run" },
+      { layout = "bottom", command = "cargo test" },
+      { layout = "right", command = "git status -sb" },
+    ] },
+]
+```
+
+### One large top pane, two bottom panes
+
+This is a good fit for `main-horizontal`.
+
+```toml
+[templates.dev]
+startup_window = "run"
+windows = [
+  { name = "run", layout = "main-horizontal", panes = [
+      { command = "nvim" },
+      { layout = "bottom 30%", command = "cargo run" },
+      { layout = "right", command = "cargo test" },
+    ] },
+]
+```
+
+This gives you one dominant pane at the top and two smaller panes below it.
+
+### Sidebar on the left, work area on the right
+
+```toml
+[templates.sidebar]
+startup_window = "main"
+windows = [
+  { name = "main", panes = [
+      { command = "nvim" },
+      { layout = "left 25%", command = "yazi" },
+    ] },
+]
+```
+
+### Vertical stack
+
+```toml
+[templates.stack]
+startup_window = "stack"
+windows = [
+  { name = "stack", panes = [
+      { command = "htop" },
+      { layout = "bottom 40%", command = "cargo watch -x test" },
+      { layout = "bottom 40%", command = "tail -f log/development.log" },
+    ] },
+]
+```
+
 ## `[projects.<name>]`
 
 Projects map known directories to template and session-name overrides.
