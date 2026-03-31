@@ -17,6 +17,7 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
+        cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
         pkgs = import nixpkgs {
           inherit system;
           overlays = [ (import rust-overlay) ];
@@ -37,7 +38,7 @@
       {
         packages.smux = rustPlatform.buildRustPackage {
           pname = "smux";
-          version = "0.1.0";
+          version = cargoToml.package.version;
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           nativeBuildInputs = [ pkgs.installShellFiles ];
