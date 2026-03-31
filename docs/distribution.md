@@ -24,7 +24,6 @@ The repository already supports:
 
 Before public publication, the project still needs:
 
-- a chosen license and a committed license file
 - a tagged release to anchor downstream package updates
 
 ## crates.io
@@ -32,13 +31,13 @@ Before public publication, the project still needs:
 Current status:
 
 - `cargo publish --dry-run` succeeds
-- Cargo warns that the manifest is still missing `license` or `documentation`
+- the manifest now includes `license`, `repository`, and `homepage`
+- `documentation` is still optional but not yet set
 
 Practical next steps:
 
-1. add `license` or `license-file`
-2. optionally add `documentation`
-4. publish with `cargo publish`
+1. optionally add `documentation`
+2. publish with `cargo publish`
 
 ## Homebrew
 

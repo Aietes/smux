@@ -4,11 +4,7 @@
 
 ### Project metadata
 
-- Choose and add a project license.
-- Add a committed license file.
-- Add final Cargo package metadata in `Cargo.toml`:
-  - `license` or `license-file`
-  - optionally `documentation`
+- Optionally add `documentation` metadata in `Cargo.toml`.
 
 ### crates.io
 
@@ -54,6 +50,5 @@
 
 ### Documentation
 
-- Update the README once the real license is known.
 - Replace “planned/pending” publication notes with real install commands once crates.io and package managers are live.
 - Add release-specific install examples once GitHub release artifacts are published.

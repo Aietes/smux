@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Small Rust CLI for tmux session selection and creation"
 readme = "README.md"
+license = "MIT"
 repository = "https://github.com/Aietes/smux"
 homepage = "https://github.com/Aietes/smux"
 
