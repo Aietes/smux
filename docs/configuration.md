@@ -99,7 +99,8 @@ These values are ANSI-256 color indexes used for picker icons.
 ## `[templates.<name>]`
 
 Templates describe the tmux layout applied when `smux` creates a new session.
-The recommended format uses TOML 1.1 inline tables for `windows` and nested `panes`.
+The recommended and documented format uses TOML 1.1 inline tables for `windows` and nested `panes`.
+That means template definitions should normally be written as `windows = [{ ... }]` with nested `panes = [{ ... }]`, rather than verbose `[[templates...]]` arrays of tables.
 
 Example:
 

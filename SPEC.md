@@ -268,7 +268,7 @@ Fields:
 - `root: string?`
 - `startup_window: string?`
 - `windows: array[window]` required
-  The recommended format uses TOML 1.1 inline tables for `windows` and nested `panes`.
+  The recommended and documented format uses TOML 1.1 inline tables for `windows` and nested `panes`.
 
 ### `windows = [{ ... }]`
 
