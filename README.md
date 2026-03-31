@@ -72,7 +72,7 @@ Then start using it:
 smux select
 ```
 
-For normal day-to-day use, wire it into `tmux` and `zsh`:
+For normal day-to-day use, wire it into `tmux`:
 
 Recommended `tmux` settings:
 
@@ -82,7 +82,7 @@ bind-key t display-popup -w 70% -h 70% -E "smux select"
 bind-key T display-popup -w 70% -h 70% -E "smux select --choose-template"
 ```
 
-zsh `Ctrl-t`:
+To launch it in `zsh` outside of `tmux` with `Ctrl-t`:
 
 ```zsh
 smux-select-widget() {
@@ -98,22 +98,24 @@ bindkey -M viins '^T' smux-select-widget
 Good first commands:
 
 ```bash
-smux select
-smux connect ~/code/myapp
-smux connect --template rust ~/code/myapp
-smux save-project myapp --stdout
 smux doctor
+smux select
+smux save-project myapp --stdout
 ```
 
-`smux select` behaves like this:
+`smux select` is the main entrypoint. It opens a picker that can:
 
-- inside a tmux popup wrapper, it appears in the popup
-- inside a tmux pane, it runs `fzf` in that pane
-- outside tmux, it runs `fzf` in the terminal
+- switch to an existing tmux session
+- launch a saved project
+- create or reuse a session from a recent directory
+
+Use `smux select --choose-template` when you want directory selection to be followed by an explicit template picker.
+
+It can run inside tmux (recommended as popup), or outside tmux in the terminal.
 
 ## Common Workflows
 
-Jump to an existing session:
+Jump to an existing session, launch a project, or pick a directory:
 
 ```bash
 smux select
@@ -137,22 +139,20 @@ Choose a template interactively from the selector:
 smux select --choose-template
 ```
 
-Launch a saved project definition:
-
-```bash
-smux select
-```
-
-Launch Neovim and restore the last `persistence.nvim` session:
-
-```toml
-{ name = "editor", command = "nvim -c 'lua require(\"persistence\").load({ last = true })'" }
-```
-
 Export the current tmux session as a project definition:
 
 ```bash
 smux save-project myapp
+```
+
+Saved projects are stored in `.config/smux/projects/`, and can be edited and adjusted. As an example the `pane` command can launch Neovim and restore the last `persistence.nvim` session:
+
+```toml
+windows = [
+  { name = "my_window", cwd = "~/Development/project", panes = [
+    { command = "nvim -c 'lua require(\"persistence\").load()'" },
+  ] },
+]
 ```
 
 Preview the generated project without writing a file:
@@ -293,7 +293,7 @@ Save that as:
 
 For the full config reference, see:
 
-- [docs/configuration.md](/Users/stefan/Development/smux/docs/configuration.md)
+- [docs/configuration.md](./docs/configuration.md)
 - `smux-config(5)` in generated man pages
 
 That reference also includes layout recipes such as:
