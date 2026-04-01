@@ -55,6 +55,7 @@ Distribution automation is intentionally split by channel:
 - `Update Homebrew Tap`: Homebrew tap update only
 
 This keeps reruns, secrets, and approvals scoped to a single distribution channel at a time.
+The `Release` workflow also publishes GitHub release notes from the matching version section in [CHANGELOG.md](../CHANGELOG.md).
 
 ## crates.io
 

@@ -131,6 +131,11 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -146,7 +151,33 @@ jobs:
             shasum -a 256 *.tar.gz > SHA256SUMS
           )
 
+      - name: Generate release notes from changelog
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          VERSION="${VERSION#v}"
+          {
+            echo "## smux ${VERSION}"
+            echo
+            awk -v version="$VERSION" '
+              $0 ~ "^## \\[" version "\\]" { in_section = 1; next }
+              $0 ~ /^## \[/ && in_section { exit }
+              in_section { print }
+            ' CHANGELOG.md
+          } > release/RELEASE_NOTES.md
+
+          if [[ ! -s release/RELEASE_NOTES.md ]] || [[ "$(wc -l < release/RELEASE_NOTES.md)" -le 2 ]]; then
+            {
+              echo "## smux ${VERSION}"
+              echo
+              echo "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${{ needs.prepare.outputs.ref }}/CHANGELOG.md) for release details."
+            } > release/RELEASE_NOTES.md
+          fi
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*
+          body_path: release/RELEASE_NOTES.md
+          files: |
+            release/*.tar.gz
+            release/SHA256SUMS
