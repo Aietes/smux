@@ -173,7 +173,11 @@ fn doctor_fix_rewrites_missing_and_stale_schema_directives() {
     let config_contents = fs::read_to_string(&config_path).expect("config should be readable");
     assert!(config_contents.starts_with("#:schema "));
     let stale_contents = fs::read_to_string(&stale_project).expect("project should be readable");
-    assert!(stale_contents.contains("/v0.1.7/schemas/smux-project.schema.json"));
+    let expected_project_schema = format!(
+        "/v{}/schemas/smux-project.schema.json",
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(stale_contents.contains(&expected_project_schema));
     let missing_contents =
         fs::read_to_string(&missing_project).expect("project should be readable");
     assert!(missing_contents.starts_with("#:schema "));

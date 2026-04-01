@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-04-01
+
 ### Added
 
 - configurable picker previews for sessions, folders, and projects via `[settings.picker.preview]`
@@ -79,4 +81,3 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 - picker cancellation is treated as a no-op
 - empty selector guidance is more actionable
-
