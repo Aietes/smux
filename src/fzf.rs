@@ -50,10 +50,15 @@ impl Entry {
         }
     }
 
-    pub fn project(style: DisplayStyle, value: String, preview: Option<String>) -> Self {
+    pub fn project(
+        style: DisplayStyle,
+        value: String,
+        label_value: String,
+        preview: Option<String>,
+    ) -> Self {
         Self {
             kind: EntryKind::Project,
-            label: style.project_label(&value),
+            label: style.project_label(&label_value),
             value,
             preview,
         }

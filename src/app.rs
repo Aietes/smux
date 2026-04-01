@@ -216,7 +216,18 @@ fn select_entries(
                 .project_files
                 .get(&project_name)
                 .map(|path| path.display().to_string());
-            entries.push(fzf::Entry::project(display_style, project_name, preview));
+            let project = &loaded.projects[&project_name];
+            let label_value = project
+                .session_name
+                .as_deref()
+                .unwrap_or(&project_name)
+                .to_string();
+            entries.push(fzf::Entry::project(
+                display_style,
+                project_name,
+                label_value,
+                preview,
+            ));
         }
         let mut invalid_projects = loaded.invalid_projects.clone();
         invalid_projects.sort_by(|left, right| left.name.cmp(&right.name));
