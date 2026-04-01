@@ -65,6 +65,11 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 
+[settings.picker.preview]
+# sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
+# folders = "eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\""
+# projects = "bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\""
+
 [templates.default]
 startup_window = "main"
 windows = [{ name = "main" }]
@@ -175,6 +180,39 @@ Rules:
 - picker bindings must not be empty
 - picker bindings must be unique within this block
 - values are passed through as `fzf` key names
+
+### `[settings.picker.preview]`
+
+```toml
+[settings.picker.preview]
+sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
+folders = "eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\""
+projects = "bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\""
+```
+
+Fields:
+
+- `sessions`
+  - type: string
+  - optional
+  - shell command used for session previews
+  - receives `SMUX_PREVIEW_SESSION` and `SMUX_PREVIEW_KIND=session`
+- `folders`
+  - type: string
+  - optional
+  - shell command used for folder previews
+  - receives `SMUX_PREVIEW_PATH` and `SMUX_PREVIEW_KIND=folder`
+- `projects`
+  - type: string
+  - optional
+  - shell command used for project and broken-project previews
+  - receives `SMUX_PREVIEW_FILE` and `SMUX_PREVIEW_KIND=project` or `project-broken`
+
+Defaults:
+
+- sessions: built-in tmux window and pane summary
+- folders: `eza` tree view when available, otherwise `ls -la`
+- projects: `bat` with TOML syntax highlighting when available, otherwise `sed -n '1,200p'`
 
 ## `[templates.<name>]`
 

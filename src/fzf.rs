@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 
-use crate::config::PickerBindings;
+use crate::config::{PickerBindings, PickerPreviewSettings};
 use crate::process::{CommandRunner, default_runner};
 use crate::ui::DisplayStyle;
 
@@ -28,6 +28,7 @@ pub struct Entry {
     pub kind: EntryKind,
     pub label: String,
     pub value: String,
+    pub preview: Option<String>,
 }
 
 impl Entry {
@@ -36,6 +37,7 @@ impl Entry {
             kind: EntryKind::Session,
             label: style.session_label(&value),
             value,
+            preview: None,
         }
     }
 
@@ -44,22 +46,30 @@ impl Entry {
             kind: EntryKind::Directory,
             label: style.directory_label(&value),
             value,
+            preview: None,
         }
     }
 
-    pub fn project(style: DisplayStyle, value: String) -> Self {
+    pub fn project(style: DisplayStyle, value: String, preview: Option<String>) -> Self {
         Self {
             kind: EntryKind::Project,
             label: style.project_label(&value),
             value,
+            preview,
         }
     }
 
-    pub fn invalid_project(style: DisplayStyle, value: String, error: &str) -> Self {
+    pub fn invalid_project(
+        style: DisplayStyle,
+        value: String,
+        error: &str,
+        preview: Option<String>,
+    ) -> Self {
         Self {
             kind: EntryKind::InvalidProject,
             label: style.invalid_project_label(&value, error),
             value,
+            preview,
         }
     }
 
@@ -71,14 +81,23 @@ impl Entry {
             EntryKind::InvalidProject => "project-broken",
         };
 
-        format!("{kind}\t{}\t{}", self.value, self.label)
+        let preview = self
+            .preview
+            .as_deref()
+            .unwrap_or_default()
+            .replace(['\t', '\n', '\r'], " ");
+        format!("{kind}\t{}\t{}\t{preview}", self.value, self.label)
     }
 
     fn decode(line: &str) -> Result<Self> {
-        let mut parts = line.splitn(3, '\t');
+        let mut parts = line.splitn(4, '\t');
         let kind = parts.next().context("missing entry kind")?;
         let value = parts.next().context("missing entry value")?.to_owned();
         let label = parts.next().context("missing entry label")?.to_owned();
+        let preview = parts
+            .next()
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
 
         let kind = match kind {
             "session" => EntryKind::Session,
@@ -88,7 +107,12 @@ impl Entry {
             other => bail!("unknown picker entry kind: {other}"),
         };
 
-        Ok(Self { kind, label, value })
+        Ok(Self {
+            kind,
+            label,
+            value,
+            preview,
+        })
     }
 }
 
@@ -127,8 +151,12 @@ impl Choice {
     }
 }
 
-pub fn select(entries: Vec<Entry>, bindings: &PickerBindings) -> Result<Option<Selection>> {
-    select_with_runner(default_runner(), entries, "smux> ", bindings)
+pub fn select(
+    entries: Vec<Entry>,
+    bindings: &PickerBindings,
+    preview: &PickerPreviewSettings,
+) -> Result<Option<Selection>> {
+    select_with_runner(default_runner(), entries, "smux> ", bindings, preview)
 }
 
 pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>> {
@@ -164,7 +192,10 @@ impl Drop for TempInputFile {
 }
 
 fn shell_quote(path: &Path) -> String {
-    let value = path.to_string_lossy();
+    shell_quote_str(&path.to_string_lossy())
+}
+
+fn shell_quote_str(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
@@ -202,10 +233,34 @@ fn add_common_picker_args(args: &mut Vec<String>, prompt: &str, header: &str, bi
         "--with-nth".to_owned(),
         "3".to_owned(),
         "--nth".to_owned(),
-        "1,2".to_owned(),
+        "1,2,4".to_owned(),
         "--prompt".to_owned(),
         prompt.to_owned(),
         "--no-sort".to_owned(),
+    ]);
+}
+
+fn add_preview_args(args: &mut Vec<String>, preview: &PickerPreviewSettings) {
+    let session_preview = preview.sessions.as_deref().unwrap_or(
+        "tmux list-panes -s -t \"$SMUX_PREVIEW_SESSION\" -F \"#{window_index}\t#{window_name}\t#{?window_active,1,0}\t#{pane_index}\t#{?pane_active,1,0}\t#{pane_current_command}\t#{pane_current_path}\" 2>/dev/null | awk -F '\t' 'BEGIN { current = \"\"; first_pane = 1; esc = sprintf(\"%c\", 27); reset = esc \"[0m\"; window_box = esc \"[38;2;26;33;36;48;2;149;192;202m\"; window_active_box = esc \"[38;2;26;33;36;48;2;81;156;174m\"; pane_box = esc \"[38;2;26;33;36;48;2;231;198;100m\"; pane_active_box = esc \"[38;2;26;33;36;48;2;243;150;96m\"; window_name = esc \"[38;2;149;192;202m\"; window_name_active = esc \"[1;38;2;118;204;224m\"; pane_text = esc \"[38;2;231;198;100m\"; pane_text_active = esc \"[1;38;2;243;150;96m\"; path_color = esc \"[2;38;2;149;192;202m\" } { if ($1 != current) { if (NR > 1) print \"\"; box = ($3 == \"1\" ? window_active_box : window_box); name = ($3 == \"1\" ? window_name_active : window_name); printf \"%s %s %s %s%s%s\\n\", box, $1, reset, name, $2, reset; current = $1; first_pane = 1 } pbox = ($5 == \"1\" ? pane_active_box : pane_box); ptext = ($5 == \"1\" ? pane_text_active : pane_text); printf \"\\n  %s %s %s %s%s%s\\n\", pbox, $4, reset, ptext, $6, reset; printf \"    %s%s%s\\n\", path_color, $7, reset }'",
+    );
+    let folder_preview = preview.folders.as_deref().unwrap_or(
+        "if command -v eza >/dev/null 2>&1; then eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\"; else ls -la \"$SMUX_PREVIEW_PATH\"; fi",
+    );
+    let project_preview = preview.projects.as_deref().unwrap_or(
+        "if command -v bat >/dev/null 2>&1; then bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\"; else sed -n '1,200p' \"$SMUX_PREVIEW_FILE\"; fi",
+    );
+    let session_preview = shell_quote_str(session_preview);
+    let folder_preview = shell_quote_str(folder_preview);
+    let project_preview = shell_quote_str(project_preview);
+    let preview_command = format!(
+        "SMUX_SESSION_PREVIEW={session_preview} SMUX_FOLDER_PREVIEW={folder_preview} SMUX_PROJECT_PREVIEW={project_preview} sh -c 'kind=\"$1\"; value=\"$2\"; extra=\"$3\"; case \"$kind\" in session) SMUX_PREVIEW_KIND=\"$kind\" SMUX_PREVIEW_SESSION=\"$value\" sh -lc \"$SMUX_SESSION_PREVIEW\" ;; folder) SMUX_PREVIEW_PATH=\"$value\" SMUX_PREVIEW_KIND=\"$kind\" sh -lc \"$SMUX_FOLDER_PREVIEW\" ;; project|project-broken) if [ -n \"$extra\" ] && [ -f \"$extra\" ]; then SMUX_PREVIEW_KIND=\"$kind\" SMUX_PREVIEW_FILE=\"$extra\" sh -lc \"$SMUX_PROJECT_PREVIEW\"; else printf \"No preview available\\n\"; fi ;; *) printf \"No preview available\\n\" ;; esac' _ {{1}} {{2}} {{4}}"
+    );
+    args.extend([
+        "--preview".to_owned(),
+        preview_command,
+        "--preview-window".to_owned(),
+        "right:55%".to_owned(),
     ]);
 }
 
@@ -259,6 +314,7 @@ fn select_with_runner(
     entries: Vec<Entry>,
     prompt: &str,
     bindings: &PickerBindings,
+    preview: &PickerPreviewSettings,
 ) -> Result<Option<Selection>> {
     let mut args = Vec::new();
     let input = entries
@@ -291,6 +347,7 @@ fn select_with_runner(
             projects = bindings.projects,
         ),
     );
+    add_preview_args(&mut args, preview);
     args.extend(["--expect".to_owned(), bindings.delete_session.clone()]);
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
@@ -342,7 +399,7 @@ mod tests {
     use super::{
         Choice, Entry, EntryKind, SelectAction, select_value_with_runner, select_with_runner,
     };
-    use crate::config::{IconMode, PickerBindings};
+    use crate::config::{IconMode, PickerBindings, PickerPreviewSettings};
     use crate::ui::DisplayStyle;
 
     #[test]
@@ -351,6 +408,7 @@ mod tests {
             kind: EntryKind::Directory,
             label: "dir      /tmp/example".to_owned(),
             value: "/tmp/example".to_owned(),
+            preview: None,
         };
 
         let decoded = Entry::decode(&entry.encode()).expect("entry should decode");
@@ -377,6 +435,7 @@ mod tests {
             )],
             "smux> ",
             &PickerBindings::default(),
+            &PickerPreviewSettings::default(),
         )
         .expect("selection should succeed");
 
@@ -386,8 +445,9 @@ mod tests {
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"3".to_owned()));
-        assert!(recorded[0].args.contains(&"1,2".to_owned()));
+        assert!(recorded[0].args.contains(&"1,2,4".to_owned()));
         assert!(recorded[0].args.contains(&"--expect".to_owned()));
+        assert!(recorded[0].args.contains(&"--preview".to_owned()));
         assert!(recorded[0].args.contains(&"ctrl-x".to_owned()));
         assert!(
             recorded[0]
@@ -415,7 +475,7 @@ mod tests {
         );
         assert_eq!(
             recorded[0].stdin.as_deref(),
-            Some("folder\t/tmp/example\tdir      /tmp/example\n")
+            Some("folder\t/tmp/example\tdir      /tmp/example\t\n")
         );
         let selection = result.expect("selection should be present");
         assert_eq!(selection.action, SelectAction::Open);
@@ -442,6 +502,7 @@ mod tests {
             )],
             "smux> ",
             &PickerBindings::default(),
+            &PickerPreviewSettings::default(),
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -471,6 +532,7 @@ mod tests {
             )],
             "smux> ",
             &PickerBindings::default(),
+            &PickerPreviewSettings::default(),
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -508,6 +570,7 @@ mod tests {
             )],
             "smux> ",
             &bindings,
+            &PickerPreviewSettings::default(),
         )
         .expect("selection should succeed");
 
@@ -536,6 +599,42 @@ mod tests {
                 .args
                 .iter()
                 .any(|arg| arg.contains("alt-p:change-prompt(project> )+clear-query+reload("))
+        );
+    }
+
+    #[test]
+    fn selector_uses_configured_folder_preview_command() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"\nfolder\t/tmp/example\tdir      /tmp/example\t\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let _ = select_with_runner(
+            runner.clone(),
+            vec![Entry::directory(
+                DisplayStyle::from_icon_mode(IconMode::Never),
+                "/tmp/example".to_owned(),
+            )],
+            "smux> ",
+            &PickerBindings::default(),
+            &PickerPreviewSettings {
+                folders: Some("eza --tree --level=2 \"$SMUX_PREVIEW_PATH\"".to_owned()),
+                ..Default::default()
+            },
+        )
+        .expect("selection should succeed");
+
+        let recorded = runner.recorded();
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("eza --tree --level=2"))
         );
     }
 
@@ -570,7 +669,7 @@ mod tests {
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"3".to_owned()));
-        assert!(recorded[0].args.contains(&"1,2".to_owned()));
+        assert!(recorded[0].args.contains(&"1,2,4".to_owned()));
         assert!(
             recorded[0]
                 .args

@@ -209,6 +209,7 @@ mod tests {
             project_dir: PathBuf::from("/tmp/projects"),
             config,
             projects: HashMap::new(),
+            project_files: HashMap::new(),
             invalid_projects: Vec::new(),
         };
 
@@ -311,6 +312,7 @@ mod tests {
                     windows: None,
                 },
             )]),
+            project_files: HashMap::new(),
             invalid_projects: Vec::new(),
         };
 
@@ -357,6 +359,7 @@ mod tests {
             project_dir: PathBuf::from("/tmp/projects"),
             config,
             projects: HashMap::new(),
+            project_files: HashMap::new(),
             invalid_projects: Vec::new(),
         };
 

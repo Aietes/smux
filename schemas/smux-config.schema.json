@@ -49,6 +49,9 @@
       "properties": {
         "bindings": {
           "$ref": "#/$defs/picker_bindings"
+        },
+        "preview": {
+          "$ref": "#/$defs/picker_preview"
         }
       }
     },
@@ -80,6 +83,24 @@
           "type": "string",
           "default": "ctrl-x",
           "description": "Main picker shortcut that closes the selected non-current tmux session."
+        }
+      }
+    },
+    "picker_preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sessions": {
+          "type": "string",
+          "description": "Shell command used for session previews. It runs with SMUX_PREVIEW_SESSION and SMUX_PREVIEW_KIND set."
+        },
+        "folders": {
+          "type": "string",
+          "description": "Shell command used for folder previews. It runs with SMUX_PREVIEW_PATH and SMUX_PREVIEW_KIND set."
+        },
+        "projects": {
+          "type": "string",
+          "description": "Shell command used for project and broken-project previews. It runs with SMUX_PREVIEW_FILE and SMUX_PREVIEW_KIND set."
         }
       }
     },

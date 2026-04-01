@@ -127,6 +127,9 @@ fn run_select(
     let picker_bindings = config
         .map(|config| config.settings.picker.bindings.clone())
         .unwrap_or_default();
+    let picker_preview = config
+        .map(|config| config.settings.picker.preview.clone())
+        .unwrap_or_default();
     let project_detection = if no_project_detect {
         session::ProjectDetection::Disabled
     } else {
@@ -137,7 +140,7 @@ fn run_select(
         let current_session = tmux.current_session().ok().flatten();
         let entries = select_entries(tmux, loaded, display_style, current_session.as_deref())?;
 
-        let Some(selection) = fzf::select(entries, &picker_bindings)? else {
+        let Some(selection) = fzf::select(entries, &picker_bindings, &picker_preview)? else {
             return Ok(());
         };
 
@@ -197,6 +200,7 @@ fn select_entries(
                 kind: fzf::EntryKind::Session,
                 label: display_style.current_session_label(&session),
                 value: session,
+                preview: None,
             }
         } else {
             fzf::Entry::session(display_style, session)
@@ -208,7 +212,11 @@ fn select_entries(
         let mut project_names = loaded.projects.keys().cloned().collect::<Vec<_>>();
         project_names.sort();
         for project_name in project_names {
-            entries.push(fzf::Entry::project(display_style, project_name));
+            let preview = loaded
+                .project_files
+                .get(&project_name)
+                .map(|path| path.display().to_string());
+            entries.push(fzf::Entry::project(display_style, project_name, preview));
         }
         let mut invalid_projects = loaded.invalid_projects.clone();
         invalid_projects.sort_by(|left, right| left.name.cmp(&right.name));
@@ -217,6 +225,7 @@ fn select_entries(
                 display_style,
                 project.name,
                 &project.error,
+                Some(project.path.display().to_string()),
             ));
         }
     }

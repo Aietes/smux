@@ -36,6 +36,11 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
+
+[settings.picker.preview]
+# sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
+# folders = "eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\""
+# projects = "bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\""
 .fi
 .PP
 \fBdefault_template\fR sets the template used when no CLI override or matching
@@ -54,6 +59,14 @@ and \fBdelete_session\fR closes the selected non-current tmux session.
 .PP
 Picker binding values are passed through as \fBfzf\fR key names. They must not
 be empty and must be unique within the picker binding block.
+.PP
+\fBsettings.picker.preview\fR customizes the right-side picker preview commands.
+\fBsessions\fR receives \fBSMUX_PREVIEW_SESSION\fR,
+\fBfolders\fR receives \fBSMUX_PREVIEW_PATH\fR, and
+\fBprojects\fR receives \fBSMUX_PREVIEW_FILE\fR.
+When unset, \fBsmux\fR uses built-in defaults: tmux window and pane summaries for
+sessions, \fBeza\fR or \fBls -la\fR for folders, and \fBbat\fR or
+\fBsed -n '1,200p'\fR for project files.
 .SH TEMPLATES
 Templates define the tmux layout used when \fBsmux\fR creates a new session.
 The recommended format uses TOML 1.1 inline tables for windows and panes.

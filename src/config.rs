@@ -24,6 +24,11 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 
+[settings.picker.preview]
+# sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
+# folders = "eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\""
+# projects = "bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\""
+
 [templates.default]
 startup_window = "main"
 windows = [{ name = "main" }]
@@ -111,6 +116,8 @@ impl Default for IconColors {
 pub struct PickerSettings {
     #[serde(default)]
     pub bindings: PickerBindings,
+    #[serde(default)]
+    pub preview: PickerPreviewSettings,
 }
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
@@ -126,6 +133,14 @@ pub struct PickerBindings {
     pub projects: String,
     #[serde(default = "default_picker_delete_session")]
     pub delete_session: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PickerPreviewSettings {
+    pub folders: Option<String>,
+    pub sessions: Option<String>,
+    pub projects: Option<String>,
 }
 
 impl Default for PickerBindings {
@@ -211,6 +226,7 @@ pub struct LoadedConfig {
     pub project_dir: PathBuf,
     pub config: Config,
     pub projects: HashMap<String, Project>,
+    pub project_files: HashMap<String, PathBuf>,
     pub invalid_projects: Vec<InvalidProject>,
 }
 
@@ -227,6 +243,12 @@ pub struct InvalidProject {
     pub path: PathBuf,
     pub error: String,
 }
+
+type LoadedProjects = (
+    HashMap<String, Project>,
+    HashMap<String, PathBuf>,
+    Vec<InvalidProject>,
+);
 
 pub fn starter_config() -> String {
     format!(
@@ -306,7 +328,7 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
         Config::default()
     };
 
-    let (projects, invalid_projects) = load_projects(&project_dir, &config)?;
+    let (projects, project_files, invalid_projects) = load_projects(&project_dir, &config)?;
 
     Ok(LoadedConfig {
         path,
@@ -314,6 +336,7 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
         project_dir,
         config,
         projects,
+        project_files,
         invalid_projects,
     })
 }
@@ -462,12 +485,9 @@ fn validate_window(owner_name: &str, window: &Window) -> Result<()> {
     Ok(())
 }
 
-fn load_projects(
-    project_dir: &Path,
-    config: &Config,
-) -> Result<(HashMap<String, Project>, Vec<InvalidProject>)> {
+fn load_projects(project_dir: &Path, config: &Config) -> Result<LoadedProjects> {
     if !project_dir.exists() {
-        return Ok((HashMap::new(), Vec::new()));
+        return Ok((HashMap::new(), HashMap::new(), Vec::new()));
     }
 
     let mut files = fs::read_dir(project_dir)
@@ -477,6 +497,7 @@ fn load_projects(
     files.sort_by_key(|entry| entry.file_name());
 
     let mut projects = HashMap::new();
+    let mut project_files = HashMap::new();
     let mut invalid_projects = Vec::new();
 
     for entry in files {
@@ -493,6 +514,7 @@ fn load_projects(
 
         match load_project_file(&path, &name, config) {
             Ok(project) => {
+                project_files.insert(name.clone(), path.clone());
                 projects.insert(name, project);
             }
             Err(error) => invalid_projects.push(InvalidProject {
@@ -503,7 +525,7 @@ fn load_projects(
         }
     }
 
-    Ok((projects, invalid_projects))
+    Ok((projects, project_files, invalid_projects))
 }
 
 fn load_project_file(path: &Path, name: &str, config: &Config) -> Result<Project> {
@@ -666,6 +688,31 @@ delete_session = "alt-x"
         validate_config(&config)?;
         assert_eq!(config.settings.picker.bindings.reset, "alt-a");
         assert_eq!(config.settings.picker.bindings.delete_session, "alt-x");
+        Ok(())
+    }
+
+    #[test]
+    fn parses_custom_picker_preview_commands() -> Result<()> {
+        let input = r#"
+[settings.picker.preview]
+sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
+folders = "eza --tree \"$SMUX_PREVIEW_PATH\""
+projects = "bat --style=plain \"$SMUX_PREVIEW_FILE\""
+"#;
+
+        let config: Config = toml::from_str(input)?;
+        assert_eq!(
+            config.settings.picker.preview.sessions.as_deref(),
+            Some("tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\"")
+        );
+        assert_eq!(
+            config.settings.picker.preview.folders.as_deref(),
+            Some("eza --tree \"$SMUX_PREVIEW_PATH\"")
+        );
+        assert_eq!(
+            config.settings.picker.preview.projects.as_deref(),
+            Some("bat --style=plain \"$SMUX_PREVIEW_FILE\"")
+        );
         Ok(())
     }
 

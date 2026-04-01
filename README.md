@@ -198,6 +198,7 @@ Current behavior:
 
 If you use a Nerd Font, `smux` can show colored icons for sessions, projects, folders, and templates.
 These picker keybinds can be changed in `[settings.picker.bindings]`.
+The right-side preview shows tmux session summaries, folder listings, and project TOML files by default; those preview commands can be customized in `[settings.picker.preview]`.
 
 ## Configuration
 
@@ -261,6 +262,11 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
+
+[settings.picker.preview]
+# sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
+# folders = "eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\""
+# projects = "bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\""
 
 [templates.default]
 startup_window = "main"
