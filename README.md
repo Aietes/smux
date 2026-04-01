@@ -359,11 +359,8 @@ smux-config.5
 smux follows these core design principles:
 
 - **Small and focused**: The tool is intentionally small, with a thin orchestration layer over existing tools (tmux, fzf, zoxide)
-- **Predictable and easy to debug**: Behavior is deterministic and straightforward to understand
-- **Explicit over implicit**: Commands and workflows are clear and explicit rather than magical
-- **Reproducible development**: Uses Nix for consistent development environments
+- **Predictable**: Behavior is deterministic and straightforward to understand
 - **Minimal dependencies**: Only includes necessary external tools (tmux, fzf, zoxide)
 - **User experience first**: Prioritizes intuitive workflows and familiar interactions
-- **Extensible architecture**: Designed to be easy to extend while maintaining core simplicity
 
 These principles guide all implementation decisions and help ensure smux remains a useful, reliable tool for tmux session management.
