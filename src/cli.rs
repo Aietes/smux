@@ -63,6 +63,8 @@ pub enum Commands {
     /// Validate runtime dependencies and basic environment state.
     Doctor {
         #[arg(long)]
+        fix: bool,
+        #[arg(long)]
         #[arg(value_hint = ValueHint::FilePath)]
         config: Option<PathBuf>,
     },

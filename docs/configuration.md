@@ -27,6 +27,8 @@ $XDG_CONFIG_HOME/smux/projects/*.toml
 ```
 
 `smux init` writes starter files with `#:schema` directives pointing at version-matched JSON Schema files for editor support.
+`smux save-project` also writes a version-matched `#:schema` directive into exported project files.
+`smux doctor` reports schema drift, and `smux doctor --fix` refreshes missing or stale schema directives in place.
 
 Schema files live in this repo at:
 

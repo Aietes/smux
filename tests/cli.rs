@@ -93,12 +93,90 @@ fn doctor_succeeds_with_missing_config_file() {
     command.args(["doctor", "--config"]);
     command.arg(&config_path);
     command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
 
     command
         .assert()
         .success()
-        .stdout(contains("config: missing"))
-        .stdout(contains("icons:"));
+        .stdout(contains("config"))
+        .stdout(contains("missing"))
+        .stdout(contains("icons"));
+}
+
+#[test]
+fn doctor_reports_schema_drift_without_failing() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let config_path = tempdir.path().join("config.toml");
+    let project_dir = tempdir.path().join("projects");
+    fs::create_dir(&project_dir).expect("project dir should be created");
+    fs::write(
+        &config_path,
+        "[templates.default]\nwindows = [{ name = \"main\" }]\n",
+    )
+    .expect("config fixture should be written");
+    fs::write(
+        project_dir.join("demo.toml"),
+        "#:schema https://raw.githubusercontent.com/Aietes/smux/v0.1.0/schemas/smux-project.schema.json\npath = \"/tmp/demo\"\n",
+    )
+    .expect("project fixture should be written");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["doctor", "--config"]);
+    command.arg(&config_path);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+
+    command
+        .assert()
+        .success()
+        .stdout(contains("schema_config"))
+        .stdout(contains("schema_projects"))
+        .stdout(contains("drift=1"))
+        .stdout(contains("missing=0"));
+}
+
+#[test]
+fn doctor_fix_rewrites_missing_and_stale_schema_directives() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let config_path = tempdir.path().join("config.toml");
+    let project_dir = tempdir.path().join("projects");
+    fs::create_dir(&project_dir).expect("project dir should be created");
+    fs::write(
+        &config_path,
+        "[templates.default]\nwindows = [{ name = \"main\" }]\n",
+    )
+    .expect("config fixture should be written");
+    let stale_project = project_dir.join("stale.toml");
+    fs::write(
+        &stale_project,
+        "#:schema https://raw.githubusercontent.com/Aietes/smux/v0.1.0/schemas/smux-project.schema.json\npath = \"/tmp/demo\"\n",
+    )
+    .expect("stale project fixture should be written");
+    let missing_project = project_dir.join("missing.toml");
+    fs::write(&missing_project, "path = \"/tmp/other\"\n")
+        .expect("missing project fixture should be written");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["doctor", "--fix", "--config"]);
+    command.arg(&config_path);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+
+    command
+        .assert()
+        .success()
+        .stdout(contains("schema_fix"))
+        .stdout(contains("updated=1 inserted=2"));
+
+    let config_contents = fs::read_to_string(&config_path).expect("config should be readable");
+    assert!(config_contents.starts_with("#:schema "));
+    let stale_contents = fs::read_to_string(&stale_project).expect("project should be readable");
+    assert!(stale_contents.contains("/v0.1.7/schemas/smux-project.schema.json"));
+    let missing_contents =
+        fs::read_to_string(&missing_project).expect("project should be readable");
+    assert!(missing_contents.starts_with("#:schema "));
 }
 
 #[test]
@@ -112,11 +190,13 @@ fn doctor_fails_with_invalid_config_file() {
     command.args(["doctor", "--config"]);
     command.arg(&config_path);
     command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
 
     command
         .assert()
         .failure()
-        .stdout(contains("config: error"))
+        .stdout(contains("config"))
+        .stdout(contains("error"))
         .stderr(contains("doctor checks failed"));
 }
 
@@ -195,6 +275,7 @@ fn save_project_stdout_exports_project_toml() {
     command
         .assert()
         .success()
+        .stdout(contains("#:schema "))
         .stdout(contains("path = \"/tmp/demo\""))
         .stdout(contains("session_name = \"demo\""))
         .stdout(contains("startup_window = \"editor\""))

@@ -52,7 +52,7 @@ pub fn run(cli: Cli) -> Result<()> {
 
             Ok(())
         }
-        Commands::Doctor { config } => doctor::run(config.as_deref()),
+        Commands::Doctor { fix, config } => doctor::run(config.as_deref(), fix),
         Commands::SaveProject {
             name,
             session,

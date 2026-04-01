@@ -123,6 +123,10 @@ impl ExportedProject {
 
     pub fn to_toml(&self) -> String {
         let mut out = String::new();
+        out.push_str(&format!(
+            "#:schema {}\n",
+            config::schema_url("smux-project.schema.json")
+        ));
         out.push_str(&format!("path = {}\n", toml_string(&self.path)));
         out.push_str(&format!(
             "session_name = {}\n",
@@ -292,6 +296,7 @@ mod tests {
         };
 
         let toml = project.to_toml();
+        assert!(toml.starts_with("#:schema "));
         assert!(toml.contains("path = \"~/code/demo\""));
         assert!(toml.contains("session_name = \"demo\""));
         assert!(toml.contains("windows = ["));
