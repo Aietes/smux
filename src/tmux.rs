@@ -95,7 +95,7 @@ impl Tmux {
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
 
-                if stderr.contains("no server running") {
+                if is_empty_session_state(stderr.as_ref()) {
                     Ok(Vec::new())
                 } else {
                     bail!("tmux list-sessions failed: {}", stderr.trim())
@@ -621,6 +621,14 @@ impl Tmux {
     }
 }
 
+fn is_empty_session_state(stderr: &str) -> bool {
+    let stderr = stderr.trim();
+
+    stderr.contains("no server running")
+        || stderr.contains("failed to connect to server")
+        || (stderr.contains("error connecting to") && stderr.contains("No such file or directory"))
+}
+
 fn parse_window_record(line: &str) -> Result<WindowRecord> {
     let mut parts = line.splitn(3, '\t');
     let id = parts.next().context("missing tmux window id")?.to_owned();
@@ -751,6 +759,45 @@ mod tests {
         assert_eq!(recorded[0].program, "tmux");
         assert_eq!(recorded[0].args, vec!["attach-session", "-t", "demo"]);
         assert_eq!(recorded[0].io_mode, IoMode::Inherit);
+    }
+
+    #[test]
+    fn list_sessions_returns_empty_when_tmux_server_is_not_running() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: false,
+                code: Some(1),
+            },
+            stdout: Vec::new(),
+            stderr: b"no server running on /tmp/tmux-1000/default\n".to_vec(),
+        }));
+
+        let tmux = Tmux::with_runner(runner);
+        assert_eq!(
+            tmux.list_sessions().expect("query should succeed"),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn list_sessions_returns_empty_when_tmux_socket_is_missing() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: false,
+                code: Some(1),
+            },
+            stdout: Vec::new(),
+            stderr: b"error connecting to /tmp/tmux-1000/default (No such file or directory)\n"
+                .to_vec(),
+        }));
+
+        let tmux = Tmux::with_runner(runner);
+        assert_eq!(
+            tmux.list_sessions().expect("query should succeed"),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
