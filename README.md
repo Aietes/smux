@@ -9,7 +9,7 @@
 ## Highlights:
 
 - quickly switch between existing tmux sessions
-- tmux session from directory - pick a recent directory and create or reuse a tmux session for it
+- tmux session from directory - pick a zoxide directory or folder-search result and create or reuse a tmux session for it
 - tmux session from project - launch a saved project with a defined properties (path, name, windows, panes, layout, commands...)
 - apply reusable tmux templates with windows, panes, layouts, and startup commands
 
@@ -111,7 +111,9 @@ smux save-project myapp --stdout
 
 - switch to an existing tmux session
 - launch a saved project
-- create or reuse a session from a recent directory
+- create or reuse a session from a zoxide directory or folder-search result
+- save a selected tmux session as a project with `Ctrl-Y`
+- delete a selected project file with `Ctrl-X`
 
 Use `smux select --choose-template` when you want directory selection to be followed by an explicit template picker.
 

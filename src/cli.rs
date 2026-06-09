@@ -22,7 +22,10 @@ impl Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Open the unified tmux-session and zoxide-directory selector.
+    /// Open the unified tmux session, project, and directory selector.
+    #[command(
+        long_about = "Open the unified picker for tmux sessions, saved projects, zoxide directories, and configured folder-search results.\n\nEnter opens the selected item. Ctrl-X deletes the selected non-current session or project file. Ctrl-Y saves the selected tmux session as a project."
+    )]
     Select {
         #[arg(long)]
         choose_template: bool,

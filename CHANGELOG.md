@@ -6,6 +6,17 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+### Added
+
+- bounded folder search in `smux select`, defaulting to the home directory
+- `Ctrl-Y` picker action to save a selected tmux session as a project
+- contextual `Ctrl-X` picker deletion for project and invalid-project files
+
+### Fixed
+
+- first pane working directories are now honored when creating tmux windows from pane-based templates
+- config validation now catches invalid pane layouts and out-of-range startup panes before session creation
+
 ## [0.1.8] - 2026-04-01
 
 ### Added

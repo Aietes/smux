@@ -248,6 +248,19 @@ directory = 108
 template = 179
 project = 81
 
+[settings.picker.bindings]
+reset = "ctrl-c"
+sessions = "ctrl-s"
+folders = "ctrl-f"
+projects = "ctrl-p"
+delete_session = "ctrl-x"
+save_project = "ctrl-y"
+
+[settings.folder_search]
+roots = ["~"]
+max_depth = 3
+include_hidden = false
+
 [templates.default]
 startup_window = "main"
 windows = [{ name = "main" }]
@@ -258,7 +271,8 @@ startup_pane = 0
 windows = [
   { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
-      { command = "cargo run" },
+      { command = "source .venv/bin/activate" },
+      { layout = "bottom", command = "cargo run" },
       { layout = "right 40%", command = "cargo test", zoom = true },
     ] },
 ]
@@ -808,7 +822,7 @@ Must cover:
 
 The implementation is complete when all of the following are true:
 
-1. `smux select` shows tmux sessions, saved projects, and zoxide directories in one `fzf` picker.
+1. `smux select` shows tmux sessions, saved projects, zoxide directories, and bounded folder-search directories in one `fzf` picker.
 2. Selecting a session switches or attaches correctly.
 3. Selecting a directory creates or reuses a session correctly.
 4. Session names default to the sanitized folder basename.
@@ -819,6 +833,7 @@ The implementation is complete when all of the following are true:
 9. Documentation covers install, config, tmux binding, and examples.
 10. Proper man pages and zsh completions are generated and documented.
 11. `smux save-project` can export a usable project file from a live tmux session.
+12. Picker actions can save selected sessions as project files and delete selected project files.
 
 ## Starter Config
 
@@ -833,16 +848,31 @@ directory = 108
 template = 179
 project = 81
 
+[settings.picker.bindings]
+reset = "ctrl-c"
+sessions = "ctrl-s"
+folders = "ctrl-f"
+projects = "ctrl-p"
+delete_session = "ctrl-x"
+save_project = "ctrl-y"
+
+[settings.folder_search]
+roots = ["~"]
+max_depth = 3
+include_hidden = false
+
 [templates.default]
 startup_window = "main"
 windows = [{ name = "main" }]
 
 [templates.rust]
 startup_window = "editor"
+startup_pane = 0
 windows = [
-  { name = "editor", command = "nvim" },
-  { name = "run", layout = "main-horizontal", panes = [
-      { command = "cargo run" },
+  { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
+  { name = "run", synchronize = true, layout = "main-horizontal", panes = [
+      { command = "source .venv/bin/activate" },
+      { layout = "bottom", command = "cargo run" },
       { layout = "right 40%", command = "cargo test" },
     ] },
 ]
