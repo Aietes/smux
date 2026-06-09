@@ -556,6 +556,7 @@ Required behavior:
 
 - selecting a session switches or attaches to it
 - saving a selected session exports it as a project definition using the session name as the default project name
+- deleting a selected project removes its project TOML file and refreshes the picker
 - selecting a directory creates or reuses a session
 - `--choose-template` enables interactive template selection for directory entries
 - v1 may additionally support an `fzf` expected key such as `ctrl-t`, but that is optional unless implementation cost remains low

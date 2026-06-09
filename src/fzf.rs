@@ -338,7 +338,7 @@ fn select_with_runner(
         &mut args,
         prompt,
         &format!(
-            "enter open  {delete} kill session  {save} save project  {reset} all  {sessions} sessions  {folders} folders  {projects} projects",
+            "enter open  {delete} delete  {save} save project  {reset} all  {sessions} sessions  {folders} folders  {projects} projects",
             delete = bindings.delete_session,
             save = bindings.save_project,
             reset = bindings.reset,
@@ -464,7 +464,7 @@ mod tests {
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("enter open  ctrl-x kill session  ctrl-y save project"))
+                .any(|arg| arg.contains("enter open  ctrl-x delete  ctrl-y save project"))
         );
         assert!(
             recorded[0]

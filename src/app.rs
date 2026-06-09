@@ -168,6 +168,16 @@ fn run_select(
                 }
                 session::kill_existing(tmux, &selection.entry.value)?;
             }
+            (fzf::SelectAction::Delete, fzf::EntryKind::Project)
+            | (fzf::SelectAction::Delete, fzf::EntryKind::InvalidProject) => {
+                match delete_project_from_picker(loaded.as_ref(), &selection.entry.value) {
+                    Ok(path) => {
+                        eprintln!("deleted project {}", path.display());
+                        loaded = config::load_optional(config_path)?;
+                    }
+                    Err(error) => eprintln!("warning: {error:#}"),
+                }
+            }
             (fzf::SelectAction::SaveProject, fzf::EntryKind::Session) => {
                 match save_project_from_picker(tmux, &selection.entry.value, config_path) {
                     Ok(Some(path)) => {
@@ -208,6 +218,14 @@ fn run_select(
             (fzf::SelectAction::SaveProject, _) => continue,
         }
     }
+}
+
+fn delete_project_from_picker(
+    loaded: Option<&config::LoadedConfig>,
+    project_name: &str,
+) -> Result<PathBuf> {
+    let loaded = loaded.context("project deletion requires config or project files")?;
+    config::delete_project_file(loaded, project_name)
 }
 
 fn save_project_from_picker(

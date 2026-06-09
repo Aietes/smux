@@ -180,7 +180,8 @@ Fields:
 - `delete_session`
   - type: string
   - default: `ctrl-x`
-  - closes the selected non-current tmux session and keeps the picker open
+  - closes the selected non-current tmux session or deletes the selected project file
+  - keeps the picker open
 - `save_project`
   - type: string
   - default: `ctrl-y`
@@ -573,7 +574,7 @@ Current behavior:
 - `Ctrl-S` limits the main picker to sessions and keeps fuzzy search active
 - `Ctrl-P` limits the main picker to projects and keeps fuzzy search active
 - `Ctrl-F` limits the main picker to folders and keeps fuzzy search active
-- `Ctrl-X` closes the selected non-current tmux session and keeps the picker open
+- `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file and keeps the picker open
 - `Ctrl-Y` saves the selected tmux session as a project and keeps the picker open
 - these keybinds are configurable through `[settings.picker.bindings]`
 

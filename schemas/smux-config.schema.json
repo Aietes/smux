@@ -114,7 +114,7 @@
         "delete_session": {
           "type": "string",
           "default": "ctrl-x",
-          "description": "Main picker shortcut that closes the selected non-current tmux session."
+          "description": "Main picker shortcut that deletes the selected session or project."
         },
         "save_project": {
           "type": "string",

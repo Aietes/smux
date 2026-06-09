@@ -739,6 +739,49 @@ pub fn resolve_project<'a>(
     Ok(None)
 }
 
+pub fn delete_project_file(loaded: &LoadedConfig, project_name: &str) -> Result<PathBuf> {
+    let project_name = util::validated_project_name(project_name)?;
+    let path = loaded
+        .project_files
+        .get(&project_name)
+        .cloned()
+        .or_else(|| {
+            loaded
+                .invalid_projects
+                .iter()
+                .find(|project| project.name == project_name)
+                .map(|project| project.path.clone())
+        })
+        .with_context(|| format!("project file not found for {project_name}"))?;
+    ensure_project_file_is_in_project_dir(&loaded.project_dir, &path)?;
+    fs::remove_file(&path)
+        .with_context(|| format!("failed to delete project file {}", path.display()))?;
+    Ok(path)
+}
+
+fn ensure_project_file_is_in_project_dir(project_dir: &Path, path: &Path) -> Result<()> {
+    let project_dir = project_dir.canonicalize().with_context(|| {
+        format!(
+            "failed to resolve project directory {}",
+            project_dir.display()
+        )
+    })?;
+    let parent = path
+        .parent()
+        .with_context(|| format!("project file {} did not have a parent", path.display()))?
+        .canonicalize()
+        .with_context(|| format!("failed to resolve project file parent {}", path.display()))?;
+
+    if parent != project_dir {
+        bail!(
+            "refusing to delete project file outside project directory: {}",
+            path.display()
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1065,6 +1108,55 @@ windows = [{ name = "main" }]
             resolve_project(&loaded, Path::new(&workspace_dir))?.expect("project should resolve");
         assert_eq!(resolved.name, "demo");
 
+        Ok(())
+    }
+
+    #[test]
+    fn deletes_project_file_by_name() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let config_path = tempdir.path().join("config.toml");
+        let project_dir = tempdir.path().join("projects");
+        fs::create_dir(&project_dir)?;
+        fs::write(
+            &config_path,
+            r#"
+[templates.default]
+windows = [{ name = "main" }]
+"#,
+        )?;
+        let project_path = project_dir.join("demo.toml");
+        fs::write(&project_path, "path = \"/tmp/demo\"\n")?;
+
+        let loaded = load_workspace(Some(&config_path))?;
+        let deleted = super::delete_project_file(&loaded, "demo")?;
+
+        assert_eq!(deleted, project_path);
+        assert!(!deleted.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn deletes_invalid_project_file_by_name() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let config_path = tempdir.path().join("config.toml");
+        let project_dir = tempdir.path().join("projects");
+        fs::create_dir(&project_dir)?;
+        fs::write(
+            &config_path,
+            r#"
+[templates.default]
+windows = [{ name = "main" }]
+"#,
+        )?;
+        let project_path = project_dir.join("broken.toml");
+        fs::write(&project_path, "not = [valid\n")?;
+
+        let loaded = load_workspace(Some(&config_path))?;
+        assert_eq!(loaded.invalid_projects.len(), 1);
+        let deleted = super::delete_project_file(&loaded, "broken")?;
+
+        assert_eq!(deleted, project_path);
+        assert!(!deleted.exists());
         Ok(())
     }
 

@@ -195,7 +195,7 @@ Current behavior:
 - `Ctrl-S` limits the main picker to sessions
 - `Ctrl-P` limits the main picker to projects
 - `Ctrl-F` limits the main picker to folders
-- `Ctrl-X` closes the selected non-current tmux session and keeps the picker open
+- `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file and keeps the picker open
 - `Ctrl-Y` saves the selected tmux session as a project and keeps the picker open
 
 If you use a Nerd Font, `smux` can show colored icons for sessions, projects, folders, and templates.
