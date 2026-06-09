@@ -162,6 +162,10 @@ fn parse_pane_layout(layout: Option<&str>) -> Result<Option<PaneLayout>> {
     Ok(Some(PaneLayout { position, size }))
 }
 
+pub(crate) fn validate_pane_layout(layout: &str) -> Result<()> {
+    parse_pane_layout(Some(layout)).map(|_| ())
+}
+
 fn resolve_root(session_root: &Path, root: Option<&str>) -> Result<PathBuf> {
     match root {
         Some(root) => resolve_relative(session_root, session_root, session_root, root),

@@ -40,7 +40,7 @@ windows = [
   { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "source .venv/bin/activate" },
-      { command = "cargo run" },
+      { layout = "bottom", command = "cargo run" },
       { layout = "right 40%", command = "cargo test" },
     ] },
 ]
@@ -448,8 +448,35 @@ fn validate_template(name: &str, template: &Template) -> Result<()> {
         bail!("{name} references missing startup window \"{startup_window}\"");
     }
 
+    validate_startup_pane(name, template)?;
+
     for window in &template.windows {
         validate_window(name, window)?;
+    }
+
+    Ok(())
+}
+
+fn validate_startup_pane(owner_name: &str, template: &Template) -> Result<()> {
+    let startup_pane = template.startup_pane.unwrap_or(0);
+    let startup_window = template
+        .startup_window
+        .as_deref()
+        .unwrap_or(&template.windows[0].name);
+    let window = template
+        .windows
+        .iter()
+        .find(|window| window.name == startup_window)
+        .context("startup window validation ran before startup window existence validation")?;
+    let pane_count = window.panes.as_ref().map(Vec::len).unwrap_or(1);
+
+    if startup_pane >= pane_count {
+        bail!(
+            "{owner_name} startup_pane {} is out of range for window \"{}\" with {} pane(s)",
+            startup_pane,
+            startup_window,
+            pane_count
+        );
     }
 
     Ok(())
@@ -473,6 +500,25 @@ fn validate_window(owner_name: &str, window: &Window) -> Result<()> {
     }
 
     if let Some(panes) = &window.panes {
+        for (index, pane) in panes.iter().enumerate() {
+            if index > 0 && pane.layout.is_none() {
+                bail!(
+                    "{owner_name} pane {} in window \"{}\" is missing a layout",
+                    index,
+                    window.name
+                );
+            }
+
+            if let Some(layout) = &pane.layout {
+                crate::templates::validate_pane_layout(layout).with_context(|| {
+                    format!(
+                        "{owner_name} pane {} in window \"{}\" has an invalid layout",
+                        index, window.name
+                    )
+                })?;
+            }
+        }
+
         let zoomed = panes.iter().filter(|pane| pane.zoom).count();
         if zoomed > 1 {
             bail!(
@@ -803,6 +849,66 @@ windows = [
 
         let error = validate_config(&config).expect_err("validation should fail");
         assert!(error.to_string().contains("zoomed pane"));
+    }
+
+    #[test]
+    fn rejects_startup_pane_out_of_range_during_config_validation() {
+        let config: Config = toml::from_str(
+            r#"
+[templates.default]
+startup_window = "main"
+startup_pane = 2
+windows = [
+  { name = "main", panes = [
+      { command = "nvim" },
+      { layout = "right", command = "cargo test" },
+    ] },
+]
+"#,
+        )
+        .expect("config should parse");
+
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("startup_pane"));
+        assert!(error.to_string().contains("out of range"));
+    }
+
+    #[test]
+    fn rejects_invalid_pane_layout_during_config_validation() {
+        let config: Config = toml::from_str(
+            r#"
+[templates.default]
+windows = [
+  { name = "main", panes = [
+      { command = "nvim" },
+      { layout = "diagonal 40%", command = "cargo test" },
+    ] },
+]
+"#,
+        )
+        .expect("config should parse");
+
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("invalid layout"));
+    }
+
+    #[test]
+    fn rejects_missing_layout_for_additional_panes() {
+        let config: Config = toml::from_str(
+            r#"
+[templates.default]
+windows = [
+  { name = "main", panes = [
+      { command = "nvim" },
+      { command = "cargo test" },
+    ] },
+]
+"#,
+        )
+        .expect("config should parse");
+
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("missing a layout"));
     }
 
     #[test]
