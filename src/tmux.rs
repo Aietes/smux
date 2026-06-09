@@ -192,7 +192,11 @@ impl Tmux {
             .first()
             .context("session plan must contain at least one window")?;
 
-        self.create_session_with_window(&plan.session_name, &first_window.name, &first_window.cwd)?;
+        self.create_session_with_window(
+            &plan.session_name,
+            &first_window.name,
+            initial_pane_cwd(first_window),
+        )?;
         self.configure_panes(&plan.session_name, &first_window.name, first_window)?;
 
         let mut previous_window = first_window.name.as_str();
@@ -201,7 +205,7 @@ impl Tmux {
                 &plan.session_name,
                 previous_window,
                 &window.name,
-                &window.cwd,
+                initial_pane_cwd(window),
             )?;
             self.configure_panes(&plan.session_name, &window.name, window)?;
             previous_window = &window.name;
@@ -725,6 +729,14 @@ fn infer_pane_position(pane: &PaneRecord, previous: &[PaneSnapshot]) -> PanePosi
     }
 }
 
+fn initial_pane_cwd(window: &crate::templates::WindowPlan) -> &Path {
+    window
+        .panes
+        .first()
+        .map(|pane| pane.cwd.as_path())
+        .unwrap_or(window.cwd.as_path())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -1033,6 +1045,83 @@ mod tests {
             vec!["list-panes", "-t", "demo:editor", "-F", "#{pane_id}"]
         );
         assert_eq!(recorded[15].args, vec!["select-pane", "-t", "%1"]);
+    }
+
+    #[test]
+    fn first_pane_cwd_is_used_when_creating_window() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%1\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%2\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(b"%1\n%2\n".to_vec()));
+        runner.push_capture(ok_capture(Vec::new()));
+
+        let tmux = Tmux::with_runner(runner.clone());
+        let plan = SessionPlan {
+            session_name: "demo".to_owned(),
+            startup_window: "main".to_owned(),
+            startup_pane: 0,
+            windows: vec![WindowPlan {
+                name: "main".to_owned(),
+                cwd: "/tmp/demo".into(),
+                pre_command: None,
+                command: None,
+                layout: None,
+                synchronize: false,
+                panes: vec![
+                    PanePlan {
+                        layout: None,
+                        cwd: "/tmp/demo/app".into(),
+                        command: Some("nvim".to_owned()),
+                        zoom: false,
+                    },
+                    PanePlan {
+                        layout: Some(PaneLayout {
+                            position: PanePosition::Right,
+                            size: None,
+                        }),
+                        cwd: "/tmp/demo/server".into(),
+                        command: Some("cargo run".to_owned()),
+                        zoom: false,
+                    },
+                ],
+            }],
+        };
+
+        tmux.create_session_from_plan(&plan)
+            .expect("session plan should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(
+            recorded[0].args,
+            vec![
+                "new-session",
+                "-d",
+                "-s",
+                "demo",
+                "-c",
+                "/tmp/demo/app",
+                "-n",
+                "main"
+            ]
+        );
+        assert_eq!(
+            recorded[3].args,
+            vec![
+                "split-window",
+                "-t",
+                "demo:main",
+                "-P",
+                "-F",
+                "#{pane_id}",
+                "-h",
+                "-c",
+                "/tmp/demo/server"
+            ]
+        );
     }
 
     #[test]
