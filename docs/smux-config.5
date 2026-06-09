@@ -36,6 +36,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
+save_project = "ctrl-y"
 
 [settings.picker.preview]
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
@@ -60,7 +61,8 @@ directories, templates, and projects.
 \fBsettings.picker.bindings\fR customizes the main picker keybinds.
 \fBreset\fR resets to the full list, \fBsessions\fR filters to tmux sessions,
 \fBfolders\fR filters to folders, \fBprojects\fR filters to saved projects,
-and \fBdelete_session\fR closes the selected non-current tmux session.
+\fBdelete_session\fR closes the selected non-current tmux session, and
+\fBsave_project\fR saves the selected tmux session as a project.
 .PP
 Picker binding values are passed through as \fBfzf\fR key names. They must not
 be empty and must be unique within the picker binding block.

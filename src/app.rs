@@ -28,7 +28,13 @@ pub fn run(cli: Cli) -> Result<()> {
             config,
         } => {
             let loaded = config::load_optional(config.as_deref())?;
-            run_select(&tmux, loaded.as_ref(), choose_template, no_project_detect)
+            run_select(
+                &tmux,
+                loaded,
+                config.as_deref(),
+                choose_template,
+                no_project_detect,
+            )
         }
         Commands::Connect {
             path,
@@ -120,18 +126,11 @@ pub fn run(cli: Cli) -> Result<()> {
 
 fn run_select(
     tmux: &Tmux,
-    loaded: Option<&config::LoadedConfig>,
+    mut loaded: Option<config::LoadedConfig>,
+    config_path: Option<&Path>,
     choose_template: bool,
     no_project_detect: bool,
 ) -> Result<()> {
-    let config = loaded.map(|loaded| &loaded.config);
-    let display_style = DisplayStyle::from_config(config);
-    let picker_bindings = config
-        .map(|config| config.settings.picker.bindings.clone())
-        .unwrap_or_default();
-    let picker_preview = config
-        .map(|config| config.settings.picker.preview.clone())
-        .unwrap_or_default();
     let project_detection = if no_project_detect {
         session::ProjectDetection::Disabled
     } else {
@@ -139,8 +138,21 @@ fn run_select(
     };
 
     loop {
+        let config = loaded.as_ref().map(|loaded| &loaded.config);
+        let display_style = DisplayStyle::from_config(config);
+        let picker_bindings = config
+            .map(|config| config.settings.picker.bindings.clone())
+            .unwrap_or_default();
+        let picker_preview = config
+            .map(|config| config.settings.picker.preview.clone())
+            .unwrap_or_default();
         let current_session = tmux.current_session().ok().flatten();
-        let entries = select_entries(tmux, loaded, display_style, current_session.as_deref())?;
+        let entries = select_entries(
+            tmux,
+            loaded.as_ref(),
+            display_style,
+            current_session.as_deref(),
+        )?;
 
         let Some(selection) = fzf::select(entries, &picker_bindings, &picker_preview)? else {
             return Ok(());
@@ -156,6 +168,16 @@ fn run_select(
                 }
                 session::kill_existing(tmux, &selection.entry.value)?;
             }
+            (fzf::SelectAction::SaveProject, fzf::EntryKind::Session) => {
+                match save_project_from_picker(tmux, &selection.entry.value, config_path) {
+                    Ok(Some(path)) => {
+                        eprintln!("saved project {}", path.display());
+                        loaded = config::load_optional(config_path)?;
+                    }
+                    Ok(None) => {}
+                    Err(error) => eprintln!("warning: {error:#}"),
+                }
+            }
             (fzf::SelectAction::Open, fzf::EntryKind::Directory) => {
                 let template = if choose_template {
                     let Some(template) = choose_template_name(config, display_style)? else {
@@ -169,21 +191,39 @@ fn run_select(
                 return session::connect_path(
                     tmux,
                     Path::new(&selection.entry.value),
-                    loaded,
+                    loaded.as_ref(),
                     template.as_deref(),
                     None,
                     project_detection,
                 );
             }
             (fzf::SelectAction::Open, fzf::EntryKind::Project) => {
-                let loaded =
-                    loaded.context("project selection requires config or project files")?;
+                let loaded = loaded
+                    .as_ref()
+                    .context("project selection requires config or project files")?;
                 return session::connect_project(tmux, loaded, &selection.entry.value);
             }
             (fzf::SelectAction::Open, fzf::EntryKind::InvalidProject) => continue,
             (fzf::SelectAction::Delete, _) => continue,
+            (fzf::SelectAction::SaveProject, _) => continue,
         }
     }
+}
+
+fn save_project_from_picker(
+    tmux: &Tmux,
+    session_name: &str,
+    config_path: Option<&Path>,
+) -> Result<Option<PathBuf>> {
+    project_export::save_project(
+        tmux,
+        session_name,
+        Some(session_name),
+        None,
+        false,
+        false,
+        config_path,
+    )
 }
 
 fn select_entries(

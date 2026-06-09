@@ -25,6 +25,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
+save_project = "ctrl-y"
 
 [settings.picker.preview]
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
@@ -142,6 +143,8 @@ pub struct PickerBindings {
     pub projects: String,
     #[serde(default = "default_picker_delete_session")]
     pub delete_session: String,
+    #[serde(default = "default_picker_save_project")]
+    pub save_project: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, Eq, PartialEq)]
@@ -189,6 +192,7 @@ impl Default for PickerBindings {
             folders: default_picker_folders(),
             projects: default_picker_projects(),
             delete_session: default_picker_delete_session(),
+            save_project: default_picker_save_project(),
         }
     }
 }
@@ -211,6 +215,10 @@ fn default_picker_projects() -> String {
 
 fn default_picker_delete_session() -> String {
     "ctrl-x".to_owned()
+}
+
+fn default_picker_save_project() -> String {
+    "ctrl-y".to_owned()
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -472,6 +480,7 @@ fn validate_picker_bindings(bindings: &PickerBindings) -> Result<()> {
         ("folders", bindings.folders.trim()),
         ("projects", bindings.projects.trim()),
         ("delete_session", bindings.delete_session.trim()),
+        ("save_project", bindings.save_project.trim()),
     ];
 
     for (name, value) in values {
@@ -788,12 +797,14 @@ sessions = "alt-s"
 folders = "alt-f"
 projects = "alt-p"
 delete_session = "alt-x"
+save_project = "alt-y"
 "#;
 
         let config: Config = toml::from_str(input)?;
         validate_config(&config)?;
         assert_eq!(config.settings.picker.bindings.reset, "alt-a");
         assert_eq!(config.settings.picker.bindings.delete_session, "alt-x");
+        assert_eq!(config.settings.picker.bindings.save_project, "alt-y");
         Ok(())
     }
 
@@ -831,6 +842,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-s"
 delete_session = "ctrl-x"
+save_project = "ctrl-y"
 "#;
 
         let config: Config = toml::from_str(input).expect("config should parse");

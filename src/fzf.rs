@@ -21,6 +21,7 @@ pub enum EntryKind {
 pub enum SelectAction {
     Open,
     Delete,
+    SaveProject,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -337,8 +338,9 @@ fn select_with_runner(
         &mut args,
         prompt,
         &format!(
-            "enter open  {delete} kill session  {reset} all  {sessions} sessions  {folders} folders  {projects} projects",
+            "enter open  {delete} kill session  {save} save project  {reset} all  {sessions} sessions  {folders} folders  {projects} projects",
             delete = bindings.delete_session,
+            save = bindings.save_project,
             reset = bindings.reset,
             sessions = bindings.sessions,
             folders = bindings.folders,
@@ -353,7 +355,10 @@ fn select_with_runner(
         ),
     );
     add_preview_args(&mut args, preview);
-    args.extend(["--expect".to_owned(), bindings.delete_session.clone()]);
+    args.extend([
+        "--expect".to_owned(),
+        format!("{},{}", bindings.delete_session, bindings.save_project),
+    ]);
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
@@ -381,6 +386,7 @@ fn select_with_runner(
         Some(encoded_entry) if !first.is_empty() => {
             let action = match first {
                 key if key == bindings.delete_session => SelectAction::Delete,
+                key if key == bindings.save_project => SelectAction::SaveProject,
                 other => bail!("unknown picker action: {other}"),
             };
             (action, encoded_entry)
@@ -453,12 +459,12 @@ mod tests {
         assert!(recorded[0].args.contains(&"1,2,4".to_owned()));
         assert!(recorded[0].args.contains(&"--expect".to_owned()));
         assert!(recorded[0].args.contains(&"--preview".to_owned()));
-        assert!(recorded[0].args.contains(&"ctrl-x".to_owned()));
+        assert!(recorded[0].args.contains(&"ctrl-x,ctrl-y".to_owned()));
         assert!(
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("enter open  ctrl-x kill session"))
+                .any(|arg| arg.contains("enter open  ctrl-x kill session  ctrl-y save project"))
         );
         assert!(
             recorded[0]
@@ -518,6 +524,36 @@ mod tests {
     }
 
     #[test]
+    fn selector_supports_save_project_action_for_sessions() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"ctrl-y\nsession\tdemo\tsession  demo\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let result = select_with_runner(
+            runner,
+            vec![Entry::session(
+                DisplayStyle::from_icon_mode(IconMode::Never),
+                "demo".to_owned(),
+            )],
+            "smux> ",
+            &PickerBindings::default(),
+            &PickerPreviewSettings::default(),
+        )
+        .expect("selection should succeed")
+        .expect("selection should be present");
+
+        assert_eq!(result.action, SelectAction::SaveProject);
+        assert_eq!(result.entry.kind, EntryKind::Session);
+        assert_eq!(result.entry.value, "demo");
+    }
+
+    #[test]
     fn selector_treats_empty_expect_key_as_open() {
         let runner = Arc::new(FakeCommandRunner::new());
         runner.push_capture(Ok(CommandOutput {
@@ -565,6 +601,7 @@ mod tests {
             folders: "alt-f".to_owned(),
             projects: "alt-p".to_owned(),
             delete_session: "alt-x".to_owned(),
+            save_project: "alt-y".to_owned(),
         };
 
         let _ = select_with_runner(
@@ -580,7 +617,7 @@ mod tests {
         .expect("selection should succeed");
 
         let recorded = runner.recorded();
-        assert!(recorded[0].args.contains(&"alt-x".to_owned()));
+        assert!(recorded[0].args.contains(&"alt-x,alt-y".to_owned()));
         assert!(
             recorded[0]
                 .args

@@ -115,6 +115,11 @@
           "type": "string",
           "default": "ctrl-x",
           "description": "Main picker shortcut that closes the selected non-current tmux session."
+        },
+        "save_project": {
+          "type": "string",
+          "default": "ctrl-y",
+          "description": "Main picker shortcut that saves the selected tmux session as a project."
         }
       }
     },

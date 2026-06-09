@@ -64,6 +64,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
+save_project = "ctrl-y"
 
 [settings.picker.preview]
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
@@ -155,6 +156,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
+save_project = "ctrl-y"
 ```
 
 Fields:
@@ -179,6 +181,10 @@ Fields:
   - type: string
   - default: `ctrl-x`
   - closes the selected non-current tmux session and keeps the picker open
+- `save_project`
+  - type: string
+  - default: `ctrl-y`
+  - saves the selected tmux session as a project and keeps the picker open
 
 Rules:
 
@@ -568,6 +574,7 @@ Current behavior:
 - `Ctrl-P` limits the main picker to projects and keeps fuzzy search active
 - `Ctrl-F` limits the main picker to folders and keeps fuzzy search active
 - `Ctrl-X` closes the selected non-current tmux session and keeps the picker open
+- `Ctrl-Y` saves the selected tmux session as a project and keeps the picker open
 - these keybinds are configurable through `[settings.picker.bindings]`
 
 ## Related Docs
