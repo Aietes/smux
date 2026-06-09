@@ -48,7 +48,7 @@
             "$out/bin/smux" completions zsh --dir "$tmpdir/completions"
             "$out/bin/smux" man --dir "$tmpdir/man"
             installShellCompletion --zsh "$tmpdir/completions/_smux"
-            installManPage "$tmpdir"/man/*.1
+            installManPage "$tmpdir"/man/*.1 "$tmpdir"/man/*.5
           '';
 
           meta = with pkgs.lib; {
