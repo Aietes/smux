@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-06-09
+
 ### Added
 
 - bounded folder search in `smux select`, defaulting to the home directory
