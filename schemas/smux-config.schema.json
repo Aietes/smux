@@ -40,6 +40,38 @@
         },
         "picker": {
           "$ref": "#/$defs/picker"
+        },
+        "folder_search": {
+          "$ref": "#/$defs/folder_search"
+        }
+      }
+    },
+    "folder_search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [
+            "~"
+          ],
+          "description": "Directory roots scanned by smux select in addition to zoxide."
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16,
+          "default": 3,
+          "description": "Maximum folder-search depth below each root."
+        },
+        "include_hidden": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether folder search descends into hidden directories."
         }
       }
     },

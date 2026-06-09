@@ -42,7 +42,7 @@ Runtime dependencies:
 - required: `tmux`, `fzf`
 - optional but recommended: `zoxide`
 
-If `zoxide` is unavailable, `smux select` still works with tmux sessions and saved projects.
+If `zoxide` is unavailable, `smux select` still works with tmux sessions, saved projects, and folder search.
 
 ## Quick Start
 
@@ -181,6 +181,7 @@ The unified picker combines:
 - tmux sessions
 - saved projects
 - `zoxide` directories
+- directories found under `[settings.folder_search]` roots
 
 The template picker is separate and appears only when `--choose-template` is used.
 
@@ -267,6 +268,11 @@ delete_session = "ctrl-x"
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
 # folders = "eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\""
 # projects = "bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\""
+
+[settings.folder_search]
+# roots = ["~"]
+# max_depth = 3
+# include_hidden = false
 
 [templates.default]
 startup_window = "main"

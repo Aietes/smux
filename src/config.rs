@@ -7,6 +7,8 @@ use serde::Deserialize;
 
 use crate::util;
 
+const MAX_FOLDER_SEARCH_DEPTH: usize = 16;
+
 const STARTER_CONFIG_BODY: &str = r#"[settings]
 default_template = "default"
 icons = "auto"
@@ -28,6 +30,11 @@ delete_session = "ctrl-x"
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
 # folders = "eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\""
 # projects = "bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\""
+
+[settings.folder_search]
+# roots = ["~"]
+# max_depth = 3
+# include_hidden = false
 
 [templates.default]
 startup_window = "main"
@@ -70,6 +77,8 @@ pub struct Settings {
     pub icon_colors: IconColors,
     #[serde(default)]
     pub picker: PickerSettings,
+    #[serde(default)]
+    pub folder_search: FolderSearchSettings,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Default, Eq, PartialEq)]
@@ -141,6 +150,35 @@ pub struct PickerPreviewSettings {
     pub folders: Option<String>,
     pub sessions: Option<String>,
     pub projects: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct FolderSearchSettings {
+    #[serde(default = "default_folder_search_roots")]
+    pub roots: Vec<String>,
+    #[serde(default = "default_folder_search_max_depth")]
+    pub max_depth: usize,
+    #[serde(default)]
+    pub include_hidden: bool,
+}
+
+impl Default for FolderSearchSettings {
+    fn default() -> Self {
+        Self {
+            roots: default_folder_search_roots(),
+            max_depth: default_folder_search_max_depth(),
+            include_hidden: false,
+        }
+    }
+}
+
+fn default_folder_search_roots() -> Vec<String> {
+    vec!["~".to_owned()]
+}
+
+fn default_folder_search_max_depth() -> usize {
+    3
 }
 
 impl Default for PickerBindings {
@@ -395,6 +433,7 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
 
 pub fn validate_config(config: &Config) -> Result<()> {
     validate_picker_bindings(&config.settings.picker.bindings)?;
+    validate_folder_search(&config.settings.folder_search)?;
 
     for (template_name, template) in &config.templates {
         validate_template(template_name, template)?;
@@ -404,6 +443,23 @@ pub fn validate_config(config: &Config) -> Result<()> {
         && !config.templates.contains_key(default_template)
     {
         bail!("default_template \"{default_template}\" was not found");
+    }
+
+    Ok(())
+}
+
+fn validate_folder_search(settings: &FolderSearchSettings) -> Result<()> {
+    if settings.max_depth > MAX_FOLDER_SEARCH_DEPTH {
+        bail!(
+            "folder_search.max_depth must be at most {}",
+            MAX_FOLDER_SEARCH_DEPTH
+        );
+    }
+
+    for root in &settings.roots {
+        if root.trim().is_empty() {
+            bail!("folder_search.roots must not contain empty paths");
+        }
     }
 
     Ok(())
@@ -699,6 +755,10 @@ mod tests {
         assert_eq!(config.settings.icons, IconMode::Auto);
         assert_eq!(config.settings.icon_colors, IconColors::default());
         assert_eq!(config.settings.picker.bindings, PickerBindings::default());
+        assert_eq!(
+            config.settings.folder_search,
+            super::FolderSearchSettings::default()
+        );
         Ok(())
     }
 
@@ -780,6 +840,59 @@ delete_session = "ctrl-x"
                 .to_string()
                 .contains("duplicates another picker binding")
         );
+    }
+
+    #[test]
+    fn defaults_folder_search_to_home_root() -> Result<()> {
+        let config: Config = toml::from_str("[settings]\n")?;
+        assert_eq!(config.settings.folder_search.roots, vec!["~"]);
+        assert_eq!(config.settings.folder_search.max_depth, 3);
+        assert!(!config.settings.folder_search.include_hidden);
+        Ok(())
+    }
+
+    #[test]
+    fn parses_custom_folder_search_settings() -> Result<()> {
+        let input = r#"
+[settings.folder_search]
+roots = ["~/Development", "~/code"]
+max_depth = 5
+include_hidden = true
+"#;
+
+        let config: Config = toml::from_str(input)?;
+        validate_config(&config)?;
+        assert_eq!(
+            config.settings.folder_search.roots,
+            vec!["~/Development", "~/code"]
+        );
+        assert_eq!(config.settings.folder_search.max_depth, 5);
+        assert!(config.settings.folder_search.include_hidden);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_empty_folder_search_roots() {
+        let input = r#"
+[settings.folder_search]
+roots = [""]
+"#;
+
+        let config: Config = toml::from_str(input).expect("config should parse");
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("must not contain empty paths"));
+    }
+
+    #[test]
+    fn rejects_unbounded_folder_search_depth() {
+        let input = r#"
+[settings.folder_search]
+max_depth = 17
+"#;
+
+        let config: Config = toml::from_str(input).expect("config should parse");
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("max_depth"));
     }
 
     #[test]

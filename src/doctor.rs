@@ -87,6 +87,7 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
                 loaded.config.settings.icons,
                 loaded.config.settings.icon_colors,
             );
+            print_folder_search_status(&loaded.config.settings.folder_search);
         }
         Ok(None) => {
             print_status_line("config", Status::Missing, None::<&str>);
@@ -101,6 +102,7 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
                 print_schema_fix_summary(summary);
             }
             print_icon_status(IconMode::Auto, Default::default());
+            print_folder_search_status(&Default::default());
         }
         Err(error) => {
             has_error = true;
@@ -111,6 +113,7 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
                 print_schema_fix_summary(summary);
             }
             print_value_line("icons", "unknown (config error)");
+            print_value_line("folder_search", "unknown (config error)");
         }
     }
 
@@ -157,6 +160,34 @@ impl Status {
             Self::Error => ANSI_RED,
         }
     }
+}
+
+fn print_folder_search_status(settings: &config::FolderSearchSettings) {
+    let missing = settings
+        .roots
+        .iter()
+        .filter(|root| {
+            let expanded = util::expand_tilde_path(Path::new(root));
+            !expanded.exists()
+        })
+        .count();
+    let state = if missing == 0 {
+        Status::Ok
+    } else {
+        Status::Missing
+    };
+
+    print_status_line(
+        "folder_search",
+        state,
+        Some(format!(
+            "roots={} missing={} max_depth={} include_hidden={}",
+            settings.roots.len(),
+            missing,
+            settings.max_depth,
+            settings.include_hidden
+        )),
+    );
 }
 
 fn availability_state(available: bool) -> Status {

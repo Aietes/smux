@@ -3,6 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod docs;
 pub mod doctor;
+pub mod folder_search;
 pub mod fzf;
 pub mod process;
 pub mod project_export;

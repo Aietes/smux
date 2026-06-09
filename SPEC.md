@@ -17,7 +17,7 @@ It combines:
 
 Version 1 exists to solve four core problems well:
 
-1. Present a unified picker of existing tmux sessions and recent directories.
+1. Present a unified picker of existing tmux sessions, recent directories, and bounded folder-search results.
 2. Reuse an existing session when one already matches the selected directory-derived session name.
 3. Create a new session from a directory when no session exists.
 4. Apply a small, validated TOML template that defines windows, panes, layouts, and startup commands.
@@ -62,9 +62,10 @@ smux select
 
 1. query tmux for existing sessions
 2. query `zoxide` for recent directories
-3. merge both into one picker list
-4. run `fzf`
-5. perform one of the following actions:
+3. search configured folder roots for additional directories
+4. merge the sources into one picker list
+5. run `fzf`
+6. perform one of the following actions:
    - selected session: switch or attach to it
    - selected directory: create or reuse a session for it
    - start tmux if not running yet
@@ -533,6 +534,8 @@ Inside/outside tmux behavior:
 
 - `session`
 - `directory`
+
+Directory entries come from zoxide plus bounded folder search rooted at `[settings.folder_search].roots`.
 
 Each picker entry must contain:
 

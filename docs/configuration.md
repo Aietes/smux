@@ -70,6 +70,11 @@ delete_session = "ctrl-x"
 # folders = "eza --tree --level=2 --color=always --icons=always \"$SMUX_PREVIEW_PATH\""
 # projects = "bat --style=plain --color=always --language=toml \"$SMUX_PREVIEW_FILE\""
 
+[settings.folder_search]
+# roots = ["~"]
+# max_depth = 3
+# include_hidden = false
+
 [templates.default]
 startup_window = "main"
 windows = [{ name = "main" }]
@@ -213,6 +218,33 @@ Defaults:
 - sessions: built-in tmux window and pane summary
 - folders: `eza` tree view when available, otherwise `ls -la`
 - projects: `bat` with TOML syntax highlighting when available, otherwise `sed -n '1,200p'`
+
+### `[settings.folder_search]`
+
+```toml
+[settings.folder_search]
+roots = ["~"]
+max_depth = 3
+include_hidden = false
+```
+
+Fields:
+
+- `roots`
+  - type: array of strings
+  - default: `["~"]`
+  - directory roots scanned by `smux select` in addition to zoxide
+- `max_depth`
+  - type: integer
+  - default: `3`
+  - maximum directory depth below each root
+  - must be at most `16`
+- `include_hidden`
+  - type: boolean
+  - default: `false`
+  - controls whether folder search descends into hidden directories
+
+Folder search is bounded and skips common heavyweight directories such as `Library`, `node_modules`, and `target`.
 
 ## `[templates.<name>]`
 
@@ -522,6 +554,7 @@ The unified picker combines:
 - tmux sessions
 - saved projects
 - zoxide directories
+- directories found by configured folder search
 
 The template picker is separate and appears only when `--choose-template` is used.
 

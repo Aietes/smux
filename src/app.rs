@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
@@ -6,6 +7,7 @@ use crate::cli::{Cli, Commands};
 use crate::config;
 use crate::docs;
 use crate::doctor;
+use crate::folder_search;
 use crate::fzf;
 use crate::project_export;
 use crate::session;
@@ -243,17 +245,37 @@ fn select_entries(
 
     let mut zoxide_available = true;
     let mut directory_count = 0;
+    let mut directory_keys = HashSet::new();
 
     match zoxide::list_directories() {
         Ok(directories) => {
-            directory_count = directories.len();
             for directory in directories {
-                entries.push(fzf::Entry::directory(display_style, directory));
+                if insert_directory_key(&mut directory_keys, &directory) {
+                    directory_count += 1;
+                    entries.push(fzf::Entry::directory(display_style, directory));
+                }
             }
         }
         Err(error) => {
             zoxide_available = false;
             eprintln!("warning: {error:#}");
+        }
+    }
+
+    let folder_search_settings = loaded
+        .map(|loaded| loaded.config.settings.folder_search.clone())
+        .unwrap_or_default();
+    let result = folder_search::list_directories(&folder_search_settings);
+    for warning in result.warnings {
+        eprintln!(
+            "warning: folder search {}: {}",
+            warning.root, warning.message
+        );
+    }
+    for directory in result.directories {
+        if insert_directory_key(&mut directory_keys, &directory) {
+            directory_count += 1;
+            entries.push(fzf::Entry::directory(display_style, directory));
         }
     }
 
@@ -265,6 +287,12 @@ fn select_entries(
     }
 
     Ok(entries)
+}
+
+fn insert_directory_key(seen: &mut HashSet<PathBuf>, directory: &str) -> bool {
+    let key = util::expand_and_normalize_path(Path::new(directory))
+        .unwrap_or_else(|_| PathBuf::from(directory));
+    seen.insert(key)
 }
 
 fn choose_template_name(
@@ -303,10 +331,10 @@ fn empty_select_message(
 ) -> String {
     match (session_count, directory_count, zoxide_available) {
         (0, 0, true) => {
-            "nothing to select: tmux has no sessions and zoxide has no indexed directories; run `smux connect <path>` or add directories to zoxide first".to_owned()
+            "nothing to select: tmux has no sessions, zoxide has no indexed directories, and folder search found no directories; run `smux connect <path>` or adjust `[settings.folder_search]`".to_owned()
         }
         (0, 0, false) => {
-            "nothing to select: tmux has no sessions and zoxide is unavailable; run `smux connect <path>` or install zoxide".to_owned()
+            "nothing to select: tmux has no sessions, zoxide is unavailable, and folder search found no directories; run `smux connect <path>` or adjust `[settings.folder_search]`".to_owned()
         }
         _ => "nothing to select".to_owned(),
     }
@@ -342,10 +370,11 @@ mod tests {
     fn empty_select_message_is_actionable_with_empty_sources() {
         assert!(empty_select_message(0, 0, true).contains("smux connect <path>"));
         assert!(empty_select_message(0, 0, true).contains("zoxide"));
+        assert!(empty_select_message(0, 0, true).contains("folder search"));
     }
 
     #[test]
     fn empty_select_message_mentions_missing_zoxide() {
-        assert!(empty_select_message(0, 0, false).contains("install zoxide"));
+        assert!(empty_select_message(0, 0, false).contains("zoxide is unavailable"));
     }
 }
