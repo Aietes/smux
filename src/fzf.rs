@@ -325,7 +325,7 @@ fn render_picker_hints(bindings: &PickerBindings) -> String {
         hint_segment(&pretty_key(&bindings.folders), "dirs"),
         hint_segment(&pretty_key(&bindings.projects), "proj"),
     ]);
-    format!("{actions}{HINT_DIM}  │  {HINT_RESET}{filters}")
+    format!("{actions}{HINT_DIM}  │  filter: {HINT_RESET}{filters}")
 }
 
 /// Build the toggle-header key binding. When a state-file path is given, the
@@ -644,7 +644,7 @@ mod tests {
         assert!(
             recorded[0]
                 .args
-                .contains(&"ctrl-x,ctrl-y,ctrl-r".to_owned())
+                .contains(&"ctrl-x,ctrl-w,ctrl-r".to_owned())
         );
         // The hint bar is restyled (ANSI-decorated), so assert on stable
         // visible fragments rather than the whole literal line.
@@ -657,6 +657,8 @@ mod tests {
                 .iter()
                 .any(|arg| arg.contains("^p") && arg.contains(" proj"))
         );
+        // The scope-filter group is labelled to distinguish it from actions.
+        assert!(recorded[0].args.iter().any(|arg| arg.contains("filter:")));
         // `?` toggles the hint bar's visibility.
         assert!(recorded[0].args.iter().any(|arg| arg == "?:toggle-header"));
         assert!(
@@ -790,7 +792,7 @@ mod tests {
                 success: true,
                 code: Some(0),
             },
-            stdout: b"ctrl-y\nsession\tdemo\tsession  demo\n".to_vec(),
+            stdout: b"ctrl-w\nsession\tdemo\tsession  demo\n".to_vec(),
             stderr: Vec::new(),
         }));
 

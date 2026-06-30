@@ -24,7 +24,7 @@ impl Cli {
 pub enum Commands {
     /// Open the unified tmux session, project, and directory selector.
     #[command(
-        long_about = "Open the unified picker for tmux sessions, saved projects, zoxide directories, and configured folder-search results.\n\nEnter opens the selected item. Ctrl-X deletes the selected non-current session or project file. Ctrl-Y saves the selected tmux session as a project."
+        long_about = "Open the unified picker for tmux sessions, saved projects, zoxide directories, and configured folder-search results.\n\nEnter opens the selected item. Ctrl-X deletes the selected non-current session or project file. Ctrl-W saves the selected tmux session as a project. Ctrl-R renames the selected session. Press ? to toggle the keyboard-shortcut hints."
     )]
     Select {
         #[arg(long)]
