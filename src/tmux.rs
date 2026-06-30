@@ -32,6 +32,13 @@ pub struct PaneSnapshot {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+struct SessionListing {
+    activity: i64,
+    attached: bool,
+    name: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct WindowRecord {
     id: String,
     name: String,
@@ -72,12 +79,32 @@ impl Tmux {
     }
 
     pub fn list_sessions(&self) -> Result<Vec<String>> {
+        Ok(self
+            .list_sessions_detailed()?
+            .into_iter()
+            .map(|session| session.name)
+            .collect())
+    }
+
+    /// List detached sessions (no attached client), most recently active first.
+    pub fn list_detached_sessions(&self) -> Result<Vec<String>> {
+        Ok(self
+            .list_sessions_detailed()?
+            .into_iter()
+            .filter(|session| !session.attached)
+            .map(|session| session.name)
+            .collect())
+    }
+
+    /// List sessions ordered by most recent activity first, carrying the
+    /// attachment state used to distinguish detached sessions.
+    fn list_sessions_detailed(&self) -> Result<Vec<SessionListing>> {
         let output = self.runner.run_capture(
             "tmux",
             &[
                 "list-sessions".to_owned(),
                 "-F".to_owned(),
-                "#{session_name}".to_owned(),
+                "#{session_activity}\t#{session_attached}\t#{session_name}".to_owned(),
             ],
         );
 
@@ -85,12 +112,13 @@ impl Tmux {
             Ok(output) if output.status.success => {
                 let stdout =
                     String::from_utf8(output.stdout).context("tmux output was not utf-8")?;
-                Ok(stdout
+                let mut sessions = stdout
                     .lines()
-                    .map(str::trim)
-                    .filter(|line| !line.is_empty())
-                    .map(ToOwned::to_owned)
-                    .collect())
+                    .filter_map(parse_session_listing)
+                    .collect::<Vec<_>>();
+                // Most recently active first; ties keep tmux's order.
+                sessions.sort_by_key(|session| std::cmp::Reverse(session.activity));
+                Ok(sessions)
             }
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -224,6 +252,29 @@ impl Tmux {
     pub fn kill_session(&self, session: &str) -> Result<()> {
         self.run_tmux(["kill-session", "-t", session])
             .context("failed to execute tmux kill-session")
+    }
+
+    pub fn rename_session(&self, session: &str, new_name: &str) -> Result<()> {
+        self.run_tmux(["rename-session", "-t", session, new_name])
+            .context("failed to execute tmux rename-session")
+    }
+
+    /// Switch to (or attach) the most recently used session other than the
+    /// current one. Inside tmux this is tmux's own "last" client target; outside
+    /// tmux it is the most recently active session.
+    pub fn switch_to_last(&self) -> Result<()> {
+        if util::inside_tmux() {
+            return self
+                .run_tmux(["switch-client", "-l"])
+                .context("failed to execute tmux switch-client -l");
+        }
+
+        let session = self
+            .list_sessions()?
+            .into_iter()
+            .next()
+            .context("no tmux sessions to switch to")?;
+        self.switch_or_attach(&session)
     }
 
     pub fn capture_session(&self, session: &str) -> Result<SessionSnapshot> {
@@ -678,6 +729,23 @@ fn parse_pane_record(line: &str) -> Result<PaneRecord> {
     })
 }
 
+/// Parse a `#{session_activity}\t#{session_attached}\t#{session_name}` line.
+/// Lines without a name are dropped; unparsable activity/attached default to 0.
+fn parse_session_listing(line: &str) -> Option<SessionListing> {
+    let mut parts = line.splitn(3, '\t');
+    let activity = parts.next()?.trim().parse().unwrap_or(0);
+    let attached = parts.next()?.trim().parse::<u32>().unwrap_or(0) > 0;
+    let name = parts.next()?.trim();
+    if name.is_empty() {
+        return None;
+    }
+    Some(SessionListing {
+        activity,
+        attached,
+        name: name.to_owned(),
+    })
+}
+
 /// Build a failure message for a tmux subcommand, falling back to the exit code
 /// when tmux produced no stderr (so the error is never an empty string).
 fn tmux_failure_message(subcommand: &str, output: &CommandOutput) -> String {
@@ -848,6 +916,34 @@ mod tests {
         assert_eq!(
             tmux.list_sessions().expect("query should succeed"),
             Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn list_sessions_orders_by_most_recent_activity() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(
+            b"100\t1\talpha\n300\t0\tbeta\n200\t0\tgamma\n".to_vec(),
+        ));
+
+        let tmux = Tmux::with_runner(runner);
+        assert_eq!(
+            tmux.list_sessions().expect("query should succeed"),
+            vec!["beta", "gamma", "alpha"]
+        );
+    }
+
+    #[test]
+    fn list_detached_sessions_excludes_attached() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(
+            b"100\t1\talpha\n300\t0\tbeta\n200\t0\tgamma\n".to_vec(),
+        ));
+
+        let tmux = Tmux::with_runner(runner);
+        assert_eq!(
+            tmux.list_detached_sessions().expect("query should succeed"),
+            vec!["beta", "gamma"]
         );
     }
 

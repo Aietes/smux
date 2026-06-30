@@ -49,6 +49,13 @@ pub enum Commands {
     },
     /// Switch to or attach an existing tmux session.
     Switch { session: String },
+    /// Switch to the most recently used tmux session.
+    Last,
+    /// Kill all detached tmux sessions.
+    #[command(
+        long_about = "Kill every tmux session that has no attached client. The session you are currently attached to is preserved; outside tmux, all sessions are detached and will be killed."
+    )]
+    Prune,
     /// Print current tmux session names.
     ListSessions,
     /// Print configured template names.
@@ -72,8 +79,12 @@ pub enum Commands {
         config: Option<PathBuf>,
     },
     /// Capture a tmux session as a project file.
+    #[command(
+        long_about = "Capture a tmux session's windows, panes, and layout as a project file.\n\nNAME defaults to the source session's name when omitted. Pass --force to overwrite (update) an existing project file."
+    )]
     SaveProject {
-        name: String,
+        /// Project name. Defaults to the source session's name.
+        name: Option<String>,
         #[arg(long)]
         session: Option<String>,
         #[arg(long)]

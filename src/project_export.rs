@@ -42,15 +42,17 @@ pub fn capture_project(
 
 pub fn save_project(
     tmux: &Tmux,
-    name: &str,
+    name: Option<&str>,
     session: Option<&str>,
     path_override: Option<&Path>,
     stdout: bool,
     force: bool,
     config_path: Option<&Path>,
 ) -> Result<Option<PathBuf>> {
-    let project_name = util::validated_project_name(name)?;
     let session = resolve_source_session(tmux, session)?;
+    // Default the project name to the source session's name so a bare
+    // `smux save-project` captures the session you are in.
+    let project_name = util::validated_project_name(name.unwrap_or(session.as_str()))?;
     let project = capture_project(tmux, &session, path_override)?;
     let toml = project.to_toml();
 
@@ -59,19 +61,7 @@ pub fn save_project(
         return Ok(None);
     }
 
-    let config_path = match config_path {
-        Some(path) => path.to_path_buf(),
-        None => config::default_config_path()?,
-    };
-    let project_dir = config::projects_dir_for_config_path(&config_path);
-    fs::create_dir_all(&project_dir).with_context(|| {
-        format!(
-            "failed to create project directory {}",
-            project_dir.display()
-        )
-    })?;
-
-    let destination = project_dir.join(format!("{project_name}.toml"));
+    let destination = project_destination(&project_name, config_path)?;
     if destination.exists() && !force {
         bail!(
             "project already exists at {}; pass --force to overwrite",
@@ -79,10 +69,35 @@ pub fn save_project(
         );
     }
 
+    if let Some(project_dir) = destination.parent() {
+        fs::create_dir_all(project_dir).with_context(|| {
+            format!(
+                "failed to create project directory {}",
+                project_dir.display()
+            )
+        })?;
+    }
+
     fs::write(&destination, toml)
         .with_context(|| format!("failed to write project {}", destination.display()))?;
 
     Ok(Some(destination))
+}
+
+/// Resolve where a project file with the given (already validated) name lives.
+fn project_destination(project_name: &str, config_path: Option<&Path>) -> Result<PathBuf> {
+    let config_path = match config_path {
+        Some(path) => path.to_path_buf(),
+        None => config::default_config_path()?,
+    };
+    let project_dir = config::projects_dir_for_config_path(&config_path);
+    Ok(project_dir.join(format!("{project_name}.toml")))
+}
+
+/// Whether a project file already exists for the given name.
+pub fn project_exists(name: &str, config_path: Option<&Path>) -> Result<bool> {
+    let project_name = util::validated_project_name(name)?;
+    Ok(project_destination(&project_name, config_path)?.exists())
 }
 
 fn resolve_source_session(tmux: &Tmux, session: Option<&str>) -> Result<String> {

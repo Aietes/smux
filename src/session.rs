@@ -24,7 +24,12 @@ pub fn connect_path(
         (None, _) => None,
     };
 
-    let template = resolve_template(loaded, override_template, resolved_project.as_ref())?;
+    let template = resolve_template(
+        loaded,
+        override_template,
+        resolved_project.as_ref(),
+        &normalized,
+    )?;
 
     let session_name = match override_name {
         Some(name) => util::validated_session_name(name)?,
@@ -71,6 +76,7 @@ fn resolve_template(
     loaded: Option<&LoadedConfig>,
     override_template: Option<&str>,
     project: Option<&crate::config::ResolvedProject<'_>>,
+    path: &Path,
 ) -> Result<Template> {
     if let Some(template_name) = override_template {
         if template_name == BUILTIN_TEMPLATE_NAME {
@@ -96,7 +102,38 @@ fn resolve_template(
         return load_template(&loaded.config, template_name);
     }
 
+    // No explicit, project, or default template: if the directory looks like a
+    // known project type and a same-named template exists, use it.
+    if let Some(loaded) = loaded
+        && let Some(template_name) = detect_template_name(&loaded.config, path)
+    {
+        return load_template(&loaded.config, &template_name);
+    }
+
     Ok(templates::fallback_template())
+}
+
+/// Detect a template name from marker files in `path`, returning it only when a
+/// template with that conventional name actually exists in the config.
+fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<String> {
+    const MARKERS: &[(&str, &str)] = &[
+        ("Cargo.toml", "rust"),
+        ("package.json", "node"),
+        ("go.mod", "go"),
+        ("pyproject.toml", "python"),
+        ("requirements.txt", "python"),
+        ("Gemfile", "ruby"),
+        ("pom.xml", "java"),
+        ("build.gradle", "java"),
+    ];
+
+    MARKERS.iter().find_map(|(marker, template)| {
+        if config.templates.contains_key(*template) && path.join(marker).exists() {
+            Some((*template).to_owned())
+        } else {
+            None
+        }
+    })
 }
 
 fn load_template(config: &crate::config::Config, template_name: &str) -> Result<Template> {
@@ -119,6 +156,33 @@ pub fn kill_existing(tmux: &Tmux, session: &str) -> Result<()> {
     tmux.kill_session(&session)
 }
 
+pub fn rename_existing(tmux: &Tmux, session: &str, new_name: &str) -> Result<String> {
+    let session = util::validated_session_name(session)?;
+    tmux.ensure_session_exists(&session)?;
+    let new_name = util::validated_session_name(new_name)?;
+    if new_name == session {
+        return Ok(new_name);
+    }
+    if tmux.has_session(&new_name)? {
+        anyhow::bail!("a tmux session named {new_name} already exists");
+    }
+    tmux.rename_session(&session, &new_name)?;
+    Ok(new_name)
+}
+
+pub fn switch_last(tmux: &Tmux) -> Result<()> {
+    tmux.switch_to_last()
+}
+
+/// Kill every detached session, returning the names that were killed.
+pub fn prune_detached(tmux: &Tmux) -> Result<Vec<String>> {
+    let detached = tmux.list_detached_sessions()?;
+    for session in &detached {
+        tmux.kill_session(session)?;
+    }
+    Ok(detached)
+}
+
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
@@ -129,13 +193,55 @@ mod tests {
     use crate::templates;
     use crate::util;
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn sanitizes_session_names() {
         assert_eq!(util::sanitize_session_name("my app"), "my_app");
         assert_eq!(util::sanitize_session_name("api:v1"), "api_v1");
         assert_eq!(util::sanitize_session_name("foo.bar"), "foo_bar");
+    }
+
+    #[test]
+    fn detects_template_from_marker_file_only_when_template_exists() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(tempdir.path().join("Cargo.toml"), "")?;
+
+        let rust_template = Template {
+            root: None,
+            startup_window: None,
+            startup_pane: None,
+            windows: vec![Window {
+                name: "main".to_owned(),
+                cwd: None,
+                pre_command: None,
+                command: None,
+                layout: None,
+                synchronize: false,
+                panes: None,
+            }],
+        };
+
+        let with_template = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([("rust".to_owned(), rust_template)]),
+        };
+        assert_eq!(
+            super::detect_template_name(&with_template, tempdir.path()).as_deref(),
+            Some("rust")
+        );
+
+        // A marker with no correspondingly named template detects nothing.
+        let without_template = Config {
+            settings: Settings::default(),
+            templates: HashMap::new(),
+        };
+        assert!(super::detect_template_name(&without_template, tempdir.path()).is_none());
+
+        // No marker file detects nothing.
+        let empty_dir = tempfile::tempdir()?;
+        assert!(super::detect_template_name(&with_template, empty_dir.path()).is_none());
+        Ok(())
     }
 
     #[test]
@@ -213,14 +319,15 @@ mod tests {
             invalid_projects: Vec::new(),
         };
 
-        let error = super::resolve_template(Some(&loaded), Some("missing"), None)
-            .expect_err("missing template should fail");
+        let error =
+            super::resolve_template(Some(&loaded), Some("missing"), None, Path::new("/tmp/demo"))
+                .expect_err("missing template should fail");
         assert!(error.to_string().contains("unknown template"));
     }
 
     #[test]
     fn falls_back_to_builtin_template_without_config() -> Result<()> {
-        let template = super::resolve_template(None, None, None)?;
+        let template = super::resolve_template(None, None, None, Path::new("/tmp/demo"))?;
         assert_eq!(template.windows.len(), 1);
         assert_eq!(
             template.windows[0].name,
@@ -322,7 +429,12 @@ mod tests {
             normalized_path: PathBuf::from("/tmp/demo"),
         };
 
-        let template = super::resolve_template(Some(&loaded), Some("explicit"), Some(&project))?;
+        let template = super::resolve_template(
+            Some(&loaded),
+            Some("explicit"),
+            Some(&project),
+            Path::new("/tmp/demo"),
+        )?;
         assert_eq!(template.windows[0].name, "explicit-window");
         Ok(())
     }
@@ -363,7 +475,7 @@ mod tests {
             invalid_projects: Vec::new(),
         };
 
-        let template = super::resolve_template(Some(&loaded), None, None)?;
+        let template = super::resolve_template(Some(&loaded), None, None, Path::new("/tmp/demo"))?;
         assert_eq!(template.windows[0].name, "default-window");
         Ok(())
     }

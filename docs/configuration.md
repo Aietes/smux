@@ -68,6 +68,7 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "ctrl-y"
+rename_session = "ctrl-r"
 toggle_hints = "?"
 
 [settings.picker.preview]
@@ -178,6 +179,7 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "ctrl-y"
+rename_session = "ctrl-r"
 toggle_hints = "?"
 ```
 
@@ -208,6 +210,12 @@ Fields:
   - type: string
   - default: `ctrl-y`
   - saves the selected tmux session as a project and keeps the picker open
+  - if a project with that name already exists, it is updated in place
+- `rename_session`
+  - type: string
+  - default: `ctrl-r`
+  - prompts for a new name and renames the selected tmux session
+  - keeps the picker open
 - `toggle_hints`
   - type: string
   - default: `?`

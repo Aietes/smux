@@ -53,6 +53,18 @@ pub fn run(cli: Cli) -> Result<()> {
             )
         }
         Commands::Switch { session } => session::switch_existing(&tmux, &session),
+        Commands::Last => session::switch_last(&tmux),
+        Commands::Prune => {
+            let pruned = session::prune_detached(&tmux)?;
+            if pruned.is_empty() {
+                eprintln!("no detached sessions to prune");
+            } else {
+                for session in &pruned {
+                    println!("killed {session}");
+                }
+            }
+            Ok(())
+        }
         Commands::ListSessions => {
             for session in tmux.list_sessions()? {
                 println!("{session}");
@@ -71,7 +83,7 @@ pub fn run(cli: Cli) -> Result<()> {
         } => {
             if let Some(path) = project_export::save_project(
                 &tmux,
-                &name,
+                name.as_deref(),
                 session.as_deref(),
                 path.as_deref(),
                 stdout,
@@ -137,6 +149,14 @@ fn run_select(
         session::ProjectDetection::Enabled
     };
 
+    let initial_show_hints = loaded
+        .as_ref()
+        .map(|loaded| loaded.config.settings.picker.show_hints)
+        .unwrap_or(true);
+    // The picker re-launches after in-loop actions; this file lets the runtime
+    // hint toggle persist across those relaunches within one `smux select`.
+    let hint_state = fzf::HintState::new(initial_show_hints)?;
+
     loop {
         let config = loaded.as_ref().map(|loaded| &loaded.config);
         let display_style = DisplayStyle::from_config(config);
@@ -146,9 +166,6 @@ fn run_select(
         let picker_preview = config
             .map(|config| config.settings.picker.preview.clone())
             .unwrap_or_default();
-        let show_hints = config
-            .map(|config| config.settings.picker.show_hints)
-            .unwrap_or(true);
         let current_session = tmux.current_session().ok().flatten();
         let entries = select_entries(
             tmux,
@@ -157,7 +174,7 @@ fn run_select(
             current_session.as_deref(),
         )?;
 
-        let Some(selection) = fzf::select(entries, &picker_bindings, &picker_preview, show_hints)?
+        let Some(selection) = fzf::select(entries, &picker_bindings, &picker_preview, &hint_state)?
         else {
             return Ok(());
         };
@@ -172,6 +189,11 @@ fn run_select(
                 }
                 session::kill_existing(tmux, &selection.entry.value)?;
             }
+            (fzf::SelectAction::Rename, fzf::EntryKind::Session) => {
+                if let Some(new_name) = rename_session_from_picker(tmux, &selection.entry.value)? {
+                    eprintln!("renamed session to {new_name}");
+                }
+            }
             (fzf::SelectAction::Delete, fzf::EntryKind::Project)
             | (fzf::SelectAction::Delete, fzf::EntryKind::InvalidProject) => {
                 match delete_project_from_picker(loaded.as_ref(), &selection.entry.value) {
@@ -183,9 +205,12 @@ fn run_select(
                 }
             }
             (fzf::SelectAction::SaveProject, fzf::EntryKind::Session) => {
+                let existed = project_export::project_exists(&selection.entry.value, config_path)
+                    .unwrap_or(false);
                 match save_project_from_picker(tmux, &selection.entry.value, config_path) {
                     Ok(Some(path)) => {
-                        eprintln!("saved project {}", path.display());
+                        let verb = if existed { "updated" } else { "saved" };
+                        eprintln!("{verb} project {}", path.display());
                         loaded = config::load_optional(config_path)?;
                     }
                     Ok(None) => {}
@@ -220,7 +245,42 @@ fn run_select(
             (fzf::SelectAction::Open, fzf::EntryKind::InvalidProject) => continue,
             (fzf::SelectAction::Delete, _) => continue,
             (fzf::SelectAction::SaveProject, _) => continue,
+            (fzf::SelectAction::Rename, _) => continue,
         }
+    }
+}
+
+fn rename_session_from_picker(tmux: &Tmux, session_name: &str) -> Result<Option<String>> {
+    let Some(input) = prompt_line(&format!("rename \"{session_name}\" to: "))? else {
+        return Ok(None);
+    };
+    match session::rename_existing(tmux, session_name, &input) {
+        Ok(new_name) => Ok(Some(new_name)),
+        Err(error) => {
+            eprintln!("warning: {error:#}");
+            Ok(None)
+        }
+    }
+}
+
+/// Prompt on the controlling terminal and read a single trimmed line. Returns
+/// `None` when the user submits an empty line or input reaches EOF.
+fn prompt_line(prompt: &str) -> Result<Option<String>> {
+    use std::io::{Write, stderr, stdin};
+
+    let mut err = stderr();
+    write!(err, "{prompt}").ok();
+    err.flush().ok();
+
+    let mut line = String::new();
+    if stdin().read_line(&mut line)? == 0 {
+        return Ok(None);
+    }
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(trimmed.to_owned()))
     }
 }
 
@@ -239,11 +299,13 @@ fn save_project_from_picker(
 ) -> Result<Option<PathBuf>> {
     project_export::save_project(
         tmux,
-        session_name,
+        Some(session_name),
         Some(session_name),
         None,
         false,
-        false,
+        // force = true: pressing "save" on a session whose project already
+        // exists updates it in place rather than failing.
+        true,
         config_path,
     )
 }
@@ -274,7 +336,13 @@ fn select_entries(
 
     if let Some(loaded) = loaded {
         let mut project_names = loaded.projects.keys().cloned().collect::<Vec<_>>();
-        project_names.sort();
+        // Most recently saved/edited projects first (by file mtime), falling
+        // back to name order when timestamps are equal or unavailable.
+        project_names.sort_by(|left, right| {
+            project_mtime(loaded, right)
+                .cmp(&project_mtime(loaded, left))
+                .then_with(|| left.cmp(right))
+        });
         for project_name in project_names {
             let preview = loaded
                 .project_files
@@ -349,6 +417,16 @@ fn select_entries(
     }
 
     Ok(entries)
+}
+
+/// Last-modified time of a project's file, used to order projects by recency.
+/// Missing files or unreadable metadata sort oldest.
+fn project_mtime(
+    loaded: &config::LoadedConfig,
+    project_name: &str,
+) -> Option<std::time::SystemTime> {
+    let path = loaded.project_files.get(project_name)?;
+    std::fs::metadata(path).ok()?.modified().ok()
 }
 
 fn insert_directory_key(seen: &mut HashSet<PathBuf>, directory: &str) -> bool {

@@ -22,6 +22,7 @@ pub enum SelectAction {
     Open,
     Delete,
     SaveProject,
+    Rename,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -166,7 +167,7 @@ pub fn select(
     entries: Vec<Entry>,
     bindings: &PickerBindings,
     preview: &PickerPreviewSettings,
-    show_hints: bool,
+    hint_state: &HintState,
 ) -> Result<Option<Selection>> {
     select_with_runner(
         default_runner(),
@@ -174,12 +175,49 @@ pub fn select(
         "smux> ",
         bindings,
         preview,
-        show_hints,
+        hint_state.is_shown(),
+        Some(hint_state.path()),
     )
 }
 
 pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>> {
     select_value_with_runner(default_runner(), prompt, choices)
+}
+
+/// Tracks whether the picker hint bar is currently shown, persisted in a temp
+/// file so the runtime toggle survives the picker relaunching between actions.
+/// Convention: the file existing means the hints are hidden.
+pub struct HintState {
+    path: PathBuf,
+}
+
+impl HintState {
+    pub fn new(initially_shown: bool) -> Result<Self> {
+        let mut path = std::env::temp_dir();
+        path.push(format!("smux-hints-{}.state", std::process::id()));
+        let state = Self { path };
+        if initially_shown {
+            let _ = fs::remove_file(&state.path);
+        } else {
+            fs::write(&state.path, b"")
+                .with_context(|| format!("failed to write {}", state.path.display()))?;
+        }
+        Ok(state)
+    }
+
+    pub fn is_shown(&self) -> bool {
+        !self.path.exists()
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for HintState {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
 }
 
 struct TempInputFile {
@@ -267,6 +305,7 @@ fn render_picker_hints(bindings: &PickerBindings) -> String {
         hint_segment("↵", "open"),
         hint_segment(&pretty_key(&bindings.delete_session), "del"),
         hint_segment(&pretty_key(&bindings.save_project), "save"),
+        hint_segment(&pretty_key(&bindings.rename_session), "ren"),
     ]);
     let filters = join_hints(&[
         hint_segment(&pretty_key(&bindings.reset), "all"),
@@ -275,6 +314,21 @@ fn render_picker_hints(bindings: &PickerBindings) -> String {
         hint_segment(&pretty_key(&bindings.projects), "proj"),
     ]);
     format!("{actions}{HINT_DIM}  │  {HINT_RESET}{filters}")
+}
+
+/// Build the toggle-header key binding. When a state-file path is given, the
+/// toggle also flips that file (file present = hidden) via `execute-silent`, so
+/// the choice persists across picker relaunches.
+fn toggle_hints_bind(key: &str, state_path: Option<&Path>) -> String {
+    match state_path {
+        Some(path) => {
+            let quoted = shell_quote(path);
+            format!(
+                "{key}:toggle-header+execute-silent(sh -c 'if [ -e \"$1\" ]; then rm -f \"$1\"; else : > \"$1\"; fi' _ {quoted})"
+            )
+        }
+        None => format!("{key}:toggle-header"),
+    }
 }
 
 fn render_template_hints() -> String {
@@ -290,7 +344,7 @@ fn add_common_picker_args(
     prompt: &str,
     header: &str,
     bindings: &str,
-    toggle_key: &str,
+    toggle_bind: &str,
 ) {
     args.extend([
         "--ansi".to_owned(),
@@ -305,11 +359,13 @@ fn add_common_picker_args(
         "--bind".to_owned(),
         bindings.to_owned(),
         "--bind".to_owned(),
-        format!("{toggle_key}:toggle-header"),
+        toggle_bind.to_owned(),
         "--with-nth".to_owned(),
         "3".to_owned(),
+        // Match the visible label (field 3) and the underlying value/kind, but
+        // not the hidden preview (field 4), so typing matches what is shown.
         "--nth".to_owned(),
-        "1,2,4".to_owned(),
+        "1,2,3".to_owned(),
         "--prompt".to_owned(),
         prompt.to_owned(),
         "--no-sort".to_owned(),
@@ -362,7 +418,7 @@ fn select_value_with_runner(
         &format!(
             "ctrl-x:change-prompt(template> )+clear-query+reload({all_command}),ctrl-t:change-prompt(template> )+clear-query+reload({template_command})"
         ),
-        "?",
+        "?:toggle-header",
     );
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
@@ -401,6 +457,7 @@ fn select_with_runner(
     bindings: &PickerBindings,
     preview: &PickerPreviewSettings,
     show_hints: bool,
+    hint_state_path: Option<&Path>,
 ) -> Result<Option<Selection>> {
     let mut args = Vec::new();
     let input = entries
@@ -425,17 +482,20 @@ fn select_with_runner(
             folders = bindings.folders,
             projects = bindings.projects,
         ),
-        &bindings.toggle_hints,
+        &toggle_hints_bind(&bindings.toggle_hints, hint_state_path),
     );
     // The hint bar is always passed to fzf; when it should start hidden we hide
-    // it at launch so `?` (toggle_hints) can reveal it on demand.
+    // it at launch so the toggle key can reveal it on demand.
     if !show_hints {
         args.extend(["--bind".to_owned(), "start:toggle-header".to_owned()]);
     }
     add_preview_args(&mut args, preview);
     args.extend([
         "--expect".to_owned(),
-        format!("{},{}", bindings.delete_session, bindings.save_project),
+        format!(
+            "{},{},{}",
+            bindings.delete_session, bindings.save_project, bindings.rename_session
+        ),
     ]);
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
@@ -473,6 +533,7 @@ fn select_with_runner(
             let action = match first {
                 key if key == bindings.delete_session => SelectAction::Delete,
                 key if key == bindings.save_project => SelectAction::SaveProject,
+                key if key == bindings.rename_session => SelectAction::Rename,
                 other => bail!("unknown picker action: {other}"),
             };
             (action, encoded_entry)
@@ -555,6 +616,7 @@ mod tests {
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
             true,
+            None,
         )
         .expect("selection should succeed");
 
@@ -564,10 +626,14 @@ mod tests {
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"3".to_owned()));
-        assert!(recorded[0].args.contains(&"1,2,4".to_owned()));
+        assert!(recorded[0].args.contains(&"1,2,3".to_owned()));
         assert!(recorded[0].args.contains(&"--expect".to_owned()));
         assert!(recorded[0].args.contains(&"--preview".to_owned()));
-        assert!(recorded[0].args.contains(&"ctrl-x,ctrl-y".to_owned()));
+        assert!(
+            recorded[0]
+                .args
+                .contains(&"ctrl-x,ctrl-y,ctrl-r".to_owned())
+        );
         // The hint bar is restyled (ANSI-decorated), so assert on stable
         // visible fragments rather than the whole literal line.
         assert!(recorded[0].args.iter().any(|arg| {
@@ -626,6 +692,7 @@ mod tests {
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
             true,
+            None,
         )
         .expect("no-match exit should not be an error");
 
@@ -655,6 +722,7 @@ mod tests {
                 &PickerBindings::default(),
                 &PickerPreviewSettings::default(),
                 show_hints,
+                None,
             )
             .expect("selection should succeed");
 
@@ -692,6 +760,7 @@ mod tests {
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
             true,
+            None,
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -723,6 +792,7 @@ mod tests {
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
             true,
+            None,
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -754,6 +824,7 @@ mod tests {
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
             true,
+            None,
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -782,6 +853,7 @@ mod tests {
             projects: "alt-p".to_owned(),
             delete_session: "alt-x".to_owned(),
             save_project: "alt-y".to_owned(),
+            rename_session: "alt-r".to_owned(),
             toggle_hints: "alt-h".to_owned(),
         };
 
@@ -795,11 +867,12 @@ mod tests {
             &bindings,
             &PickerPreviewSettings::default(),
             true,
+            None,
         )
         .expect("selection should succeed");
 
         let recorded = runner.recorded();
-        assert!(recorded[0].args.contains(&"alt-x,alt-y".to_owned()));
+        assert!(recorded[0].args.contains(&"alt-x,alt-y,alt-r".to_owned()));
         assert!(
             recorded[0]
                 .args
@@ -851,6 +924,7 @@ mod tests {
                 ..Default::default()
             },
             true,
+            None,
         )
         .expect("selection should succeed");
 
@@ -894,7 +968,7 @@ mod tests {
         assert!(recorded[0].args.contains(&"--ansi".to_owned()));
         assert!(recorded[0].args.contains(&"reverse".to_owned()));
         assert!(recorded[0].args.contains(&"3".to_owned()));
-        assert!(recorded[0].args.contains(&"1,2,4".to_owned()));
+        assert!(recorded[0].args.contains(&"1,2,3".to_owned()));
         assert!(
             recorded[0]
                 .args

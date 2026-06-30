@@ -29,6 +29,7 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "ctrl-y"
+rename_session = "ctrl-r"
 toggle_hints = "?"
 
 [settings.picker.preview]
@@ -188,6 +189,8 @@ pub struct PickerBindings {
     pub delete_session: String,
     #[serde(default = "default_picker_save_project")]
     pub save_project: String,
+    #[serde(default = "default_picker_rename_session")]
+    pub rename_session: String,
     #[serde(default = "default_picker_toggle_hints")]
     pub toggle_hints: String,
 }
@@ -238,6 +241,7 @@ impl Default for PickerBindings {
             projects: default_picker_projects(),
             delete_session: default_picker_delete_session(),
             save_project: default_picker_save_project(),
+            rename_session: default_picker_rename_session(),
             toggle_hints: default_picker_toggle_hints(),
         }
     }
@@ -265,6 +269,10 @@ fn default_picker_delete_session() -> String {
 
 fn default_picker_save_project() -> String {
     "ctrl-y".to_owned()
+}
+
+fn default_picker_rename_session() -> String {
+    "ctrl-r".to_owned()
 }
 
 fn default_picker_toggle_hints() -> String {
@@ -531,6 +539,7 @@ fn validate_picker_bindings(bindings: &PickerBindings) -> Result<()> {
         ("projects", bindings.projects.trim()),
         ("delete_session", bindings.delete_session.trim()),
         ("save_project", bindings.save_project.trim()),
+        ("rename_session", bindings.rename_session.trim()),
         ("toggle_hints", bindings.toggle_hints.trim()),
     ];
 

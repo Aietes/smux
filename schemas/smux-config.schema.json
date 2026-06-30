@@ -126,6 +126,11 @@
           "default": "ctrl-y",
           "description": "Main picker shortcut that saves the selected tmux session as a project."
         },
+        "rename_session": {
+          "type": "string",
+          "default": "ctrl-r",
+          "description": "Main picker shortcut that renames the selected tmux session."
+        },
         "toggle_hints": {
           "type": "string",
           "default": "?",

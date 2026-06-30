@@ -61,8 +61,14 @@ directories, templates, and projects.
 \fBsettings.picker.bindings\fR customizes the main picker keybinds.
 \fBreset\fR resets to the full list, \fBsessions\fR filters to tmux sessions,
 \fBfolders\fR filters to folders, \fBprojects\fR filters to saved projects,
-\fBdelete_session\fR deletes the selected session or project, and
-\fBsave_project\fR saves the selected tmux session as a project.
+\fBdelete_session\fR deletes the selected session or project,
+\fBsave_project\fR saves the selected tmux session as a project,
+\fBrename_session\fR renames the selected tmux session, and
+\fBtoggle_hints\fR shows or hides the keyboard-shortcut hint bar.
+.PP
+\fBsettings.picker.show_hints\fR (boolean, default true) sets whether the hint
+bar is shown initially; it can always be toggled at runtime with
+\fBtoggle_hints\fR.
 .PP
 Picker binding values are passed through as \fBfzf\fR key names. They must not
 be empty and must be unique within the picker binding block.

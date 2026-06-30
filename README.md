@@ -82,6 +82,8 @@ Recommended `tmux` settings:
 set -g detach-on-destroy off # keeps tmux running when you close a session
 bind-key t display-popup -w 70% -h 70% -E "smux select"
 bind-key T display-popup -w 70% -h 70% -E "smux select --choose-template"
+bind-key L run-shell "smux last"          # jump to the previous session
+bind-key S run-shell "smux save-project"  # save/update the current session as a project
 ```
 
 To launch it in `zsh` outside of `tmux` with `Ctrl-t`:
@@ -150,8 +152,11 @@ smux select --choose-template
 Export the current tmux session as a project definition:
 
 ```bash
-smux save-project myapp
+smux save-project myapp     # explicit name
+smux save-project           # name defaults to the current session
 ```
+
+The name is optional and defaults to the source session's name, so a bare `smux save-project` (or the `^y` action in the picker) captures the session you are in. Re-running it after adding windows or panes updates the existing project: the picker action overwrites in place, and on the command line pass `--force` to overwrite.
 
 Saved projects are stored in `.config/smux/projects/`, and can be edited and adjusted. As an example the `pane` command can launch Neovim and restore the last `persistence.nvim` session:
 
@@ -194,13 +199,16 @@ Current behavior:
 - prompt is shown at the top
 - `Esc` cancels cleanly
 - the current tmux session is highlighted when `smux select` runs inside tmux
-- typing still does normal fuzzy search
+- sessions are ordered most-recently-active first; saved projects most-recently-updated first
+- typing fuzzy-matches the visible label and path
 - `Ctrl-C` resets to the full list
 - `Ctrl-S` limits the main picker to sessions
 - `Ctrl-P` limits the main picker to projects
 - `Ctrl-F` limits the main picker to folders
 - `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file and keeps the picker open
-- `Ctrl-Y` saves the selected tmux session as a project and keeps the picker open
+- `Ctrl-Y` saves (or updates) the selected tmux session as a project and keeps the picker open
+- `Ctrl-R` renames the selected tmux session and keeps the picker open
+- `?` shows or hides the keyboard-shortcut hint bar
 
 If you use a Nerd Font, `smux` can show colored icons for sessions, projects, folders, and templates.
 These picker keybinds can be changed in `[settings.picker.bindings]`.
@@ -334,11 +342,13 @@ That reference also includes layout recipes such as:
 smux select [--choose-template] [--no-project-detect] [--config <path>]
 smux connect [--template <name>] [--session-name <name>] [--config <path>] <path>
 smux switch <session>
+smux last
+smux prune
 smux list-sessions
 smux list-templates [--config <path>]
 smux list-projects [--config <path>]
 smux doctor [--fix] [--config <path>]
-smux save-project <name> [--session <name>] [--path <path>] [--stdout] [--force] [--config <path>]
+smux save-project [<name>] [--session <name>] [--path <path>] [--stdout] [--force] [--config <path>]
 smux init [--config <path>]
 smux completions zsh [--dir <path>]
 smux man [--dir <path>]
