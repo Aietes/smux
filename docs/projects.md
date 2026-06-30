@@ -97,6 +97,23 @@ windows = [
 One rule to know: when a project defines its own `windows`, they **replace** the
 template's windows entirely — there is no window-by-window merge.
 
+## Reopen your editor session
+
+Because a pane `command` is just a shell command, a project can restore your
+editor exactly where you left it. With [`folke/persistence.nvim`](https://github.com/folke/persistence.nvim),
+have the editor window reload the last saved Neovim session on launch:
+
+```toml
+windows = [
+  { name = "editor", command = "nvim -c 'lua require(\"persistence\").load()'" },
+]
+```
+
+`load()` restores the session saved for the project's directory; use
+`load({ last = true })` to reopen the most recent session regardless of
+directory. Combined with project detection, opening the folder now drops you
+straight back into your buffers, splits, and cursor positions.
+
 ## Manage projects
 
 - **List**: `smux list-projects`
