@@ -87,12 +87,10 @@ impl Entry {
             EntryKind::InvalidProject => "project-broken",
         };
 
-        let preview = self
-            .preview
-            .as_deref()
-            .unwrap_or_default()
-            .replace(['\t', '\n', '\r'], " ");
-        format!("{kind}\t{}\t{}\t{preview}", self.value, self.label)
+        let value = sanitize_field(&self.value);
+        let label = sanitize_field(&self.label);
+        let preview = sanitize_field(self.preview.as_deref().unwrap_or_default());
+        format!("{kind}\t{value}\t{label}\t{preview}")
     }
 
     fn decode(line: &str) -> Result<Self> {
@@ -120,6 +118,13 @@ impl Entry {
             preview,
         })
     }
+}
+
+/// Replace the field/record delimiters fzf relies on so that values containing
+/// tabs or newlines (legal in Unix paths) cannot shift or split the encoded
+/// record.
+fn sanitize_field(value: &str) -> String {
+    value.replace(['\t', '\n', '\r'], " ")
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -297,12 +302,20 @@ fn select_value_with_runner(
         .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
 
-    if output.status.code == Some(130) {
+    // 130 = interrupted (Esc/Ctrl-C), 1 = accepted with no matching item.
+    // Both mean "no selection", not a failure. Only 2 (and anything else) is a
+    // genuine fzf error.
+    if matches!(output.status.code, Some(1) | Some(130)) {
         return Ok(None);
     }
 
     if !output.status.success {
-        bail!("fzf exited with status {:?}", output.status.code);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        if stderr.is_empty() {
+            bail!("fzf exited with status {:?}", output.status.code);
+        }
+        bail!("fzf exited with status {:?}: {stderr}", output.status.code);
     }
 
     let selection = String::from_utf8(output.stdout).context("fzf output was not valid utf-8")?;
@@ -363,12 +376,20 @@ fn select_with_runner(
         .run_capture_with_input("fzf", &args, &input)
         .context("failed to launch fzf")?;
 
-    if output.status.code == Some(130) {
+    // 130 = interrupted (Esc/Ctrl-C), 1 = accepted with no matching item.
+    // Both mean "no selection", not a failure. Only 2 (and anything else) is a
+    // genuine fzf error.
+    if matches!(output.status.code, Some(1) | Some(130)) {
         return Ok(None);
     }
 
     if !output.status.success {
-        bail!("fzf exited with status {:?}", output.status.code);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        if stderr.is_empty() {
+            bail!("fzf exited with status {:?}", output.status.code);
+        }
+        bail!("fzf exited with status {:?}: {stderr}", output.status.code);
     }
 
     let selection = String::from_utf8(output.stdout).context("fzf output was not valid utf-8")?;
@@ -424,6 +445,27 @@ mod tests {
 
         let decoded = Entry::decode(&entry.encode()).expect("entry should decode");
         assert_eq!(decoded, entry);
+    }
+
+    #[test]
+    fn encode_neutralizes_delimiters_in_value_and_label() {
+        let entry = Entry {
+            kind: EntryKind::Directory,
+            label: "dir\tweird\nlabel".to_owned(),
+            value: "/tmp/has\ttab\nand-newline".to_owned(),
+            preview: None,
+        };
+
+        let encoded = entry.encode();
+        // Exactly four tab-delimited fields on a single line, regardless of the
+        // tabs/newlines that were present in the value and label.
+        assert_eq!(encoded.lines().count(), 1);
+        assert_eq!(encoded.matches('\t').count(), 3);
+
+        let decoded = Entry::decode(&encoded).expect("entry should decode");
+        assert_eq!(decoded.kind, EntryKind::Directory);
+        assert_eq!(decoded.value, "/tmp/has tab and-newline");
+        assert_eq!(decoded.label, "dir weird label");
     }
 
     #[test]
@@ -491,6 +533,35 @@ mod tests {
         let selection = result.expect("selection should be present");
         assert_eq!(selection.action, SelectAction::Open);
         assert_eq!(selection.entry.kind, EntryKind::Directory);
+    }
+
+    #[test]
+    fn selector_treats_no_match_exit_as_no_selection() {
+        // fzf exits 1 when the user accepts with no matching item; that is a
+        // clean "no selection", not an error.
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: false,
+                code: Some(1),
+            },
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }));
+
+        let result = select_with_runner(
+            runner,
+            vec![Entry::session(
+                DisplayStyle::from_icon_mode(IconMode::Never),
+                "demo".to_owned(),
+            )],
+            "smux> ",
+            &PickerBindings::default(),
+            &PickerPreviewSettings::default(),
+        )
+        .expect("no-match exit should not be an error");
+
+        assert!(result.is_none());
     }
 
     #[test]
