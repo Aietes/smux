@@ -339,7 +339,12 @@ impl Tmux {
     }
 
     fn send_keys_to_target(&self, target: &str, command: &str) -> Result<()> {
-        self.run_tmux(["send-keys", "-t", target, command, "C-m"])
+        // Send the command text literally (-l) so a command that happens to
+        // match a tmux key name (e.g. `Up`, `Enter`, `C-c`) is typed rather
+        // than interpreted, then submit it with a separate Enter keypress.
+        self.run_tmux(["send-keys", "-t", target, "-l", command])
+            .context("failed to execute tmux send-keys")?;
+        self.run_tmux(["send-keys", "-t", target, "Enter"])
             .context("failed to execute tmux send-keys")
     }
 
@@ -898,22 +903,28 @@ mod tests {
     #[test]
     fn session_plan_emits_expected_tmux_commands() {
         let runner = Arc::new(FakeCommandRunner::new());
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%1\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%2\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%3\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%1\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new())); // 0 new-session
+        runner.push_capture(ok_capture(b"%1\n".to_vec())); // 1 list-panes editor
+        runner.push_capture(ok_capture(Vec::new())); // 2 send-keys -l pre_command
+        runner.push_capture(ok_capture(Vec::new())); // 3 send-keys Enter
+        runner.push_capture(ok_capture(Vec::new())); // 4 send-keys -l nvim
+        runner.push_capture(ok_capture(Vec::new())); // 5 send-keys Enter
+        runner.push_capture(ok_capture(Vec::new())); // 6 new-window run
+        runner.push_capture(ok_capture(b"%2\n".to_vec())); // 7 list-panes run
+        runner.push_capture(ok_capture(Vec::new())); // 8 send-keys -l pre_command
+        runner.push_capture(ok_capture(Vec::new())); // 9 send-keys Enter
+        runner.push_capture(ok_capture(Vec::new())); // 10 send-keys -l cargo run
+        runner.push_capture(ok_capture(Vec::new())); // 11 send-keys Enter
+        runner.push_capture(ok_capture(b"%3\n".to_vec())); // 12 split-window
+        runner.push_capture(ok_capture(Vec::new())); // 13 send-keys -l pre_command
+        runner.push_capture(ok_capture(Vec::new())); // 14 send-keys Enter
+        runner.push_capture(ok_capture(Vec::new())); // 15 send-keys -l cargo test
+        runner.push_capture(ok_capture(Vec::new())); // 16 send-keys Enter
+        runner.push_capture(ok_capture(Vec::new())); // 17 select-layout
+        runner.push_capture(ok_capture(Vec::new())); // 18 set-window-option
+        runner.push_capture(ok_capture(Vec::new())); // 19 select-window
+        runner.push_capture(ok_capture(b"%1\n".to_vec())); // 20 list-panes editor
+        runner.push_capture(ok_capture(Vec::new())); // 21 select-pane
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
@@ -969,14 +980,16 @@ mod tests {
         );
         assert_eq!(
             recorded[2].args,
-            vec!["send-keys", "-t", "%1", "source .venv/bin/activate", "C-m"]
+            vec!["send-keys", "-t", "%1", "-l", "source .venv/bin/activate"]
         );
-        assert_eq!(
-            recorded[3].args,
-            vec!["send-keys", "-t", "%1", "nvim", "C-m"]
-        );
+        assert_eq!(recorded[3].args, vec!["send-keys", "-t", "%1", "Enter"]);
         assert_eq!(
             recorded[4].args,
+            vec!["send-keys", "-t", "%1", "-l", "nvim"]
+        );
+        assert_eq!(recorded[5].args, vec!["send-keys", "-t", "%1", "Enter"]);
+        assert_eq!(
+            recorded[6].args,
             vec![
                 "new-window",
                 "-a",
@@ -989,19 +1002,21 @@ mod tests {
             ]
         );
         assert_eq!(
-            recorded[5].args,
+            recorded[7].args,
             vec!["list-panes", "-t", "demo:run", "-F", "#{pane_id}"]
         );
         assert_eq!(
-            recorded[6].args,
-            vec!["send-keys", "-t", "%2", "source .venv/bin/activate", "C-m"]
-        );
-        assert_eq!(
-            recorded[7].args,
-            vec!["send-keys", "-t", "%2", "cargo run", "C-m"]
-        );
-        assert_eq!(
             recorded[8].args,
+            vec!["send-keys", "-t", "%2", "-l", "source .venv/bin/activate"]
+        );
+        assert_eq!(recorded[9].args, vec!["send-keys", "-t", "%2", "Enter"]);
+        assert_eq!(
+            recorded[10].args,
+            vec!["send-keys", "-t", "%2", "-l", "cargo run"]
+        );
+        assert_eq!(recorded[11].args, vec!["send-keys", "-t", "%2", "Enter"]);
+        assert_eq!(
+            recorded[12].args,
             vec![
                 "split-window",
                 "-t",
@@ -1015,19 +1030,21 @@ mod tests {
             ]
         );
         assert_eq!(
-            recorded[9].args,
-            vec!["send-keys", "-t", "%3", "source .venv/bin/activate", "C-m"]
+            recorded[13].args,
+            vec!["send-keys", "-t", "%3", "-l", "source .venv/bin/activate"]
         );
+        assert_eq!(recorded[14].args, vec!["send-keys", "-t", "%3", "Enter"]);
         assert_eq!(
-            recorded[10].args,
-            vec!["send-keys", "-t", "%3", "cargo test", "C-m"]
+            recorded[15].args,
+            vec!["send-keys", "-t", "%3", "-l", "cargo test"]
         );
+        assert_eq!(recorded[16].args, vec!["send-keys", "-t", "%3", "Enter"]);
         assert_eq!(
-            recorded[11].args,
+            recorded[17].args,
             vec!["select-layout", "-t", "demo:run", "main-horizontal"]
         );
         assert_eq!(
-            recorded[12].args,
+            recorded[18].args,
             vec![
                 "set-window-option",
                 "-t",
@@ -1037,27 +1054,29 @@ mod tests {
             ]
         );
         assert_eq!(
-            recorded[13].args,
+            recorded[19].args,
             vec!["select-window", "-t", "demo:editor"]
         );
         assert_eq!(
-            recorded[14].args,
+            recorded[20].args,
             vec!["list-panes", "-t", "demo:editor", "-F", "#{pane_id}"]
         );
-        assert_eq!(recorded[15].args, vec!["select-pane", "-t", "%1"]);
+        assert_eq!(recorded[21].args, vec!["select-pane", "-t", "%1"]);
     }
 
     #[test]
     fn first_pane_cwd_is_used_when_creating_window() {
         let runner = Arc::new(FakeCommandRunner::new());
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%1\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%2\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%1\n%2\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new())); // new-session
+        runner.push_capture(ok_capture(b"%1\n".to_vec())); // list-panes
+        runner.push_capture(ok_capture(Vec::new())); // send-keys -l nvim
+        runner.push_capture(ok_capture(Vec::new())); // send-keys Enter
+        runner.push_capture(ok_capture(b"%2\n".to_vec())); // split-window
+        runner.push_capture(ok_capture(Vec::new())); // send-keys -l cargo run
+        runner.push_capture(ok_capture(Vec::new())); // send-keys Enter
+        runner.push_capture(ok_capture(Vec::new())); // select-window
+        runner.push_capture(ok_capture(b"%1\n%2\n".to_vec())); // list-panes
+        runner.push_capture(ok_capture(Vec::new())); // select-pane
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
@@ -1109,7 +1128,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            recorded[3].args,
+            recorded[4].args,
             vec![
                 "split-window",
                 "-t",
@@ -1178,14 +1197,16 @@ mod tests {
     #[test]
     fn startup_pane_uses_zero_based_offset_not_tmux_base_index() {
         let runner = Arc::new(FakeCommandRunner::new());
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%10\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%11\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%10\n%11\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new())); // 0 new-session
+        runner.push_capture(ok_capture(b"%10\n".to_vec())); // 1 list-panes
+        runner.push_capture(ok_capture(Vec::new())); // 2 send-keys -l shell
+        runner.push_capture(ok_capture(Vec::new())); // 3 send-keys Enter
+        runner.push_capture(ok_capture(b"%11\n".to_vec())); // 4 split-window
+        runner.push_capture(ok_capture(Vec::new())); // 5 send-keys -l tests
+        runner.push_capture(ok_capture(Vec::new())); // 6 send-keys Enter
+        runner.push_capture(ok_capture(Vec::new())); // 7 select-window
+        runner.push_capture(ok_capture(b"%10\n%11\n".to_vec())); // 8 list-panes
+        runner.push_capture(ok_capture(Vec::new())); // 9 select-pane
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
@@ -1224,24 +1245,26 @@ mod tests {
 
         let recorded = runner.recorded();
         assert_eq!(
-            recorded[6].args,
+            recorded[8].args,
             vec!["list-panes", "-t", "demo:main", "-F", "#{pane_id}"]
         );
-        assert_eq!(recorded[7].args, vec!["select-pane", "-t", "%11"]);
+        assert_eq!(recorded[9].args, vec!["select-pane", "-t", "%11"]);
     }
 
     #[test]
     fn zoomed_pane_emits_resize_pane_command() {
         let runner = Arc::new(FakeCommandRunner::new());
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%20\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%21\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(Vec::new()));
-        runner.push_capture(ok_capture(b"%20\n%21\n".to_vec()));
-        runner.push_capture(ok_capture(Vec::new()));
+        runner.push_capture(ok_capture(Vec::new())); // 0 new-session
+        runner.push_capture(ok_capture(b"%20\n".to_vec())); // 1 list-panes
+        runner.push_capture(ok_capture(Vec::new())); // 2 send-keys -l shell
+        runner.push_capture(ok_capture(Vec::new())); // 3 send-keys Enter
+        runner.push_capture(ok_capture(b"%21\n".to_vec())); // 4 split-window
+        runner.push_capture(ok_capture(Vec::new())); // 5 send-keys -l tests
+        runner.push_capture(ok_capture(Vec::new())); // 6 send-keys Enter
+        runner.push_capture(ok_capture(Vec::new())); // 7 resize-pane (zoom)
+        runner.push_capture(ok_capture(Vec::new())); // 8 select-window
+        runner.push_capture(ok_capture(b"%20\n%21\n".to_vec())); // 9 list-panes
+        runner.push_capture(ok_capture(Vec::new())); // 10 select-pane
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
@@ -1279,7 +1302,7 @@ mod tests {
             .expect("session plan should succeed");
 
         let recorded = runner.recorded();
-        assert_eq!(recorded[5].args, vec!["resize-pane", "-Z", "-t", "%21"]);
+        assert_eq!(recorded[7].args, vec!["resize-pane", "-Z", "-t", "%21"]);
     }
 
     fn ok_capture(stdout: Vec<u8>) -> std::io::Result<CommandOutput> {
