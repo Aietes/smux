@@ -8,7 +8,7 @@
 
 If you live in `tmux`, you know the friction: remembering session names, rebuilding the same editor/server/git layout for every project, and fumbling `attach`/`switch` to get back to where you were.
 
-smux is a thin layer over `tmux`, `fzf`, and `zoxide` that removes it. One keystroke opens a fuzzy picker of your running sessions, saved projects, and recent directories — hit Enter to jump in or build the workspace.
+smux is a single static binary, written in Rust, that sits as a thin layer over `tmux`, `fzf`, and `zoxide`. One keystroke opens a fuzzy picker of your running sessions, saved projects, and recent directories — hit Enter to jump in or build the workspace.
 
 - **Jump to any running session** — search, don't memorize
 - **Open a saved project in one step** — windows, panes, layout, and startup commands all restored
@@ -376,3 +376,13 @@ smux-config.5
 - **Small and focused** — a thin orchestration layer over `tmux`, `fzf`, and `zoxide`, with no dependencies beyond them
 - **Predictable** — deterministic behavior that is easy to reason about
 - **User experience first** — intuitive workflows and familiar key bindings
+
+## Alternatives
+
+smux stands on the shoulders of the tools that came before it. If it isn't the right fit, these are all excellent:
+
+- [**sesh**](https://github.com/joshmedeski/sesh) — a fast, mature session manager (written in Go) built on the same `fzf` + `zoxide` instincts. If you mostly want to fuzzy-jump between sessions and directories, sesh is superb.
+- [**smug**](https://github.com/ivaaaan/smug) — declarative YAML session layouts as a single Go binary. Reach for it if you prefer defining every session entirely up front in config.
+- [**tmuxinator**](https://github.com/tmuxinator/tmuxinator) — the original project-layout manager: mature, Ruby-based, YAML configs.
+
+Where smux fits: it's a small, focused Rust binary that pairs a unified `fzf` picker (sessions, saved projects, and `zoxide`/folder directories in one list) with full window/pane/layout definitions — and it can capture a *running* session into a reusable project file with `save-project`, instead of only replaying config you wrote by hand.
