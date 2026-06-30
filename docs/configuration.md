@@ -58,6 +58,9 @@ directory = 108
 template = 179
 project = 81
 
+[settings.picker]
+show_hints = true
+
 [settings.picker.bindings]
 reset = "ctrl-c"
 sessions = "ctrl-s"
@@ -65,6 +68,7 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "ctrl-y"
+toggle_hints = "?"
 
 [settings.picker.preview]
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
@@ -147,6 +151,23 @@ Fields:
 
 These values are ANSI-256 color indexes used for picker icons.
 
+### `[settings.picker]`
+
+```toml
+[settings.picker]
+show_hints = true
+```
+
+Fields:
+
+- `show_hints`
+  - type: boolean
+  - default: `true`
+  - whether the picker shows the keyboard-shortcut hint bar by default
+  - the hint bar can always be toggled at runtime with the `toggle_hints` key
+    (default `?`), so set this to `false` for a clean picker that still reveals
+    the shortcuts on demand
+
 ### `[settings.picker.bindings]`
 
 ```toml
@@ -157,6 +178,7 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "ctrl-y"
+toggle_hints = "?"
 ```
 
 Fields:
@@ -186,6 +208,12 @@ Fields:
   - type: string
   - default: `ctrl-y`
   - saves the selected tmux session as a project and keeps the picker open
+- `toggle_hints`
+  - type: string
+  - default: `?`
+  - shows or hides the keyboard-shortcut hint bar
+  - note: while bound to `?`, that character can no longer be typed into the
+    fuzzy query; rebind it (for example to `f1`) if you need to search for `?`
 
 Rules:
 

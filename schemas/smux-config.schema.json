@@ -84,6 +84,11 @@
         },
         "preview": {
           "$ref": "#/$defs/picker_preview"
+        },
+        "show_hints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the picker shows the keyboard-shortcut hint bar by default. It can always be toggled at runtime with the toggle_hints key."
         }
       }
     },
@@ -120,6 +125,11 @@
           "type": "string",
           "default": "ctrl-y",
           "description": "Main picker shortcut that saves the selected tmux session as a project."
+        },
+        "toggle_hints": {
+          "type": "string",
+          "default": "?",
+          "description": "Picker shortcut that shows or hides the keyboard-shortcut hint bar."
         }
       }
     },

@@ -19,6 +19,9 @@ directory = 108
 template = 179
 project = 81
 
+[settings.picker]
+show_hints = true
+
 [settings.picker.bindings]
 reset = "ctrl-c"
 sessions = "ctrl-s"
@@ -26,6 +29,7 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "ctrl-y"
+toggle_hints = "?"
 
 [settings.picker.preview]
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
@@ -141,13 +145,32 @@ impl Default for IconColors {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PickerSettings {
     #[serde(default)]
     pub bindings: PickerBindings,
     #[serde(default)]
     pub preview: PickerPreviewSettings,
+    /// Whether the picker shows the keyboard-shortcut hint bar by default. It
+    /// can always be toggled at runtime with `?`; this only sets the initial
+    /// state.
+    #[serde(default = "default_show_hints")]
+    pub show_hints: bool,
+}
+
+fn default_show_hints() -> bool {
+    true
+}
+
+impl Default for PickerSettings {
+    fn default() -> Self {
+        Self {
+            bindings: PickerBindings::default(),
+            preview: PickerPreviewSettings::default(),
+            show_hints: default_show_hints(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
@@ -165,6 +188,8 @@ pub struct PickerBindings {
     pub delete_session: String,
     #[serde(default = "default_picker_save_project")]
     pub save_project: String,
+    #[serde(default = "default_picker_toggle_hints")]
+    pub toggle_hints: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, Eq, PartialEq)]
@@ -213,6 +238,7 @@ impl Default for PickerBindings {
             projects: default_picker_projects(),
             delete_session: default_picker_delete_session(),
             save_project: default_picker_save_project(),
+            toggle_hints: default_picker_toggle_hints(),
         }
     }
 }
@@ -239,6 +265,10 @@ fn default_picker_delete_session() -> String {
 
 fn default_picker_save_project() -> String {
     "ctrl-y".to_owned()
+}
+
+fn default_picker_toggle_hints() -> String {
+    "?".to_owned()
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -501,6 +531,7 @@ fn validate_picker_bindings(bindings: &PickerBindings) -> Result<()> {
         ("projects", bindings.projects.trim()),
         ("delete_session", bindings.delete_session.trim()),
         ("save_project", bindings.save_project.trim()),
+        ("toggle_hints", bindings.toggle_hints.trim()),
     ];
 
     for (name, value) in values {
@@ -873,6 +904,47 @@ save_project = "alt-y"
         assert_eq!(config.settings.picker.bindings.delete_session, "alt-x");
         assert_eq!(config.settings.picker.bindings.save_project, "alt-y");
         Ok(())
+    }
+
+    #[test]
+    fn picker_hint_settings_default_when_absent() -> Result<()> {
+        let config: Config = toml::from_str("[settings]\n")?;
+        assert!(config.settings.picker.show_hints);
+        assert_eq!(config.settings.picker.bindings.toggle_hints, "?");
+        Ok(())
+    }
+
+    #[test]
+    fn parses_custom_picker_hint_settings() -> Result<()> {
+        let input = r#"
+[settings.picker]
+show_hints = false
+
+[settings.picker.bindings]
+toggle_hints = "f1"
+"#;
+
+        let config: Config = toml::from_str(input)?;
+        validate_config(&config)?;
+        assert!(!config.settings.picker.show_hints);
+        assert_eq!(config.settings.picker.bindings.toggle_hints, "f1");
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_toggle_hints_colliding_with_another_binding() {
+        let input = r#"
+[settings.picker.bindings]
+toggle_hints = "ctrl-s"
+"#;
+
+        let config: Config = toml::from_str(input).expect("config should parse");
+        let error = validate_config(&config).expect_err("colliding bindings should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("duplicates another picker binding")
+        );
     }
 
     #[test]

@@ -146,6 +146,9 @@ fn run_select(
         let picker_preview = config
             .map(|config| config.settings.picker.preview.clone())
             .unwrap_or_default();
+        let show_hints = config
+            .map(|config| config.settings.picker.show_hints)
+            .unwrap_or(true);
         let current_session = tmux.current_session().ok().flatten();
         let entries = select_entries(
             tmux,
@@ -154,7 +157,8 @@ fn run_select(
             current_session.as_deref(),
         )?;
 
-        let Some(selection) = fzf::select(entries, &picker_bindings, &picker_preview)? else {
+        let Some(selection) = fzf::select(entries, &picker_bindings, &picker_preview, show_hints)?
+        else {
             return Ok(());
         };
 

@@ -166,8 +166,16 @@ pub fn select(
     entries: Vec<Entry>,
     bindings: &PickerBindings,
     preview: &PickerPreviewSettings,
+    show_hints: bool,
 ) -> Result<Option<Selection>> {
-    select_with_runner(default_runner(), entries, "smux> ", bindings, preview)
+    select_with_runner(
+        default_runner(),
+        entries,
+        "smux> ",
+        bindings,
+        preview,
+        show_hints,
+    )
 }
 
 pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>> {
@@ -228,7 +236,62 @@ fn filter_command(file: &TempInputFile, kind: &str) -> String {
     }
 }
 
-fn add_common_picker_args(args: &mut Vec<String>, prompt: &str, header: &str, bindings: &str) {
+const HINT_DIM: &str = "\x1b[2m";
+const HINT_KEY: &str = "\x1b[1m";
+const HINT_RESET: &str = "\x1b[0m";
+
+/// Render a configured fzf key token compactly (`ctrl-x` -> `^x`, `alt-h` -> `⌥h`).
+fn pretty_key(token: &str) -> String {
+    if let Some(rest) = token.strip_prefix("ctrl-") {
+        format!("^{rest}")
+    } else if let Some(rest) = token.strip_prefix("alt-") {
+        format!("⌥{rest}")
+    } else {
+        token.to_owned()
+    }
+}
+
+/// A `<key> <label>` hint with the key emphasised and the label dimmed.
+fn hint_segment(key: &str, label: &str) -> String {
+    format!("{HINT_KEY}{key}{HINT_RESET}{HINT_DIM} {label}{HINT_RESET}")
+}
+
+fn join_hints(segments: &[String]) -> String {
+    segments.join(&format!("{HINT_DIM} · {HINT_RESET}"))
+}
+
+/// Compact, dimmed hint bar for the main picker: actions on the left, scope
+/// filters on the right, separated by a faint divider.
+fn render_picker_hints(bindings: &PickerBindings) -> String {
+    let actions = join_hints(&[
+        hint_segment("↵", "open"),
+        hint_segment(&pretty_key(&bindings.delete_session), "del"),
+        hint_segment(&pretty_key(&bindings.save_project), "save"),
+    ]);
+    let filters = join_hints(&[
+        hint_segment(&pretty_key(&bindings.reset), "all"),
+        hint_segment(&pretty_key(&bindings.sessions), "sess"),
+        hint_segment(&pretty_key(&bindings.folders), "dirs"),
+        hint_segment(&pretty_key(&bindings.projects), "proj"),
+    ]);
+    format!("{actions}{HINT_DIM}  │  {HINT_RESET}{filters}")
+}
+
+fn render_template_hints() -> String {
+    join_hints(&[
+        hint_segment("↵", "pick"),
+        hint_segment("^x", "all"),
+        hint_segment("^t", "templates"),
+    ])
+}
+
+fn add_common_picker_args(
+    args: &mut Vec<String>,
+    prompt: &str,
+    header: &str,
+    bindings: &str,
+    toggle_key: &str,
+) {
     args.extend([
         "--ansi".to_owned(),
         "--delimiter".to_owned(),
@@ -241,6 +304,8 @@ fn add_common_picker_args(args: &mut Vec<String>, prompt: &str, header: &str, bi
         "tab:down,btab:up".to_owned(),
         "--bind".to_owned(),
         bindings.to_owned(),
+        "--bind".to_owned(),
+        format!("{toggle_key}:toggle-header"),
         "--with-nth".to_owned(),
         "3".to_owned(),
         "--nth".to_owned(),
@@ -293,10 +358,11 @@ fn select_value_with_runner(
     add_common_picker_args(
         &mut args,
         prompt,
-        "ctrl-x all  ctrl-t templates",
+        &render_template_hints(),
         &format!(
             "ctrl-x:change-prompt(template> )+clear-query+reload({all_command}),ctrl-t:change-prompt(template> )+clear-query+reload({template_command})"
         ),
+        "?",
     );
     let output = runner
         .run_capture_with_input("fzf", &args, &input)
@@ -334,6 +400,7 @@ fn select_with_runner(
     prompt: &str,
     bindings: &PickerBindings,
     preview: &PickerPreviewSettings,
+    show_hints: bool,
 ) -> Result<Option<Selection>> {
     let mut args = Vec::new();
     let input = entries
@@ -350,15 +417,7 @@ fn select_with_runner(
     add_common_picker_args(
         &mut args,
         prompt,
-        &format!(
-            "enter open  {delete} delete  {save} save project  {reset} all  {sessions} sessions  {folders} folders  {projects} projects",
-            delete = bindings.delete_session,
-            save = bindings.save_project,
-            reset = bindings.reset,
-            sessions = bindings.sessions,
-            folders = bindings.folders,
-            projects = bindings.projects,
-        ),
+        &render_picker_hints(bindings),
         &format!(
             "{reset}:change-prompt(smux> )+clear-query+reload({all_command}),{sessions}:change-prompt(session> )+clear-query+reload({session_command}),{folders}:change-prompt(folder> )+clear-query+reload({folder_command}),{projects}:change-prompt(project> )+clear-query+reload({project_command})",
             reset = bindings.reset,
@@ -366,7 +425,13 @@ fn select_with_runner(
             folders = bindings.folders,
             projects = bindings.projects,
         ),
+        &bindings.toggle_hints,
     );
+    // The hint bar is always passed to fzf; when it should start hidden we hide
+    // it at launch so `?` (toggle_hints) can reveal it on demand.
+    if !show_hints {
+        args.extend(["--bind".to_owned(), "start:toggle-header".to_owned()]);
+    }
     add_preview_args(&mut args, preview);
     args.extend([
         "--expect".to_owned(),
@@ -489,6 +554,7 @@ mod tests {
             "smux> ",
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
+            true,
         )
         .expect("selection should succeed");
 
@@ -502,23 +568,24 @@ mod tests {
         assert!(recorded[0].args.contains(&"--expect".to_owned()));
         assert!(recorded[0].args.contains(&"--preview".to_owned()));
         assert!(recorded[0].args.contains(&"ctrl-x,ctrl-y".to_owned()));
+        // The hint bar is restyled (ANSI-decorated), so assert on stable
+        // visible fragments rather than the whole literal line.
+        assert!(recorded[0].args.iter().any(|arg| {
+            arg.contains("↵") && arg.contains(" open") && arg.contains("^x") && arg.contains(" del")
+        }));
         assert!(
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("enter open  ctrl-x delete  ctrl-y save project"))
+                .any(|arg| arg.contains("^p") && arg.contains(" proj"))
         );
+        // `?` toggles the hint bar's visibility.
+        assert!(recorded[0].args.iter().any(|arg| arg == "?:toggle-header"));
         assert!(
             recorded[0]
                 .args
                 .iter()
                 .any(|arg| arg.contains("ctrl-c:change-prompt(smux> )+clear-query+reload("))
-        );
-        assert!(
-            recorded[0]
-                .args
-                .iter()
-                .any(|arg| arg.contains("ctrl-p projects"))
         );
         assert!(
             recorded[0]
@@ -558,10 +625,49 @@ mod tests {
             "smux> ",
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
+            true,
         )
         .expect("no-match exit should not be an error");
 
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn hidden_hints_default_binds_start_toggle_header() {
+        for (show_hints, expect_start_bind) in [(true, false), (false, true)] {
+            let runner = Arc::new(FakeCommandRunner::new());
+            runner.push_capture(Ok(CommandOutput {
+                status: CommandStatus {
+                    success: true,
+                    code: Some(0),
+                },
+                stdout: b"folder\t/tmp/example\tdir      /tmp/example\n".to_vec(),
+                stderr: Vec::new(),
+            }));
+
+            let _ = select_with_runner(
+                runner.clone(),
+                vec![Entry::directory(
+                    DisplayStyle::from_icon_mode(IconMode::Never),
+                    "/tmp/example".to_owned(),
+                )],
+                "smux> ",
+                &PickerBindings::default(),
+                &PickerPreviewSettings::default(),
+                show_hints,
+            )
+            .expect("selection should succeed");
+
+            let recorded = runner.recorded();
+            let has_start_bind = recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg == "start:toggle-header");
+            assert_eq!(
+                has_start_bind, expect_start_bind,
+                "show_hints = {show_hints}"
+            );
+        }
     }
 
     #[test]
@@ -585,6 +691,7 @@ mod tests {
             "smux> ",
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
+            true,
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -615,6 +722,7 @@ mod tests {
             "smux> ",
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
+            true,
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -645,6 +753,7 @@ mod tests {
             "smux> ",
             &PickerBindings::default(),
             &PickerPreviewSettings::default(),
+            true,
         )
         .expect("selection should succeed")
         .expect("selection should be present");
@@ -673,6 +782,7 @@ mod tests {
             projects: "alt-p".to_owned(),
             delete_session: "alt-x".to_owned(),
             save_project: "alt-y".to_owned(),
+            toggle_hints: "alt-h".to_owned(),
         };
 
         let _ = select_with_runner(
@@ -684,6 +794,7 @@ mod tests {
             "smux> ",
             &bindings,
             &PickerPreviewSettings::default(),
+            true,
         )
         .expect("selection should succeed");
 
@@ -739,6 +850,7 @@ mod tests {
                 folders: Some("eza --tree --level=2 \"$SMUX_PREVIEW_PATH\"".to_owned()),
                 ..Default::default()
             },
+            true,
         )
         .expect("selection should succeed");
 
@@ -787,8 +899,9 @@ mod tests {
             recorded[0]
                 .args
                 .iter()
-                .any(|arg| arg.contains("ctrl-t templates"))
+                .any(|arg| arg.contains("^t") && arg.contains(" templates"))
         );
+        assert!(recorded[0].args.iter().any(|arg| arg == "?:toggle-header"));
         assert!(
             recorded[0]
                 .args
