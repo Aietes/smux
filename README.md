@@ -27,11 +27,13 @@ With Homebrew:
 brew install Aietes/homebrew-smux/smux
 ```
 
-With Nix:
+With Nix, from the project flake:
 
 ```bash
-nix profile install nixpkgs#smux
+nix profile install github:Aietes/smux
 ```
+
+A nixpkgs package is [pending review](https://github.com/NixOS/nixpkgs/pull/505348); once it merges, `nix profile install nixpkgs#smux` will work too.
 
 With Cargo:
 

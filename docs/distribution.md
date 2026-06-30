@@ -91,7 +91,7 @@ Homebrew core is not the primary path right now. It may make sense later if proj
 Current status:
 
 - the project already builds cleanly in nixpkgs package form
-- a nixpkgs PR has been created
+- a nixpkgs PR has been created ([NixOS/nixpkgs#505348](https://github.com/NixOS/nixpkgs/pull/505348))
 - the remaining work is review and merge on the nixpkgs side
 
 The repository flake remains useful for local development and local installation regardless of nixpkgs merge timing.

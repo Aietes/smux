@@ -99,6 +99,8 @@ The command model is:
 - `select`: interactive entrypoint
 - `connect`: direct path-based session creation/reuse
 - `switch`: direct session switch/attach
+- `last`: switch to the most recently used session
+- `prune`: kill all detached sessions
 - `save-project`: best-effort export of a live tmux session into a project file
 - `doctor`: environment and config diagnostics
 

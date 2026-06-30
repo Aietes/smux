@@ -606,15 +606,18 @@ The template picker is a separate step. When you open a folder, it appears autom
 
 Current behavior:
 
-- prompt is shown at the top
 - `Esc` cancels cleanly
-- typing still does normal fuzzy search
-- `Ctrl-C` resets the picker
-- `Ctrl-S` limits the main picker to sessions and keeps fuzzy search active
-- `Ctrl-P` limits the main picker to projects and keeps fuzzy search active
-- `Ctrl-F` limits the main picker to folders and keeps fuzzy search active
-- `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file and keeps the picker open
-- `Alt-S` saves the selected tmux session as a project and keeps the picker open
+- the current tmux session is highlighted when `smux select` runs inside tmux
+- sessions are ordered most-recently-active first; saved projects most-recently-updated first
+- typing fuzzy-matches the visible label and path
+- `Ctrl-C` resets the picker to the full list
+- `Ctrl-S` limits the main picker to sessions
+- `Ctrl-P` limits the main picker to saved projects
+- `Ctrl-F` limits the main picker to folders
+- `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file, and keeps the picker open
+- `Alt-S` saves (or updates) the selected tmux session as a project, and keeps the picker open
+- `Ctrl-R` renames the selected tmux session, and keeps the picker open
+- `?` shows or hides the keyboard-shortcut hint bar
 - these keybinds are configurable through `[settings.picker.bindings]`
 
 ## Related Docs
