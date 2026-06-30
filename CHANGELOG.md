@@ -6,6 +6,39 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-30
+
+### Added
+
+- `smux last` switches to the most recently used tmux session
+- `smux prune` kills all detached tmux sessions, preserving the attached one
+- picker action to rename the selected tmux session (default `Ctrl-R`)
+- restyled, toggleable keyboard-shortcut hint bar; press `?` to show or hide it, with `[settings.picker] show_hints` for the initial state and `[settings.picker.bindings] toggle_hints` / `rename_session`
+- template auto-detection from project marker files (`Cargo.toml`, `package.json`, `go.mod`, ...) when no explicit, project, or default template applies and a same-named template exists
+- `save-project` name is now optional and defaults to the source session's name
+
+### Changed
+
+- default save-project picker binding moved from `Ctrl-Y` to `Alt-S` (frees `s` for the sessions filter and avoids fzf's `Ctrl-W` word-delete)
+- the picker save action now updates an existing project in place instead of failing
+- picker sessions are ordered most-recently-active first, saved projects most-recently-updated first
+- picker fuzzy-matching now includes the visible label, not just the underlying value
+- captured project layouts record pane split direction and size more faithfully
+- template window names may no longer contain `:` or `.`, and must be unique
+- friendlier tmux error messages, including a clear "tmux is not installed" hint
+
+### Fixed
+
+- picker entries containing tabs or newlines no longer corrupt the list
+- pane commands are sent literally, so a command matching a tmux key name (e.g. `Up`) is typed rather than interpreted
+- accepting the picker with no matching item is treated as no selection instead of an error
+- project path resolution compares the query and configured paths symmetrically
+- only a single `.toml` suffix is stripped from project names
+
+### Security
+
+- the picker hint-state file is created inside a private, randomly-named directory rather than at a predictable path in the world-writable temp directory, preventing a local symlink attack
+
 ## [0.1.10] - 2026-06-09
 
 ### Added
