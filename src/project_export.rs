@@ -357,7 +357,7 @@ mod tests {
                 .expect("panes should exist")[1]
                 .layout
                 .as_deref(),
-            Some("right")
+            Some("right 50")
         );
 
         unsafe {

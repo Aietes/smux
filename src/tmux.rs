@@ -164,26 +164,7 @@ impl Tmux {
     }
 
     pub fn create_session(&self, session: &str, directory: &Path) -> Result<()> {
-        let directory = util::path_to_string(directory)?;
-        let output = self
-            .run_tmux_capture([
-                "new-session",
-                "-d",
-                "-s",
-                session,
-                "-c",
-                &directory,
-                "-n",
-                "main",
-            ])
-            .context("failed to execute tmux new-session")?;
-
-        if output.status.success {
-            Ok(())
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("tmux new-session failed: {}", stderr.trim())
-        }
+        self.create_session_with_window(session, "main", directory)
     }
 
     pub fn create_session_from_plan(&self, plan: &SessionPlan) -> Result<()> {
@@ -383,8 +364,7 @@ impl Tmux {
             .context("failed to execute tmux split-window")?;
 
         if !output.status.success {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("tmux split-window failed: {}", stderr.trim());
+            bail!("{}", tmux_failure_message("split-window", &output));
         }
 
         let pane_id =
@@ -514,8 +494,7 @@ impl Tmux {
             .context("failed to execute tmux list-panes")?;
 
         if !output.status.success {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("tmux list-panes failed: {}", stderr.trim());
+            bail!("{}", tmux_failure_message("list-panes", &output));
         }
 
         let stdout =
@@ -541,19 +520,25 @@ impl Tmux {
     }
 
     fn run_tmux<const N: usize>(&self, args: [&str; N]) -> Result<()> {
+        let subcommand = args.first().copied().unwrap_or("tmux");
         let output = self.run_tmux_capture(args)?;
 
         if output.status.success {
             Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("{}", stderr.trim())
+            bail!("{}", tmux_failure_message(subcommand, &output))
         }
     }
 
     fn run_tmux_capture<const N: usize>(&self, args: [&str; N]) -> Result<CommandOutput> {
         let args = args.into_iter().map(ToOwned::to_owned).collect::<Vec<_>>();
-        self.runner.run_capture("tmux", &args).map_err(Into::into)
+        self.runner.run_capture("tmux", &args).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!("tmux is not installed or not on PATH")
+            } else {
+                anyhow::Error::new(error).context("failed to execute tmux")
+            }
+        })
     }
 
     fn list_windows(&self, session: &str) -> Result<Vec<WindowRecord>> {
@@ -568,8 +553,7 @@ impl Tmux {
             .context("failed to execute tmux list-windows")?;
 
         if !output.status.success {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("tmux list-windows failed: {}", stderr.trim());
+            bail!("{}", tmux_failure_message("list-windows", &output));
         }
 
         let stdout =
@@ -593,8 +577,7 @@ impl Tmux {
             .context("failed to execute tmux show-window-options")?;
 
         if !output.status.success {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("tmux show-window-options failed: {}", stderr.trim());
+            bail!("{}", tmux_failure_message("show-window-options", &output));
         }
 
         let stdout = String::from_utf8(output.stdout)
@@ -614,8 +597,7 @@ impl Tmux {
             .context("failed to execute tmux list-panes")?;
 
         if !output.status.success {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("tmux list-panes failed: {}", stderr.trim());
+            bail!("{}", tmux_failure_message("list-panes", &output));
         }
 
         let stdout =
@@ -696,42 +678,61 @@ fn parse_pane_record(line: &str) -> Result<PaneRecord> {
     })
 }
 
-fn infer_pane_layouts(panes: Vec<PaneRecord>) -> Vec<PaneSnapshot> {
-    let mut inferred = Vec::with_capacity(panes.len());
-
-    for pane in panes {
-        let layout = if inferred.is_empty() {
-            None
-        } else {
-            Some(PaneLayout {
-                position: infer_pane_position(&pane, &inferred),
-                size: None,
-            })
-        };
-
-        inferred.push(PaneSnapshot {
-            cwd: pane.cwd,
-            active: pane.active,
-            layout,
-        });
+/// Build a failure message for a tmux subcommand, falling back to the exit code
+/// when tmux produced no stderr (so the error is never an empty string).
+fn tmux_failure_message(subcommand: &str, output: &CommandOutput) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = stderr.trim();
+    if stderr.is_empty() {
+        format!(
+            "tmux {subcommand} failed with status {:?}",
+            output.status.code
+        )
+    } else {
+        format!("tmux {subcommand} failed: {stderr}")
     }
-
-    inferred
 }
 
-fn infer_pane_position(pane: &PaneRecord, previous: &[PaneSnapshot]) -> PanePosition {
-    let _ = previous;
-    if pane.left > 0 && pane.top == 0 {
-        PanePosition::Right
-    } else if pane.top > 0 && pane.left == 0 {
-        PanePosition::Bottom
-    } else if pane.left > 0 {
-        PanePosition::Right
-    } else if pane.top > 0 {
+fn infer_pane_layouts(panes: Vec<PaneRecord>) -> Vec<PaneSnapshot> {
+    panes
+        .iter()
+        .enumerate()
+        .map(|(index, pane)| PaneSnapshot {
+            cwd: pane.cwd.clone(),
+            active: pane.active,
+            layout: index
+                .checked_sub(1)
+                .map(|previous| infer_pane_layout(pane, &panes[previous])),
+        })
+        .collect()
+}
+
+/// Infer the split that produced `pane` relative to the pane it was split from.
+/// `smux` creates each extra pane by splitting the previously created one, so
+/// the inverse is a comparison against the previous pane's geometry: panes that
+/// share a top edge sit side by side (a horizontal split), otherwise they are
+/// stacked. The recovered size is the new pane's extent along the split axis in
+/// cells, which `split-window -l` reproduces.
+fn infer_pane_layout(pane: &PaneRecord, previous: &PaneRecord) -> PaneLayout {
+    let position = if pane.top == previous.top {
+        if pane.left >= previous.left {
+            PanePosition::Right
+        } else {
+            PanePosition::Left
+        }
+    } else if pane.top > previous.top {
         PanePosition::Bottom
     } else {
-        PanePosition::Right
-    }
+        PanePosition::Top
+    };
+
+    let extent = match position {
+        PanePosition::Right | PanePosition::Left => pane.width,
+        PanePosition::Bottom | PanePosition::Top => pane.height,
+    };
+    let size = (extent > 0).then(|| extent.to_string());
+
+    PaneLayout { position, size }
 }
 
 fn initial_pane_cwd(window: &crate::templates::WindowPlan) -> &Path {
@@ -750,9 +751,42 @@ mod tests {
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner, IoMode};
     use crate::templates::{PaneLayout, PanePlan, PanePosition, SessionPlan, WindowPlan};
 
-    use super::Tmux;
+    use super::{PaneRecord, Tmux, infer_pane_layout};
 
     static TMUX_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn pane_record(left: i32, top: i32, width: i32, height: i32) -> PaneRecord {
+        PaneRecord {
+            index: 0,
+            cwd: std::path::PathBuf::from("/tmp"),
+            active: false,
+            left,
+            top,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn infers_split_position_and_size_from_geometry() {
+        let base = pane_record(0, 0, 100, 40);
+
+        // Side-by-side panes share a top edge: a horizontal split.
+        let right = infer_pane_layout(&pane_record(50, 0, 50, 40), &base);
+        assert_eq!(right.position, PanePosition::Right);
+        assert_eq!(right.size.as_deref(), Some("50"));
+
+        let left = infer_pane_layout(&base, &pane_record(50, 0, 50, 40));
+        assert_eq!(left.position, PanePosition::Left);
+
+        // Stacked panes differ in top: a vertical split, sized by height.
+        let bottom = infer_pane_layout(&pane_record(0, 20, 100, 20), &base);
+        assert_eq!(bottom.position, PanePosition::Bottom);
+        assert_eq!(bottom.size.as_deref(), Some("20"));
+
+        let top = infer_pane_layout(&base, &pane_record(0, 20, 100, 20));
+        assert_eq!(top.position, PanePosition::Top);
+    }
 
     #[test]
     fn outside_tmux_uses_inherited_stdio_for_attach() {
@@ -1188,7 +1222,7 @@ mod tests {
             snapshot.windows[0].panes[1].layout,
             Some(PaneLayout {
                 position: PanePosition::Right,
-                size: None,
+                size: Some("50".to_owned()),
             })
         );
         assert!(snapshot.windows[1].synchronize);
