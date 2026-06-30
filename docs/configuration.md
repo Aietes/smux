@@ -69,6 +69,7 @@ projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "alt-s"
 rename_session = "ctrl-r"
+edit_project = "ctrl-e"
 toggle_hints = "?"
 
 [settings.picker.preview]
@@ -180,6 +181,7 @@ projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "alt-s"
 rename_session = "ctrl-r"
+edit_project = "ctrl-e"
 toggle_hints = "?"
 ```
 
@@ -216,6 +218,11 @@ Fields:
   - default: `ctrl-r`
   - prompts for a new name and renames the selected tmux session
   - keeps the picker open
+- `edit_project`
+  - type: string
+  - default: `ctrl-e`
+  - opens the selected project (or broken project) file in `$VISUAL`/`$EDITOR`
+  - returns to the picker when the editor exits
 - `toggle_hints`
   - type: string
   - default: `?`
@@ -617,6 +624,7 @@ Current behavior:
 - `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file, and keeps the picker open
 - `Alt-S` saves (or updates) the selected tmux session as a project, and keeps the picker open
 - `Ctrl-R` renames the selected tmux session, and keeps the picker open
+- `Ctrl-E` opens the selected project (or broken project) file in `$EDITOR`, and returns to the picker
 - `?` shows or hides the keyboard-shortcut hint bar
 - these keybinds are configurable through `[settings.picker.bindings]`
 

@@ -30,6 +30,7 @@ projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "alt-s"
 rename_session = "ctrl-r"
+edit_project = "ctrl-e"
 toggle_hints = "?"
 
 [settings.picker.preview]
@@ -191,6 +192,8 @@ pub struct PickerBindings {
     pub save_project: String,
     #[serde(default = "default_picker_rename_session")]
     pub rename_session: String,
+    #[serde(default = "default_picker_edit_project")]
+    pub edit_project: String,
     #[serde(default = "default_picker_toggle_hints")]
     pub toggle_hints: String,
 }
@@ -242,6 +245,7 @@ impl Default for PickerBindings {
             delete_session: default_picker_delete_session(),
             save_project: default_picker_save_project(),
             rename_session: default_picker_rename_session(),
+            edit_project: default_picker_edit_project(),
             toggle_hints: default_picker_toggle_hints(),
         }
     }
@@ -273,6 +277,10 @@ fn default_picker_save_project() -> String {
 
 fn default_picker_rename_session() -> String {
     "ctrl-r".to_owned()
+}
+
+fn default_picker_edit_project() -> String {
+    "ctrl-e".to_owned()
 }
 
 fn default_picker_toggle_hints() -> String {
@@ -540,6 +548,7 @@ fn validate_picker_bindings(bindings: &PickerBindings) -> Result<()> {
         ("delete_session", bindings.delete_session.trim()),
         ("save_project", bindings.save_project.trim()),
         ("rename_session", bindings.rename_session.trim()),
+        ("edit_project", bindings.edit_project.trim()),
         ("toggle_hints", bindings.toggle_hints.trim()),
     ];
 
@@ -803,7 +812,10 @@ pub fn resolve_project<'a>(
     Ok(None)
 }
 
-pub fn delete_project_file(loaded: &LoadedConfig, project_name: &str) -> Result<PathBuf> {
+/// Resolve the on-disk path of a project file by name, covering both valid and
+/// invalid (broken) projects, and verifying the file lives inside the configured
+/// project directory.
+pub fn project_file_path(loaded: &LoadedConfig, project_name: &str) -> Result<PathBuf> {
     let project_name = util::validated_project_name(project_name)?;
     let path = loaded
         .project_files
@@ -818,6 +830,11 @@ pub fn delete_project_file(loaded: &LoadedConfig, project_name: &str) -> Result<
         })
         .with_context(|| format!("project file not found for {project_name}"))?;
     ensure_project_file_is_in_project_dir(&loaded.project_dir, &path)?;
+    Ok(path)
+}
+
+pub fn delete_project_file(loaded: &LoadedConfig, project_name: &str) -> Result<PathBuf> {
+    let path = project_file_path(loaded, project_name)?;
     fs::remove_file(&path)
         .with_context(|| format!("failed to delete project file {}", path.display()))?;
     Ok(path)

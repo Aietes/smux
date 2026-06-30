@@ -122,6 +122,9 @@ straight back into your buffers, splits, and cursor positions.
 - **Update in place**: re-run `smux save-project <name> --force` after adding
   windows or panes, or press `Alt-S` on the session in the picker — both
   overwrite the existing file
+- **Edit**: press `Ctrl-E` on the project in the picker to open its `.toml` in
+  `$EDITOR`; when you quit the editor the picker returns. This works on broken
+  projects too, so it's the quickest way to fix one
 - **Rename**: rename the `.toml` file (the file name *is* the project name).
   Note that the picker's `Ctrl-R` renames a tmux *session*, not a project file
 - **Delete**: press `Ctrl-X` on the project in the picker, or delete the file
@@ -129,8 +132,8 @@ straight back into your buffers, splits, and cursor positions.
   `smux doctor --fix` refreshes schema directives after an upgrade
 
 A broken project file (bad path, unknown template reference) stays **visible but
-inactive** in the picker, so you can spot it and fix it instead of having it
-silently disappear.
+inactive** in the picker, so you can spot it and fix it (`Ctrl-E`) instead of
+having it silently disappear.
 
 ## Field summary
 

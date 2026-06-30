@@ -248,9 +248,21 @@ fn run_select(
                 return session::connect_project(tmux, loaded, &selection.entry.value);
             }
             (fzf::SelectAction::Open, fzf::EntryKind::InvalidProject) => continue,
+            (fzf::SelectAction::Edit, fzf::EntryKind::Project)
+            | (fzf::SelectAction::Edit, fzf::EntryKind::InvalidProject) => {
+                if let Err(error) =
+                    edit_project_from_picker(loaded.as_ref(), &selection.entry.value)
+                {
+                    eprintln!("warning: {error:#}");
+                }
+                // The file may have changed (or a broken project become valid),
+                // so reload before the picker relaunches.
+                loaded = config::load_optional(config_path)?;
+            }
             (fzf::SelectAction::Delete, _) => continue,
             (fzf::SelectAction::SaveProject, _) => continue,
             (fzf::SelectAction::Rename, _) => continue,
+            (fzf::SelectAction::Edit, _) => continue,
         }
     }
 }
@@ -295,6 +307,51 @@ fn delete_project_from_picker(
 ) -> Result<PathBuf> {
     let loaded = loaded.context("project deletion requires config or project files")?;
     config::delete_project_file(loaded, project_name)
+}
+
+fn edit_project_from_picker(
+    loaded: Option<&config::LoadedConfig>,
+    project_name: &str,
+) -> Result<()> {
+    let loaded = loaded.context("editing a project requires config or project files")?;
+    let path = config::project_file_path(loaded, project_name)?;
+    let Some(command) = editor_command() else {
+        anyhow::bail!("no editor set: export $EDITOR (or $VISUAL) to edit project files");
+    };
+    let (program, args) = command
+        .split_first()
+        .expect("editor_command never returns an empty command");
+    let status = std::process::Command::new(program)
+        .args(args)
+        .arg(&path)
+        .status()
+        .with_context(|| format!("failed to launch editor `{program}`"))?;
+    if !status.success() {
+        anyhow::bail!("editor `{program}` exited with a non-zero status");
+    }
+    Ok(())
+}
+
+/// Resolve the editor command from `$VISUAL`, then `$EDITOR`, split into a
+/// program and its leading arguments (so values like `code --wait` work). Returns
+/// `None` when neither variable is set to a non-empty value.
+fn editor_command() -> Option<Vec<String>> {
+    for var in ["VISUAL", "EDITOR"] {
+        if let Ok(value) = std::env::var(var) {
+            let parts = split_editor_command(&value);
+            if !parts.is_empty() {
+                return Some(parts);
+            }
+        }
+    }
+    None
+}
+
+fn split_editor_command(value: &str) -> Vec<String> {
+    value
+        .split_whitespace()
+        .map(|part| part.to_owned())
+        .collect()
 }
 
 fn save_project_from_picker(
@@ -487,12 +544,23 @@ fn empty_select_message(
 
 #[cfg(test)]
 mod tests {
-    use super::{empty_select_message, resolve_template_choice};
+    use super::{empty_select_message, resolve_template_choice, split_editor_command};
     use crate::session;
 
     #[test]
     fn cancelling_template_choice_returns_none() {
         assert_eq!(resolve_template_choice(None), None);
+    }
+
+    #[test]
+    fn split_editor_command_handles_program_and_args() {
+        assert_eq!(split_editor_command("nvim"), vec!["nvim".to_owned()]);
+        assert_eq!(
+            split_editor_command("code --wait"),
+            vec!["code".to_owned(), "--wait".to_owned()]
+        );
+        assert!(split_editor_command("   ").is_empty());
+        assert!(split_editor_command("").is_empty());
     }
 
     #[test]

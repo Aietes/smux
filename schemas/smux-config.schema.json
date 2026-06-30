@@ -131,6 +131,11 @@
           "default": "ctrl-r",
           "description": "Main picker shortcut that renames the selected tmux session."
         },
+        "edit_project": {
+          "type": "string",
+          "default": "ctrl-e",
+          "description": "Main picker shortcut that opens the selected project file in $EDITOR."
+        },
         "toggle_hints": {
           "type": "string",
           "default": "?",
