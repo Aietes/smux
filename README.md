@@ -2,18 +2,20 @@
 [![Release](https://github.com/Aietes/smux/actions/workflows/release.yml/badge.svg)](https://github.com/Aietes/smux/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**smux** is a tmux session manager with `fzf`-powered session creation and switching.
+**smux** — jump to any tmux session, or spin up a full project workspace, in one keystroke.
 
 [Install](#install) • [Quick Start](#quick-start) • [Common Workflows](#common-workflows) • [Projects vs Templates](#projects-vs-templates) • [Config](#configuration) • [Commands](#commands)
 
-## Highlights:
+If you live in `tmux`, you know the friction: remembering session names, rebuilding the same editor/server/git layout for every project, and fumbling `attach`/`switch` to get back to where you were.
 
-- quickly switch between existing tmux sessions
-- tmux session from directory - pick a zoxide directory or folder-search result and create or reuse a tmux session for it
-- tmux session from project - launch a saved project with a defined properties (path, name, windows, panes, layout, commands...)
-- apply reusable tmux templates with windows, panes, layouts, and startup commands
+smux is a thin layer over `tmux`, `fzf`, and `zoxide` that removes it. One keystroke opens a fuzzy picker of your running sessions, saved projects, and recent directories — hit Enter to jump in or build the workspace.
 
-It works both inside and outside tmux. Inside tmux, it fits naturally in a popup. Outside tmux, it uses the current terminal.
+- **Jump to any running session** — search, don't memorize
+- **Open a saved project in one step** — windows, panes, layout, and startup commands all restored
+- **Turn any directory into a session** — pick a `zoxide` directory or folder-search hit; smux creates or reuses it
+- **Reuse layouts with templates** — define a shape once, apply it to any folder
+
+It works both inside and outside tmux: inside, it fits naturally in a popup; outside, it uses the current terminal.
 
 https://github.com/user-attachments/assets/9025660b-31c4-4cc6-8b51-fd37ec008562
 
@@ -74,9 +76,7 @@ Then start using it:
 smux select
 ```
 
-For normal day-to-day use, wire it into `tmux`:
-
-Recommended `tmux` settings:
+For day-to-day use, wire it into `tmux` (recommended settings):
 
 ```tmux
 set -g detach-on-destroy off # keeps tmux running when you close a session
@@ -111,17 +111,7 @@ smux save-project myapp --stdout
 `smux doctor` reports dependency health, config validity, and schema drift without modifying files.
 `smux doctor --fix` updates missing or stale `#:schema` lines in the main config and project files.
 
-`smux select` is the main entrypoint. It opens a picker that can:
-
-- switch to an existing tmux session
-- launch a saved project
-- create or reuse a session from a zoxide directory or folder-search result
-- save a selected tmux session as a project with `Alt-S`
-- delete a selected project file with `Ctrl-X`
-
-Use `smux select --choose-template` when you want directory selection to be followed by an explicit template picker.
-
-It can run inside tmux (recommended as popup), or outside tmux in the terminal.
+`smux select` is the main entrypoint — one picker over your sessions, projects, and directories. See [Picker Behavior](#picker-behavior) for everything it does.
 
 ## Common Workflows
 
@@ -156,9 +146,9 @@ smux save-project myapp     # explicit name
 smux save-project           # name defaults to the current session
 ```
 
-The name is optional and defaults to the source session's name, so a bare `smux save-project` (or the `^y` action in the picker) captures the session you are in. Re-running it after adding windows or panes updates the existing project: the picker action overwrites in place, and on the command line pass `--force` to overwrite.
+The name is optional and defaults to the source session's name, so a bare `smux save-project` (or the `Alt-S` action in the picker) captures the session you are in. Re-running it after adding windows or panes updates the existing project: the picker action overwrites in place, and on the command line pass `--force` to overwrite.
 
-Saved projects are stored in `.config/smux/projects/`, and can be edited and adjusted. As an example the `pane` command can launch Neovim and restore the last `persistence.nvim` session:
+Saved projects are plain TOML in `~/.config/smux/projects/`, so you can edit them by hand. For example, a pane command can launch Neovim and restore the last `persistence.nvim` session:
 
 ```toml
 windows = [
@@ -194,9 +184,8 @@ The unified picker combines:
 
 The template picker is separate and appears only when `--choose-template` is used.
 
-Current behavior:
+In the picker:
 
-- prompt is shown at the top
 - `Esc` cancels cleanly
 - the current tmux session is highlighted when `smux select` runs inside tmux
 - sessions are ordered most-recently-active first; saved projects most-recently-updated first
@@ -249,7 +238,8 @@ Template resolution order:
 1. `--template`
 2. matching project definition
 3. `settings.default_template`
-4. built-in fallback template
+4. auto-detected template — a same-named template (e.g. `rust` for a `Cargo.toml`, `node` for a `package.json`) when the directory has a recognized marker file
+5. built-in fallback template
 
 Session name resolution order:
 
@@ -270,6 +260,9 @@ directory = 108
 template = 179
 project = 81
 
+[settings.picker]
+show_hints = true
+
 [settings.picker.bindings]
 reset = "ctrl-c"
 sessions = "ctrl-s"
@@ -277,6 +270,8 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "alt-s"
+rename_session = "ctrl-r"
+toggle_hints = "?"
 
 [settings.picker.preview]
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
@@ -378,11 +373,6 @@ smux-config.5
 
 ## Design Principles
 
-smux follows these core design principles:
-
-- **Small and focused**: The tool is intentionally small, with a thin orchestration layer over existing tools (tmux, fzf, zoxide)
-- **Predictable**: Behavior is deterministic and straightforward to understand
-- **Minimal dependencies**: Only includes necessary external tools (tmux, fzf, zoxide)
-- **User experience first**: Prioritizes intuitive workflows and familiar interactions
-
-These principles guide all implementation decisions and help ensure smux remains a useful, reliable tool for tmux session management.
+- **Small and focused** — a thin orchestration layer over `tmux`, `fzf`, and `zoxide`, with no dependencies beyond them
+- **Predictable** — deterministic behavior that is easy to reason about
+- **User experience first** — intuitive workflows and familiar key bindings
