@@ -18,13 +18,6 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf> {
         .with_context(|| format!("failed to resolve path {}", expanded.display()))
 }
 
-pub fn expand_and_normalize_path(path: &Path) -> Result<PathBuf> {
-    let expanded = expand_tilde_path(path);
-    expanded
-        .canonicalize()
-        .with_context(|| format!("failed to resolve path {}", expanded.display()))
-}
-
 pub fn expand_and_absolutize_path(path: &Path) -> Result<PathBuf> {
     let expanded = expand_tilde_path(path);
 

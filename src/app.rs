@@ -97,7 +97,7 @@ pub fn run(cli: Cli) -> Result<()> {
             names.sort();
             for name in names {
                 let project = &loaded.projects[&name];
-                let resolved = util::expand_and_normalize_path(Path::new(&project.path))?;
+                let resolved = util::normalize_path(Path::new(&project.path))?;
                 println!("{name}\t{}", resolved.display());
             }
             Ok(())
@@ -348,8 +348,8 @@ fn select_entries(
 }
 
 fn insert_directory_key(seen: &mut HashSet<PathBuf>, directory: &str) -> bool {
-    let key = util::expand_and_normalize_path(Path::new(directory))
-        .unwrap_or_else(|_| PathBuf::from(directory));
+    let key =
+        util::normalize_path(Path::new(directory)).unwrap_or_else(|_| PathBuf::from(directory));
     seen.insert(key)
 }
 

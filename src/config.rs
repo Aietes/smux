@@ -104,19 +104,39 @@ impl IconMode {
 #[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct IconColors {
+    #[serde(default = "default_icon_color_session")]
     pub session: u8,
+    #[serde(default = "default_icon_color_directory")]
     pub directory: u8,
+    #[serde(default = "default_icon_color_template")]
     pub template: u8,
+    #[serde(default = "default_icon_color_project")]
     pub project: u8,
+}
+
+fn default_icon_color_session() -> u8 {
+    75
+}
+
+fn default_icon_color_directory() -> u8 {
+    108
+}
+
+fn default_icon_color_template() -> u8 {
+    179
+}
+
+fn default_icon_color_project() -> u8 {
+    81
 }
 
 impl Default for IconColors {
     fn default() -> Self {
         Self {
-            session: 75,
-            directory: 108,
-            template: 179,
-            project: 81,
+            session: default_icon_color_session(),
+            directory: default_icon_color_directory(),
+            template: default_icon_color_template(),
+            project: default_icon_color_project(),
         }
     }
 }
@@ -723,7 +743,7 @@ pub fn resolve_project<'a>(
     loaded: &'a LoadedConfig,
     path: &Path,
 ) -> Result<Option<ResolvedProject<'a>>> {
-    let normalized = util::expand_and_normalize_path(path)?;
+    let normalized = util::normalize_path(path)?;
 
     for (name, project) in &loaded.projects {
         let project_path = util::expand_and_absolutize_path(Path::new(&project.path))?;
