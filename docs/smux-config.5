@@ -207,7 +207,11 @@ matching project definition
 .IP "3." 4
 \fBsettings.default_template\fR
 .IP "4." 4
+auto-detected template: a same-named template (for example \fBrust\fR for a \fBCargo.toml\fR, \fBnode\fR for a \fBpackage.json\fR) when the directory has a recognized marker file
+.IP "5." 4
 built-in fallback template
+.PP
+When opening a folder from the picker, if none of the above resolve a template and two or more templates are defined, smux prompts you to choose one instead of using the built-in fallback.
 .PP
 Session name resolution order:
 .IP "1." 4

@@ -181,7 +181,7 @@ The unified picker combines:
 - `zoxide` directories
 - directories found under `[settings.folder_search]` roots
 
-The template picker is separate and appears only when `--choose-template` is used.
+The template picker is a separate step. When you open a folder, it appears automatically if no template resolves on its own and two or more are defined; `--choose-template` makes it appear every time.
 
 In the picker:
 

@@ -565,7 +565,10 @@ When creating or connecting to a session, template resolution order is:
 1. `--template`
 2. matching project definition
 3. `settings.default_template`
-4. built-in fallback template
+4. auto-detected template — a same-named template (e.g. `rust` for a `Cargo.toml`, `node` for a `package.json`) when the directory has a recognized marker file
+5. built-in fallback template
+
+When you open a folder from the picker and steps 1–4 don't resolve a template, smux prompts you to choose one instead of silently using the built-in fallback — but only if two or more templates are defined. With one or no templates, it opens straight away.
 
 ### Session name resolution
 
@@ -599,7 +602,7 @@ The unified picker combines:
 - zoxide directories
 - directories found by configured folder search
 
-The template picker is separate and appears only when `--choose-template` is used.
+The template picker is a separate step. When you open a folder, it appears automatically if no template resolves on its own and two or more are defined; `--choose-template` makes it appear every time.
 
 Current behavior:
 
