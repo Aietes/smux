@@ -81,12 +81,11 @@ For day-to-day use, wire it into `tmux` (recommended settings):
 ```tmux
 set -g detach-on-destroy off # keeps tmux running when you close a session
 bind-key t display-popup -w 70% -h 70% -E "smux select"
-bind-key T display-popup -w 70% -h 70% -E "smux select --choose-template"
 bind-key L run-shell "smux last"          # jump to the previous session
 bind-key S run-shell "smux save-project"  # save/update the current session as a project
 ```
 
-These `bind-key` lines are optional `tmux` conveniences (`prefix + t/T/L/S`) — smux works without them. Saving a project, for example, also works from inside the picker with `Alt-S` and from the command line with `smux save-project`; the `prefix + S` binding just saves the current session without opening the picker first.
+These `bind-key` lines are optional `tmux` conveniences (`prefix + t/L/S`) — smux works without them. Saving a project, for example, also works from inside the picker with `Alt-S` and from the command line with `smux save-project`; the `prefix + S` binding just saves the current session without opening the picker first.
 
 To launch it in `zsh` outside of `tmux` with `Ctrl-t`:
 
@@ -101,17 +100,13 @@ bindkey -M emacs '^T' smux-select-widget
 bindkey -M viins '^T' smux-select-widget
 ```
 
-Good first commands:
+Check that everything is wired up:
 
 ```bash
 smux doctor
-smux doctor --fix
-smux select
-smux save-project myapp --stdout
 ```
 
-`smux doctor` reports dependency health, config validity, and schema drift without modifying files.
-`smux doctor --fix` updates missing or stale `#:schema` lines in the main config and project files.
+`smux doctor` reports dependency health, config validity, and schema drift without modifying files. After upgrading smux, `smux doctor --fix` refreshes any missing or stale `#:schema` lines in your config and project files.
 
 `smux select` is the main entrypoint — one picker over your sessions, projects, and directories. See [Picker Behavior](#picker-behavior) for everything it does.
 
