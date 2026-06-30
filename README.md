@@ -15,6 +15,8 @@
 
 It works both inside and outside tmux. Inside tmux, it fits naturally in a popup. Outside tmux, it uses the current terminal.
 
+https://github.com/user-attachments/assets/c52920db-23f3-4e1b-b19a-0411dfd8183a
+
 ## Install
 
 With Homebrew:
