@@ -218,7 +218,12 @@ fn run_select(
                 }
             }
             (fzf::SelectAction::Open, fzf::EntryKind::Directory) => {
-                let template = if choose_template {
+                let path = Path::new(&selection.entry.value);
+                // Offer the template picker when explicitly requested, or when no
+                // template would resolve on its own but several are available.
+                let offer_choice =
+                    choose_template || session::should_offer_template_choice(loaded.as_ref(), path);
+                let template = if offer_choice {
                     let Some(template) = choose_template_name(config, display_style)? else {
                         return Ok(());
                     };
@@ -229,7 +234,7 @@ fn run_select(
 
                 return session::connect_path(
                     tmux,
-                    Path::new(&selection.entry.value),
+                    path,
                     loaded.as_ref(),
                     template.as_deref(),
                     None,

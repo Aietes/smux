@@ -27,6 +27,9 @@ pub enum Commands {
         long_about = "Open the unified picker for tmux sessions, saved projects, zoxide directories, and configured folder-search results.\n\nEnter opens the selected item. Ctrl-X deletes the selected non-current session or project file. Alt-S saves the selected tmux session as a project. Ctrl-R renames the selected session. Press ? to toggle the keyboard-shortcut hints."
     )]
     Select {
+        /// Always prompt for a template when opening a folder. Without this, the
+        /// picker only prompts when no template resolves automatically and two or
+        /// more templates are defined.
         #[arg(long)]
         choose_template: bool,
         #[arg(long)]

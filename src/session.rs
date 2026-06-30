@@ -136,6 +136,26 @@ fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<S
     })
 }
 
+/// Decide whether opening `path` from the picker should prompt for a template
+/// rather than resolving one silently. We prompt only when nothing would resolve
+/// automatically — no `default_template` and no marker-file match — and there are
+/// at least two templates worth choosing between. This keeps the common path (a
+/// configured default, or a detected project type) a single keystroke, and offers
+/// a choice only when smux would otherwise fall back to the built-in template.
+pub fn should_offer_template_choice(loaded: Option<&LoadedConfig>, path: &Path) -> bool {
+    let Some(loaded) = loaded else {
+        return false;
+    };
+    let config = &loaded.config;
+    if config.settings.default_template.is_some() {
+        return false;
+    }
+    if detect_template_name(config, path).is_some() {
+        return false;
+    }
+    config.templates.len() >= 2
+}
+
 fn load_template(config: &crate::config::Config, template_name: &str) -> Result<Template> {
     config
         .templates
@@ -323,6 +343,100 @@ mod tests {
             super::resolve_template(Some(&loaded), Some("missing"), None, Path::new("/tmp/demo"))
                 .expect_err("missing template should fail");
         assert!(error.to_string().contains("unknown template"));
+    }
+
+    fn loaded_with(default_template: Option<&str>, template_names: &[&str]) -> LoadedConfig {
+        let templates = template_names
+            .iter()
+            .map(|name| {
+                (
+                    (*name).to_owned(),
+                    Template {
+                        root: None,
+                        startup_window: None,
+                        startup_pane: None,
+                        windows: vec![Window {
+                            name: "main".to_owned(),
+                            cwd: None,
+                            pre_command: None,
+                            command: None,
+                            layout: None,
+                            synchronize: false,
+                            panes: None,
+                        }],
+                    },
+                )
+            })
+            .collect();
+
+        LoadedConfig {
+            path: PathBuf::from("/tmp/config.toml"),
+            config_exists: true,
+            project_dir: PathBuf::from("/tmp/projects"),
+            config: Config {
+                settings: Settings {
+                    default_template: default_template.map(|name| name.to_owned()),
+                    ..Default::default()
+                },
+                templates,
+            },
+            projects: HashMap::new(),
+            project_files: HashMap::new(),
+            invalid_projects: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn offers_template_choice_when_no_default_and_multiple_templates() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let loaded = loaded_with(None, &["default", "rust"]);
+        assert!(super::should_offer_template_choice(
+            Some(&loaded),
+            tempdir.path()
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn no_template_choice_when_default_template_set() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let loaded = loaded_with(Some("default"), &["default", "rust"]);
+        assert!(!super::should_offer_template_choice(
+            Some(&loaded),
+            tempdir.path()
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn no_template_choice_when_marker_file_resolves_a_template() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(tempdir.path().join("Cargo.toml"), "")?;
+        let loaded = loaded_with(None, &["rust", "node"]);
+        assert!(!super::should_offer_template_choice(
+            Some(&loaded),
+            tempdir.path()
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn no_template_choice_with_fewer_than_two_templates() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let loaded = loaded_with(None, &["rust"]);
+        assert!(!super::should_offer_template_choice(
+            Some(&loaded),
+            tempdir.path()
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn no_template_choice_without_config() {
+        assert!(!super::should_offer_template_choice(
+            None,
+            Path::new("/tmp/demo")
+        ));
     }
 
     #[test]

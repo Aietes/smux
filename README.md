@@ -86,6 +86,8 @@ bind-key L run-shell "smux last"          # jump to the previous session
 bind-key S run-shell "smux save-project"  # save/update the current session as a project
 ```
 
+These `bind-key` lines are optional `tmux` conveniences (`prefix + t/T/L/S`) — smux works without them. Saving a project, for example, also works from inside the picker with `Alt-S` and from the command line with `smux save-project`; the `prefix + S` binding just saves the current session without opening the picker first.
+
 To launch it in `zsh` outside of `tmux` with `Ctrl-t`:
 
 ```zsh
@@ -138,6 +140,8 @@ Choose a template interactively from the selector:
 ```bash
 smux select --choose-template
 ```
+
+You usually don't need this flag: when you open a folder, smux shows the template picker on its own whenever no template resolves automatically (no `default_template`, no marker-file match) but two or more templates are defined. If a default or a detected project type applies, it just opens. `--choose-template` forces the picker every time.
 
 Export the current tmux session as a project definition:
 
@@ -240,6 +244,8 @@ Template resolution order:
 3. `settings.default_template`
 4. auto-detected template — a same-named template (e.g. `rust` for a `Cargo.toml`, `node` for a `package.json`) when the directory has a recognized marker file
 5. built-in fallback template
+
+When you open a folder from the picker and steps 1–4 don't resolve a template, smux prompts you to choose one instead of silently using the built-in fallback — but only if two or more templates are defined. With one or no templates, it opens straight away.
 
 Session name resolution order:
 

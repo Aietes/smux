@@ -6,6 +6,10 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+### Changed
+
+- opening a folder in the picker now prompts for a template automatically when no template resolves on its own (no `default_template`, no marker-file match) and two or more templates are defined, instead of silently using the built-in fallback; `smux select --choose-template` still forces the prompt every time
+
 ## [0.2.0] - 2026-06-30
 
 ### Added
