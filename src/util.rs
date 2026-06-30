@@ -65,7 +65,8 @@ pub fn validated_session_name(value: &str) -> Result<String> {
 }
 
 pub fn validated_project_name(value: &str) -> Result<String> {
-    let trimmed = value.trim().trim_end_matches(".toml");
+    let trimmed = value.trim();
+    let trimmed = trimmed.strip_suffix(".toml").unwrap_or(trimmed);
 
     if trimmed.is_empty() {
         bail!("project name resolved to an empty value");
@@ -188,6 +189,14 @@ mod tests {
         assert_eq!(
             validated_project_name("example.toml").expect("project name should validate"),
             "example"
+        );
+    }
+
+    #[test]
+    fn strips_only_a_single_toml_suffix() {
+        assert_eq!(
+            validated_project_name("example.toml.toml").expect("project name should validate"),
+            "example.toml"
         );
     }
 
