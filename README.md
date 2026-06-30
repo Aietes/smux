@@ -172,6 +172,18 @@ smux save-project myapp --stdout
 
 Use templates when you want to reuse the same shape across many folders. Use projects when you want one named workspace that already knows where it lives and how it should start.
 
+### Capturing and reusing projects
+
+The easiest way to make a project is to *capture* a session you've already built: arrange your windows and panes, run `smux save-project`, and smux writes a reusable definition (re-run it to update in place). Opening that project — or just opening its directory, which smux recognizes automatically — rebuilds the workspace, or switches to it if it's already running.
+
+See **[docs/projects.md](./docs/projects.md)** for the full guide to capturing and managing projects.
+
+### Smart template selection
+
+Templates shine because you rarely pick one by hand. When you open a folder, smux chooses a template for you: if the folder looks like a known project type — a `Cargo.toml`, `package.json`, `go.mod`, … — and you have a template named to match (`rust`, `node`, `go`, …), it applies automatically; if nothing matches but you have several templates, it pops up a quick chooser so you decide in the moment, rather than making you plan ahead; otherwise it just opens. Define your layouts once, name them after the project types you work in, and folders open with the right workspace on their own.
+
+See **[docs/templates.md](./docs/templates.md)** for the full guide to creating and managing templates.
+
 ## Picker Behavior
 
 The unified picker combines:

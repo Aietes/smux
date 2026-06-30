@@ -620,5 +620,7 @@ Current behavior:
 ## Related Docs
 
 - CLI overview: `README.md`
+- templates guide: `docs/templates.md`
+- projects guide: `docs/projects.md`
 - design notes: `docs/design.md`
 - distribution notes: `docs/distribution.md`
