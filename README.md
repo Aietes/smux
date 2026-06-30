@@ -116,7 +116,7 @@ smux save-project myapp --stdout
 - switch to an existing tmux session
 - launch a saved project
 - create or reuse a session from a zoxide directory or folder-search result
-- save a selected tmux session as a project with `Ctrl-W`
+- save a selected tmux session as a project with `Alt-S`
 - delete a selected project file with `Ctrl-X`
 
 Use `smux select --choose-template` when you want directory selection to be followed by an explicit template picker.
@@ -206,7 +206,7 @@ Current behavior:
 - `Ctrl-P` limits the main picker to projects
 - `Ctrl-F` limits the main picker to folders
 - `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file and keeps the picker open
-- `Ctrl-W` saves (or updates) the selected tmux session as a project and keeps the picker open
+- `Alt-S` saves (or updates) the selected tmux session as a project and keeps the picker open
 - `Ctrl-R` renames the selected tmux session and keeps the picker open
 - `?` shows or hides the keyboard-shortcut hint bar
 
@@ -276,7 +276,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
-save_project = "ctrl-w"
+save_project = "alt-s"
 
 [settings.picker.preview]
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""

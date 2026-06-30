@@ -67,7 +67,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
-save_project = "ctrl-w"
+save_project = "alt-s"
 rename_session = "ctrl-r"
 toggle_hints = "?"
 
@@ -178,7 +178,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
-save_project = "ctrl-w"
+save_project = "alt-s"
 rename_session = "ctrl-r"
 toggle_hints = "?"
 ```
@@ -208,7 +208,7 @@ Fields:
   - keeps the picker open
 - `save_project`
   - type: string
-  - default: `ctrl-w`
+  - default: `alt-s`
   - saves the selected tmux session as a project and keeps the picker open
   - if a project with that name already exists, it is updated in place
 - `rename_session`
@@ -611,7 +611,7 @@ Current behavior:
 - `Ctrl-P` limits the main picker to projects and keeps fuzzy search active
 - `Ctrl-F` limits the main picker to folders and keeps fuzzy search active
 - `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file and keeps the picker open
-- `Ctrl-W` saves the selected tmux session as a project and keeps the picker open
+- `Alt-S` saves the selected tmux session as a project and keeps the picker open
 - these keybinds are configurable through `[settings.picker.bindings]`
 
 ## Related Docs

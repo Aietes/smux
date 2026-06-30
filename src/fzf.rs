@@ -641,11 +641,7 @@ mod tests {
         assert!(recorded[0].args.contains(&"1,2,3".to_owned()));
         assert!(recorded[0].args.contains(&"--expect".to_owned()));
         assert!(recorded[0].args.contains(&"--preview".to_owned()));
-        assert!(
-            recorded[0]
-                .args
-                .contains(&"ctrl-x,ctrl-w,ctrl-r".to_owned())
-        );
+        assert!(recorded[0].args.contains(&"ctrl-x,alt-s,ctrl-r".to_owned()));
         // The hint bar is restyled (ANSI-decorated), so assert on stable
         // visible fragments rather than the whole literal line.
         assert!(recorded[0].args.iter().any(|arg| {
@@ -792,7 +788,7 @@ mod tests {
                 success: true,
                 code: Some(0),
             },
-            stdout: b"ctrl-w\nsession\tdemo\tsession  demo\n".to_vec(),
+            stdout: b"alt-s\nsession\tdemo\tsession  demo\n".to_vec(),
             stderr: Vec::new(),
         }));
 

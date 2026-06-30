@@ -28,7 +28,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
-save_project = "ctrl-w"
+save_project = "alt-s"
 rename_session = "ctrl-r"
 toggle_hints = "?"
 
@@ -268,7 +268,7 @@ fn default_picker_delete_session() -> String {
 }
 
 fn default_picker_save_project() -> String {
-    "ctrl-w".to_owned()
+    "alt-s".to_owned()
 }
 
 fn default_picker_rename_session() -> String {
@@ -990,7 +990,7 @@ sessions = "ctrl-s"
 folders = "ctrl-f"
 projects = "ctrl-s"
 delete_session = "ctrl-x"
-save_project = "ctrl-w"
+save_project = "alt-s"
 "#;
 
         let config: Config = toml::from_str(input).expect("config should parse");
