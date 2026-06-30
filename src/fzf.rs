@@ -187,22 +187,30 @@ pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>
 /// Tracks whether the picker hint bar is currently shown, persisted in a temp
 /// file so the runtime toggle survives the picker relaunching between actions.
 /// Convention: the file existing means the hints are hidden.
+///
+/// The state file lives inside a private, randomly-named `0700` directory
+/// (created via `mkdtemp`) rather than at a predictable path in the world-
+/// writable temp dir, so neither the initial write nor the shell toggle that
+/// creates/removes it can be redirected through an attacker-planted symlink.
 pub struct HintState {
+    // Held only for its `Drop`, which removes the directory and the file in it.
+    _dir: tempfile::TempDir,
     path: PathBuf,
 }
 
 impl HintState {
     pub fn new(initially_shown: bool) -> Result<Self> {
-        let mut path = std::env::temp_dir();
-        path.push(format!("smux-hints-{}.state", std::process::id()));
-        let state = Self { path };
-        if initially_shown {
-            let _ = fs::remove_file(&state.path);
-        } else {
-            fs::write(&state.path, b"")
-                .with_context(|| format!("failed to write {}", state.path.display()))?;
+        let dir = tempfile::Builder::new()
+            .prefix("smux-hints-")
+            .tempdir()
+            .context("failed to create hint state directory")?;
+        let path = dir.path().join("state");
+        // "Hidden" is represented by the file existing, so only create it when
+        // the hints should start hidden.
+        if !initially_shown {
+            fs::write(&path, b"").with_context(|| format!("failed to write {}", path.display()))?;
         }
-        Ok(state)
+        Ok(Self { _dir: dir, path })
     }
 
     pub fn is_shown(&self) -> bool {
@@ -214,25 +222,29 @@ impl HintState {
     }
 }
 
-impl Drop for HintState {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
 struct TempInputFile {
     path: PathBuf,
 }
 
 impl TempInputFile {
     fn new(contents: &str) -> Result<Self> {
+        use std::io::Write;
+
         let mut path = std::env::temp_dir();
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .context("system clock should be after unix epoch")?
             .as_nanos();
         path.push(format!("smux-fzf-{}-{nanos}.tsv", std::process::id()));
-        fs::write(&path, contents)
+        // create_new (O_CREAT|O_EXCL) refuses to follow or reuse a pre-existing
+        // path, defeating a symlink planted at this name; the temp dir's sticky
+        // bit then prevents another user from replacing the file afterwards.
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .with_context(|| format!("failed to create {}", path.display()))?;
+        file.write_all(contents.as_bytes())
             .with_context(|| format!("failed to write {}", path.display()))?;
         Ok(Self { path })
     }
