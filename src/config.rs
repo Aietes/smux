@@ -743,7 +743,11 @@ pub fn resolve_project<'a>(
     loaded: &'a LoadedConfig,
     path: &Path,
 ) -> Result<Option<ResolvedProject<'a>>> {
-    let normalized = util::normalize_path(path)?;
+    // Normalize the query path the same way as each project path so the
+    // comparison is symmetric (both canonicalize when the directory exists and
+    // fall back to a lexical absolute path otherwise); using `normalize_path`
+    // here would canonicalize only one side and error on not-yet-created dirs.
+    let normalized = util::expand_and_absolutize_path(path)?;
 
     for (name, project) in &loaded.projects {
         let project_path = util::expand_and_absolutize_path(Path::new(&project.path))?;
