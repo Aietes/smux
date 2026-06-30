@@ -72,6 +72,8 @@ pub fn build_session_plan(
         bail!("template must contain at least one window");
     }
 
+    validate_window_names(template)?;
+
     let template_root = resolve_root(root, template.root.as_deref())?;
     let mut windows = Vec::with_capacity(template.windows.len());
 
@@ -92,6 +94,26 @@ pub fn build_session_plan(
         startup_window,
         startup_pane,
     })
+}
+
+/// Window names are interpolated into tmux `session:window` target strings and
+/// addressed by name after creation, so a name containing the tmux target
+/// separators (`:` or `.`) would mis-address later commands, and duplicate
+/// names would resolve ambiguously. Reject both up front with a clear error.
+fn validate_window_names(template: &Template) -> Result<()> {
+    let mut seen = std::collections::HashSet::new();
+    for window in &template.windows {
+        if window.name.contains(':') || window.name.contains('.') {
+            bail!(
+                "window name \"{}\" must not contain ':' or '.'",
+                window.name
+            );
+        }
+        if !seen.insert(window.name.as_str()) {
+            bail!("duplicate window name \"{}\" in template", window.name);
+        }
+    }
+    Ok(())
 }
 
 fn build_window_plan(
@@ -302,6 +324,53 @@ mod tests {
             Path::new("/tmp/demo/workspace/server")
         );
         Ok(())
+    }
+
+    #[test]
+    fn rejects_window_name_with_target_separators() {
+        for bad in ["api:v1", "build.step"] {
+            let template = Template {
+                root: None,
+                startup_window: None,
+                startup_pane: None,
+                windows: vec![Window {
+                    name: bad.to_owned(),
+                    cwd: None,
+                    pre_command: None,
+                    command: None,
+                    layout: None,
+                    synchronize: false,
+                    panes: None,
+                }],
+            };
+
+            let error = build_session_plan("demo", Path::new("/tmp/demo"), &template)
+                .expect_err("window name with target separators should fail");
+            assert!(error.to_string().contains("must not contain"));
+        }
+    }
+
+    #[test]
+    fn rejects_duplicate_window_names() {
+        let window = || Window {
+            name: "main".to_owned(),
+            cwd: None,
+            pre_command: None,
+            command: None,
+            layout: None,
+            synchronize: false,
+            panes: None,
+        };
+        let template = Template {
+            root: None,
+            startup_window: None,
+            startup_pane: None,
+            windows: vec![window(), window()],
+        };
+
+        let error = build_session_plan("demo", Path::new("/tmp/demo"), &template)
+            .expect_err("duplicate window names should fail");
+        assert!(error.to_string().contains("duplicate window name"));
     }
 
     #[test]
