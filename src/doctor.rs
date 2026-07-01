@@ -11,6 +11,7 @@ use crate::zoxide;
 
 const ANSI_RESET: &str = "\x1b[0m";
 const ANSI_BOLD: &str = "\x1b[1m";
+const ANSI_DIM: &str = "\x1b[2m";
 const ANSI_GREEN: &str = "\x1b[32m";
 const ANSI_YELLOW: &str = "\x1b[33m";
 const ANSI_RED: &str = "\x1b[31m";
@@ -19,7 +20,6 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
     let tmux = util::command_available("tmux");
     let fzf = util::command_available("fzf");
     let zoxide_available = util::command_available("zoxide");
-    let mut has_error = false;
     let config_path = path_for_missing_config(config_path);
     let project_dir = config::projects_dir_for_config_path(&config_path);
 
@@ -29,100 +29,146 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
         None
     };
 
-    print_status_line("tmux", availability_state(tmux), None::<&str>);
-    print_status_line("fzf", availability_state(fzf), None::<&str>);
-    print_status_line("zoxide", availability_state(zoxide_available), None::<&str>);
+    let mut sections = vec![
+        Section {
+            title: "Dependencies",
+            checks: vec![
+                dependency_check("tmux", tmux, true),
+                dependency_check("fzf", fzf, true),
+                dependency_check("zoxide", zoxide_available, false),
+            ],
+        },
+        Section {
+            title: "Sources",
+            checks: vec![
+                tmux_sessions_check(tmux),
+                zoxide_directories_check(zoxide_available),
+            ],
+        },
+    ];
 
-    if tmux {
-        match Tmux::new().list_sessions() {
-            Ok(sessions) => print_value_line("tmux_sessions", &sessions.len().to_string()),
-            Err(error) => {
-                print_status_line("tmux_sessions", Status::Error, None::<&str>);
-                print_value_line("tmux_sessions_error", &format!("{error:#}"));
-            }
-        }
-    } else {
-        print_status_line("tmux_sessions", Status::Unavailable, None::<&str>);
-    }
-
-    if zoxide_available {
-        match zoxide::list_directories() {
-            Ok(directories) => {
-                print_value_line("zoxide_directories", &directories.len().to_string())
-            }
-            Err(error) => print_value_line("zoxide_directories", &format!("error ({error:#})")),
-        }
-    } else {
-        print_status_line("zoxide_directories", Status::Unavailable, None::<&str>);
-    }
-
-    if !tmux || !fzf {
-        has_error = true;
-    }
+    let mut config_checks = Vec::new();
+    let mut schema_checks = Vec::new();
+    let mut display_checks = Vec::new();
+    let mut folder_checks = Vec::new();
 
     match config::load_optional(Some(&config_path)) {
         Ok(Some(loaded)) => {
             if loaded.config_exists {
-                print_status_line("config", Status::Ok, Some(loaded.path.display()));
+                config_checks.push(Check::new(
+                    Status::Ok,
+                    "config",
+                    Some(loaded.path.display().to_string()),
+                ));
             } else {
-                print_status_line("config", Status::Missing, None::<&str>);
+                config_checks.push(Check::new(
+                    Status::Missing,
+                    "config",
+                    Some("not found (using defaults)".to_owned()),
+                ));
             }
-            print_value_line(
+            config_checks.push(Check::new(
+                Status::Ok,
                 "projects",
-                &format!(
-                    "{} ({})",
+                Some(format!(
+                    "{} in {}",
                     loaded.projects.len(),
                     loaded.project_dir.display()
-                ),
-            );
-            print_value_line(
-                "invalid_projects",
-                &loaded.invalid_projects.len().to_string(),
-            );
-            print_schema_status(&loaded.path, &loaded.project_dir);
-            if let Some(summary) = schema_fix_summary {
-                print_schema_fix_summary(summary);
-            }
-            print_icon_status(
+                )),
+            ));
+            config_checks.push(invalid_projects_check(loaded.invalid_projects.len()));
+            schema_checks.extend(schema_checks_for(&loaded.path, &loaded.project_dir));
+            display_checks.push(icon_check(
                 loaded.config.settings.icons,
                 loaded.config.settings.icon_colors,
-            );
-            print_folder_search_status(&loaded.config.settings.folder_search);
+            ));
+            folder_checks.push(folder_search_check(&loaded.config.settings.folder_search));
         }
         Ok(None) => {
-            print_status_line("config", Status::Missing, None::<&str>);
+            config_checks.push(Check::new(
+                Status::Missing,
+                "config",
+                Some("not found (using defaults)".to_owned()),
+            ));
             if project_dir.exists() || config_path.exists() {
-                print_value_line("projects", &format!("0 ({})", project_dir.display()));
-                print_schema_status(&config_path, &project_dir);
+                config_checks.push(Check::new(
+                    Status::Ok,
+                    "projects",
+                    Some(format!("0 in {}", project_dir.display())),
+                ));
+                schema_checks.extend(schema_checks_for(&config_path, &project_dir));
             } else {
-                print_value_line("projects", "0");
+                config_checks.push(Check::new(Status::Ok, "projects", Some("0".to_owned())));
             }
-            print_value_line("invalid_projects", "0");
-            if let Some(summary) = schema_fix_summary {
-                print_schema_fix_summary(summary);
-            }
-            print_icon_status(IconMode::Auto, Default::default());
-            print_folder_search_status(&Default::default());
+            config_checks.push(invalid_projects_check(0));
+            display_checks.push(icon_check(IconMode::Auto, Default::default()));
+            folder_checks.push(folder_search_check(&Default::default()));
         }
         Err(error) => {
-            has_error = true;
-            print_status_line("config", Status::Error, None::<&str>);
-            print_value_line("config_error", &format!("{error:#}"));
-            print_schema_status(&config_path, &project_dir);
-            if let Some(summary) = schema_fix_summary {
-                print_schema_fix_summary(summary);
-            }
-            print_value_line("icons", "unknown (config error)");
-            print_value_line("folder_search", "unknown (config error)");
+            config_checks.push(Check::new(
+                Status::Error,
+                "config",
+                Some(format!("invalid: {error:#}")),
+            ));
+            schema_checks.extend(schema_checks_for(&config_path, &project_dir));
+            display_checks.push(Check::new(
+                Status::Unavailable,
+                "icons",
+                Some("unknown (config error)".to_owned()),
+            ));
+            folder_checks.push(Check::new(
+                Status::Unavailable,
+                "folder search",
+                Some("unknown (config error)".to_owned()),
+            ));
         }
     }
 
-    if has_error {
-        print_status_line("doctor", Status::Error, None::<&str>);
-        bail!("doctor checks failed");
+    if let Some(summary) = schema_fix_summary {
+        schema_checks.push(Check::new(
+            Status::Ok,
+            "schema fixes",
+            Some(format!(
+                "updated {} · inserted {}",
+                summary.updated, summary.inserted
+            )),
+        ));
     }
 
-    print_status_line("doctor", Status::Ok, None::<&str>);
+    sections.push(Section {
+        title: "Configuration",
+        checks: config_checks,
+    });
+    sections.push(Section {
+        title: "Schemas",
+        checks: schema_checks,
+    });
+    sections.push(Section {
+        title: "Display",
+        checks: display_checks,
+    });
+    sections.push(Section {
+        title: "Folder search",
+        checks: folder_checks,
+    });
+
+    let errors = sections
+        .iter()
+        .flat_map(|section| &section.checks)
+        .filter(|check| check.status.is_error())
+        .count();
+    let warnings = sections
+        .iter()
+        .flat_map(|section| &section.checks)
+        .filter(|check| check.status.is_warning())
+        .count();
+
+    render_report(&sections);
+    render_footer(errors, warnings);
+
+    if errors > 0 {
+        bail!("doctor checks failed");
+    }
 
     Ok(())
 }
@@ -143,26 +189,217 @@ enum Status {
 }
 
 impl Status {
-    fn text(self) -> &'static str {
+    fn symbol(self) -> &'static str {
         match self {
-            Self::Ok => "ok",
-            Self::Missing => "missing",
-            Self::Error => "error",
-            Self::Unavailable => "unavailable",
-            Self::Drift => "drift",
+            Self::Ok => "✓",
+            Self::Missing | Self::Drift => "⚠",
+            Self::Error => "✗",
+            Self::Unavailable => "·",
         }
     }
 
     fn color(self) -> &'static str {
         match self {
             Self::Ok => ANSI_GREEN,
-            Self::Missing | Self::Unavailable | Self::Drift => ANSI_YELLOW,
+            Self::Missing | Self::Drift => ANSI_YELLOW,
             Self::Error => ANSI_RED,
+            Self::Unavailable => ANSI_DIM,
+        }
+    }
+
+    fn is_error(self) -> bool {
+        matches!(self, Self::Error)
+    }
+
+    fn is_warning(self) -> bool {
+        matches!(self, Self::Missing | Self::Drift)
+    }
+}
+
+struct Check {
+    status: Status,
+    label: String,
+    detail: Option<String>,
+}
+
+impl Check {
+    fn new(status: Status, label: impl Into<String>, detail: Option<String>) -> Self {
+        Self {
+            status,
+            label: label.into(),
+            detail,
         }
     }
 }
 
-fn print_folder_search_status(settings: &config::FolderSearchSettings) {
+struct Section {
+    title: &'static str,
+    checks: Vec<Check>,
+}
+
+fn render_report(sections: &[Section]) {
+    let width = sections
+        .iter()
+        .flat_map(|section| &section.checks)
+        .map(|check| check.label.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    println!("{ANSI_BOLD}smux doctor{ANSI_RESET}");
+
+    for section in sections {
+        if section.checks.is_empty() {
+            continue;
+        }
+        println!();
+        println!("{ANSI_BOLD}{}{ANSI_RESET}", section.title);
+        for check in &section.checks {
+            let symbol = format!(
+                "{}{}{ANSI_RESET}",
+                check.status.color(),
+                check.status.symbol()
+            );
+            match &check.detail {
+                Some(detail) => {
+                    println!(
+                        "  {symbol} {:<width$}  {ANSI_DIM}{detail}{ANSI_RESET}",
+                        check.label
+                    )
+                }
+                None => println!("  {symbol} {}", check.label),
+            }
+        }
+    }
+}
+
+fn render_footer(errors: usize, warnings: usize) {
+    println!();
+    let summary = summary_text(errors, warnings);
+    if errors > 0 {
+        println!("{ANSI_RED}✗ {summary}{ANSI_RESET}");
+    } else if warnings > 0 {
+        println!("{ANSI_YELLOW}⚠ {summary}{ANSI_RESET}");
+    } else {
+        println!("{ANSI_GREEN}✓ {summary}{ANSI_RESET}");
+    }
+}
+
+fn summary_text(errors: usize, warnings: usize) -> String {
+    if errors == 0 && warnings == 0 {
+        return "all checks passed".to_owned();
+    }
+    let mut parts = Vec::new();
+    if errors > 0 {
+        parts.push(count_phrase(errors, "error"));
+    }
+    if warnings > 0 {
+        parts.push(count_phrase(warnings, "warning"));
+    }
+    parts.join(", ")
+}
+
+fn count_phrase(count: usize, noun: &str) -> String {
+    if count == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{count} {noun}s")
+    }
+}
+
+fn dependency_check(name: &'static str, available: bool, required: bool) -> Check {
+    if available {
+        Check::new(Status::Ok, name, Some("found".to_owned()))
+    } else if required {
+        Check::new(Status::Error, name, Some("not found (required)".to_owned()))
+    } else {
+        Check::new(
+            Status::Missing,
+            name,
+            Some("not found (optional)".to_owned()),
+        )
+    }
+}
+
+fn tmux_sessions_check(tmux: bool) -> Check {
+    if !tmux {
+        return Check::new(
+            Status::Unavailable,
+            "tmux sessions",
+            Some("tmux not found".to_owned()),
+        );
+    }
+    match Tmux::new().list_sessions() {
+        Ok(sessions) => Check::new(
+            Status::Ok,
+            "tmux sessions",
+            Some(format!("{} running", sessions.len())),
+        ),
+        Err(error) => Check::new(
+            Status::Missing,
+            "tmux sessions",
+            Some(format!("failed to list: {error:#}")),
+        ),
+    }
+}
+
+fn zoxide_directories_check(zoxide_available: bool) -> Check {
+    if !zoxide_available {
+        return Check::new(
+            Status::Unavailable,
+            "zoxide directories",
+            Some("zoxide not found".to_owned()),
+        );
+    }
+    match zoxide::list_directories() {
+        Ok(directories) => Check::new(
+            Status::Ok,
+            "zoxide directories",
+            Some(format!("{} indexed", directories.len())),
+        ),
+        Err(error) => Check::new(
+            Status::Missing,
+            "zoxide directories",
+            Some(format!("failed to list: {error:#}")),
+        ),
+    }
+}
+
+fn invalid_projects_check(count: usize) -> Check {
+    if count == 0 {
+        Check::new(Status::Ok, "invalid projects", Some("none".to_owned()))
+    } else {
+        Check::new(
+            Status::Missing,
+            "invalid projects",
+            Some(format!("{count} broken — fix or remove")),
+        )
+    }
+}
+
+fn icon_check(icon_mode: IconMode, icon_colors: crate::config::IconColors) -> Check {
+    let style = DisplayStyle::new(icon_mode, icon_colors);
+    let state = if style.icons_enabled() {
+        "enabled"
+    } else {
+        "disabled"
+    };
+    let colors = style.icon_colors();
+
+    Check::new(
+        Status::Ok,
+        "icons",
+        Some(format!(
+            "{state} · mode {} · colors {}/{}/{}/{} · Nerd Font not auto-detected",
+            style.icon_mode().as_str(),
+            colors.session,
+            colors.directory,
+            colors.template,
+            colors.project,
+        )),
+    )
+}
+
+fn folder_search_check(settings: &config::FolderSearchSettings) -> Check {
     let missing = settings
         .roots
         .iter()
@@ -171,31 +408,37 @@ fn print_folder_search_status(settings: &config::FolderSearchSettings) {
             !expanded.exists()
         })
         .count();
-    let state = if missing == 0 {
+
+    let roots_word = if settings.roots.len() == 1 {
+        "root"
+    } else {
+        "roots"
+    };
+    let hidden = if settings.include_hidden {
+        "included"
+    } else {
+        "excluded"
+    };
+    let detail = if missing == 0 {
+        format!(
+            "{} {roots_word} · max depth {} · hidden {hidden}",
+            settings.roots.len(),
+            settings.max_depth,
+        )
+    } else {
+        format!(
+            "{} {roots_word} · {missing} missing · max depth {} · hidden {hidden}",
+            settings.roots.len(),
+            settings.max_depth,
+        )
+    };
+    let status = if missing == 0 {
         Status::Ok
     } else {
         Status::Missing
     };
 
-    print_status_line(
-        "folder_search",
-        state,
-        Some(format!(
-            "roots={} missing={} max_depth={} include_hidden={}",
-            settings.roots.len(),
-            missing,
-            settings.max_depth,
-            settings.include_hidden
-        )),
-    );
-}
-
-fn availability_state(available: bool) -> Status {
-    if available {
-        Status::Ok
-    } else {
-        Status::Missing
-    }
+    Check::new(status, "folder search", Some(detail))
 }
 
 fn path_for_missing_config(config_path: Option<&Path>) -> PathBuf {
@@ -205,64 +448,42 @@ fn path_for_missing_config(config_path: Option<&Path>) -> PathBuf {
     }
 }
 
-fn print_status_line(label: &str, status: Status, detail: Option<impl std::fmt::Display>) {
-    let colored = format!("{}{}{}", status.color(), status.text(), ANSI_RESET);
-    match detail {
-        Some(detail) => println!("{ANSI_BOLD}{label:<16}{ANSI_RESET} {colored}  {detail}"),
-        None => println!("{ANSI_BOLD}{label:<16}{ANSI_RESET} {colored}"),
-    }
-}
-
-fn print_value_line(label: &str, value: &str) {
-    println!("{ANSI_BOLD}{label:<16}{ANSI_RESET} {value}");
-}
-
-fn print_icon_status(icon_mode: IconMode, icon_colors: crate::config::IconColors) {
-    let style = DisplayStyle::new(icon_mode, icon_colors);
-    let state = if style.icons_enabled() {
-        "enabled"
-    } else {
-        "disabled"
-    };
-
-    print_value_line(
-        "icons",
-        &format!(
-            "{state} (mode: {}; colors: session={}, directory={}, template={}, project={}; Nerd Font support is not auto-detectable)",
-            style.icon_mode().as_str(),
-            style.icon_colors().session,
-            style.icon_colors().directory,
-            style.icon_colors().template,
-            style.icon_colors().project,
-        ),
-    );
-}
-
-fn print_schema_fix_summary(summary: SchemaFixSummary) {
-    print_status_line(
-        "schema_fix",
-        Status::Ok,
-        Some(format!(
-            "updated={} inserted={}",
-            summary.updated, summary.inserted
-        )),
-    );
-}
-
-fn print_schema_status(config_path: &Path, project_dir: &Path) {
+fn schema_checks_for(config_path: &Path, project_dir: &Path) -> Vec<Check> {
     let config_expected = config::schema_url("smux-config.schema.json");
     let project_expected = config::schema_url("smux-project.schema.json");
 
-    match schema_state(config_path, &config_expected) {
-        SchemaState::Ok => print_status_line("schema_config", Status::Ok, None::<&str>),
-        SchemaState::Missing => print_status_line("schema_config", Status::Missing, None::<&str>),
-        SchemaState::Drift => print_status_line(
-            "schema_config",
-            Status::Drift,
-            Some(format!("expected {config_expected}")),
+    let config_check = match schema_state(config_path, &config_expected) {
+        SchemaState::Ok => Check::new(Status::Ok, "config schema", Some("up to date".to_owned())),
+        SchemaState::Missing => Check::new(
+            Status::Missing,
+            "config schema",
+            Some("no #:schema directive".to_owned()),
         ),
-    }
+        SchemaState::Drift => Check::new(
+            Status::Drift,
+            "config schema",
+            Some("out of date — run `smux doctor --fix`".to_owned()),
+        ),
+    };
 
+    let (ok, missing, drift) = count_project_schema_states(project_dir, &project_expected);
+    let status = if drift > 0 {
+        Status::Drift
+    } else if missing > 0 {
+        Status::Missing
+    } else {
+        Status::Ok
+    };
+    let project_check = Check::new(
+        status,
+        "project schemas",
+        Some(format!("{ok} ok · {drift} drift · {missing} missing")),
+    );
+
+    vec![config_check, project_check]
+}
+
+fn count_project_schema_states(project_dir: &Path, expected: &str) -> (usize, usize, usize) {
     let mut ok = 0;
     let mut missing = 0;
     let mut drift = 0;
@@ -274,7 +495,7 @@ fn print_schema_status(config_path: &Path, project_dir: &Path) {
                 continue;
             }
 
-            match schema_state(&path, &project_expected) {
+            match schema_state(&path, expected) {
                 SchemaState::Ok => ok += 1,
                 SchemaState::Missing => missing += 1,
                 SchemaState::Drift => drift += 1,
@@ -282,18 +503,7 @@ fn print_schema_status(config_path: &Path, project_dir: &Path) {
         }
     }
 
-    let state = if drift > 0 {
-        Status::Drift
-    } else if missing > 0 {
-        Status::Missing
-    } else {
-        Status::Ok
-    };
-    print_status_line(
-        "schema_projects",
-        state,
-        Some(format!("ok={ok} drift={drift} missing={missing}")),
-    );
+    (ok, missing, drift)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -389,4 +599,52 @@ fn rewrite_schema_line(path: &Path, expected: &str) -> Result<SchemaRewrite> {
     };
     fs::write(path, updated).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(SchemaRewrite::Inserted)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Status, count_phrase, dependency_check, invalid_projects_check, summary_text};
+
+    #[test]
+    fn summary_text_describes_combinations() {
+        assert_eq!(summary_text(0, 0), "all checks passed");
+        assert_eq!(summary_text(0, 1), "1 warning");
+        assert_eq!(summary_text(0, 2), "2 warnings");
+        assert_eq!(summary_text(1, 0), "1 error");
+        assert_eq!(summary_text(1, 1), "1 error, 1 warning");
+        assert_eq!(summary_text(2, 3), "2 errors, 3 warnings");
+    }
+
+    #[test]
+    fn count_phrase_pluralizes() {
+        assert_eq!(count_phrase(1, "error"), "1 error");
+        assert_eq!(count_phrase(0, "error"), "0 errors");
+        assert_eq!(count_phrase(3, "warning"), "3 warnings");
+    }
+
+    #[test]
+    fn status_severity_classification() {
+        assert!(Status::Error.is_error());
+        assert!(!Status::Error.is_warning());
+        assert!(Status::Missing.is_warning());
+        assert!(Status::Drift.is_warning());
+        assert!(!Status::Ok.is_warning() && !Status::Ok.is_error());
+        assert!(!Status::Unavailable.is_warning() && !Status::Unavailable.is_error());
+    }
+
+    #[test]
+    fn required_dependency_missing_is_an_error() {
+        assert_eq!(dependency_check("tmux", false, true).status, Status::Error);
+        assert_eq!(
+            dependency_check("zoxide", false, false).status,
+            Status::Missing
+        );
+        assert_eq!(dependency_check("tmux", true, true).status, Status::Ok);
+    }
+
+    #[test]
+    fn invalid_projects_check_warns_only_when_present() {
+        assert_eq!(invalid_projects_check(0).status, Status::Ok);
+        assert_eq!(invalid_projects_check(2).status, Status::Missing);
+    }
 }

@@ -99,7 +99,7 @@ fn doctor_succeeds_with_missing_config_file() {
         .assert()
         .success()
         .stdout(contains("config"))
-        .stdout(contains("missing"))
+        .stdout(contains("not found"))
         .stdout(contains("icons"));
 }
 
@@ -130,10 +130,10 @@ fn doctor_reports_schema_drift_without_failing() {
     command
         .assert()
         .success()
-        .stdout(contains("schema_config"))
-        .stdout(contains("schema_projects"))
-        .stdout(contains("drift=1"))
-        .stdout(contains("missing=0"));
+        .stdout(contains("config schema"))
+        .stdout(contains("project schemas"))
+        .stdout(contains("1 drift"))
+        .stdout(contains("0 missing"));
 }
 
 #[test]
@@ -167,8 +167,8 @@ fn doctor_fix_rewrites_missing_and_stale_schema_directives() {
     command
         .assert()
         .success()
-        .stdout(contains("schema_fix"))
-        .stdout(contains("updated=1 inserted=2"));
+        .stdout(contains("schema fixes"))
+        .stdout(contains("updated 1 · inserted 2"));
 
     let config_contents = fs::read_to_string(&config_path).expect("config should be readable");
     assert!(config_contents.starts_with("#:schema "));

@@ -10,6 +10,10 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 - picker action to open the selected project (or broken project) file in `$EDITOR` (default `Ctrl-E`), configurable via `[settings.picker.bindings] edit_project`; the picker returns when the editor exits
 
+### Changed
+
+- `smux doctor` output is grouped into sections (Dependencies, Sources, Configuration, Schemas, Display, Folder search) with a per-check status symbol and a summary footer (`✓ all checks passed` / `⚠ N warnings` / `✗ N errors`), and reports missing required dependencies as errors
+
 ## [0.2.1] - 2026-06-30
 
 ### Changed
