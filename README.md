@@ -358,12 +358,16 @@ smux prune
 smux list-sessions
 smux list-templates [--config <path>]
 smux list-projects [--config <path>]
+smux detect [--config <path>] <path>
 smux doctor [--fix] [--config <path>]
 smux save-project [<name>] [--session <name>] [--path <path>] [--stdout] [--force] [--config <path>]
 smux init [--config <path>]
 smux completions zsh [--dir <path>]
 smux man [--dir <path>]
+smux skill [--dir <path>]
 ```
+
+`smux detect <path>` prints the templates that match a directory, ranked the way smux auto-selects them, so you can see which one a folder would open with (see [Smart template selection](#smart-template-selection)).
 
 ## Completions And Man Pages
 
@@ -386,6 +390,15 @@ This includes the config man page:
 ```text
 smux-config.5
 ```
+
+Claude Code skill:
+
+```bash
+smux skill                          # print the skill to stdout
+smux skill --dir ~/.claude/skills/smux
+```
+
+`smux skill` writes a [Claude Code](https://www.anthropic.com/claude-code) skill (`SKILL.md`) that teaches an AI assistant how to author, validate, and debug smux templates and projects. It's embedded in the binary, so it always matches the installed version — re-run after an upgrade to refresh it.
 
 ## Design Principles
 
