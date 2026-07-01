@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-01
+
 ### Added
 
 - `smux detect <dir>` prints the templates whose `match` files or `match_dependencies` are present in a directory, ranked the way smux auto-selects them (the top entry, marked with an arrow, is the one it would apply). Lets you debug why a folder resolves to a given template without launching a session
