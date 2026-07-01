@@ -301,10 +301,11 @@ toggle_hints = "?"
 Example template file, saved as `~/.config/smux/templates/rust.toml` (the file name is the template name):
 
 ```toml
+match = ["Cargo.toml"]   # auto-detect this template for folders with a Cargo.toml
 startup_window = "editor"
 startup_pane = 0
 windows = [
-  { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
+  { name = "editor", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [
       { command = "cargo run" },
       { layout = "right 40%", command = "cargo test", zoom = true },
