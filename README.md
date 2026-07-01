@@ -4,7 +4,7 @@
 
 **smux** — jump to any tmux session, or spin up a full project workspace, in one keystroke.
 
-[Install](#install) • [Quick Start](#quick-start) • [Common Workflows](#common-workflows) • [Projects vs Templates](#projects-vs-templates) • [Config](#configuration) • [Commands](#commands)
+[Install](#install) • [Quick Start](#quick-start) • [Using smux](#using-smux) • [Projects vs Templates](#projects-vs-templates) • [Config](#configuration) • [Commands](#commands)
 
 If you live in `tmux`, you know the friction: remembering session names, rebuilding the same editor/server/git layout for every project, and fumbling `attach`/`switch` to get back to where you were.
 
@@ -110,46 +110,78 @@ smux doctor
 
 `smux doctor` reports dependency health, config validity, and schema drift without modifying files. After upgrading smux, `smux doctor --fix` refreshes any missing or stale `#:schema` lines in your config and project files.
 
-`smux select` is the main entrypoint — one picker over your sessions, projects, and directories. See [Picker Behavior](#picker-behavior) for everything it does.
+## Using smux
 
-## Common Workflows
+You normally drive smux through its **picker**: open it (as a `tmux` popup, or by running `smux select`), fuzzy-search one combined list of your tmux sessions, saved projects, and directories, then act on the highlighted item with a keyboard shortcut. That interactive picker is how most people use smux day to day.
 
-Jump to an existing session, launch a project, or pick a directory:
+Every one of those actions is also a plain **command**, so you can script smux, wire it into `tmux`/shell keybindings, or drive it directly when you already know exactly what you want — without ever opening the picker.
+
+The two sections below cover each mode: the picker first, then the command line.
+
+### The picker
+
+Open it with your `tmux` popup binding (see [Quick Start](#quick-start)) or by running:
 
 ```bash
 smux select
 ```
 
-Connect a directory and let `smux` create or reuse the matching tmux session:
+It combines, in one fuzzy-searchable list:
+
+- tmux sessions
+- saved projects
+- `zoxide` directories
+- directories found under `[settings.folder_search]` roots
+
+Type to fuzzy-match, then use a keyboard shortcut to act on the highlighted item:
+
+- `Enter` opens it — switch to a session, launch a project, or create/reuse a session for a directory
+- `Ctrl-S` / `Ctrl-P` / `Ctrl-F` limit the list to sessions / projects / folders
+- `Ctrl-C` resets to the full list
+- `Alt-S` saves (or updates) the selected tmux session as a project
+- `Ctrl-R` renames the selected tmux session
+- `Ctrl-E` opens the selected project (or broken project) file in `$EDITOR`
+- `Ctrl-X` closes the selected non-current session, or deletes the selected project file
+- `?` shows or hides the keyboard-shortcut hint bar
+- `Esc` cancels
+
+Actions that change something (save, rename, edit, delete) keep the picker open so you can keep working. A few niceties:
+
+- the current tmux session is highlighted when you run `smux select` inside tmux
+- sessions are ordered most-recently-active first; saved projects most-recently-updated first
+- typing fuzzy-matches the visible label and the path
+- opening a folder shows a template chooser automatically when the choice is ambiguous (see [Smart template selection](#smart-template-selection)); `smux select --choose-template` always shows it
+
+If you use a Nerd Font, smux can show colored icons for sessions, projects, folders, and templates. The keybindings above are configurable under `[settings.picker.bindings]`, and the right-side preview (tmux session summary, folder listing, project TOML) under `[settings.picker.preview]`.
+
+### From the command line
+
+Every picker action has a direct command — handy for scripts, `tmux`/shell bindings, or when you already know the target.
+
+Create or reuse a session for a directory:
 
 ```bash
 smux connect ~/code/myapp
+smux connect --template rust ~/code/myapp   # force a specific template
 ```
 
-Force a specific template for a directory:
+Switch sessions, jump to the previous one, or clean up detached ones:
 
 ```bash
-smux connect --template rust ~/code/myapp
+smux switch myapp   # switch to or attach a session by name
+smux last           # switch to the most recently used session
+smux prune          # kill all detached sessions
 ```
 
-Choose a template interactively from the selector:
+Capture the current tmux session as a reusable project definition:
 
 ```bash
-smux select --choose-template
+smux save-project myapp            # explicit name
+smux save-project                  # name defaults to the current session
+smux save-project myapp --stdout   # preview without writing a file
 ```
 
-You usually don't need this flag: when you open a folder, smux shows the template picker on its own whenever no template resolves automatically (no `default_template`, no marker-file match) but two or more templates are defined. If a default or a detected project type applies, it just opens. `--choose-template` forces the picker every time.
-
-Export the current tmux session as a project definition:
-
-```bash
-smux save-project myapp     # explicit name
-smux save-project           # name defaults to the current session
-```
-
-The name is optional and defaults to the source session's name, so a bare `smux save-project` (or the `Alt-S` action in the picker) captures the session you are in. Re-running it after adding windows or panes updates the existing project: the picker action overwrites in place, and on the command line pass `--force` to overwrite.
-
-Saved projects are plain TOML in `~/.config/smux/projects/`, so you can edit them by hand — press `Ctrl-E` on a project in the picker to open its file in `$EDITOR` right after saving it. For example, a pane command can launch Neovim and restore the last `persistence.nvim` session:
+Re-running `save-project` after adding windows or panes updates the project; pass `--force` to overwrite (the `Alt-S` picker action overwrites in place). Saved projects are plain TOML in `~/.config/smux/projects/`, so you can edit them by hand — or with `Ctrl-E` in the picker. For example, a pane command can launch Neovim and restore the last `persistence.nvim` session:
 
 ```toml
 windows = [
@@ -159,11 +191,7 @@ windows = [
 ]
 ```
 
-Preview the generated project without writing a file:
-
-```bash
-smux save-project myapp --stdout
-```
+See [Commands](#commands) for the full list.
 
 ## Projects Vs Templates
 
@@ -185,37 +213,6 @@ See **[docs/projects.md](./docs/projects.md)** for the full guide to capturing a
 Templates shine because you rarely pick one by hand. When you open a folder, smux chooses a template for you: if the folder looks like a known project type — a `Cargo.toml`, `package.json`, `go.mod`, … — and you have a template named to match (`rust`, `node`, `go`, …), it applies automatically; if nothing matches but you have several templates, it pops up a quick chooser so you decide in the moment, rather than making you plan ahead; otherwise it just opens. Define your layouts once, name them after the project types you work in, and folders open with the right workspace on their own.
 
 See **[docs/templates.md](./docs/templates.md)** for the full guide to creating and managing templates.
-
-## Picker Behavior
-
-The unified picker combines:
-
-- tmux sessions
-- saved projects
-- `zoxide` directories
-- directories found under `[settings.folder_search]` roots
-
-The template picker is a separate step. When you open a folder, it appears automatically if no template resolves on its own and two or more are defined; `--choose-template` makes it appear every time.
-
-In the picker:
-
-- `Esc` cancels cleanly
-- the current tmux session is highlighted when `smux select` runs inside tmux
-- sessions are ordered most-recently-active first; saved projects most-recently-updated first
-- typing fuzzy-matches the visible label and path
-- `Ctrl-C` resets to the full list
-- `Ctrl-S` limits the main picker to sessions
-- `Ctrl-P` limits the main picker to projects
-- `Ctrl-F` limits the main picker to folders
-- `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file and keeps the picker open
-- `Alt-S` saves (or updates) the selected tmux session as a project and keeps the picker open
-- `Ctrl-R` renames the selected tmux session and keeps the picker open
-- `Ctrl-E` opens the selected project (or broken project) file in `$EDITOR` and returns to the picker
-- `?` shows or hides the keyboard-shortcut hint bar
-
-If you use a Nerd Font, `smux` can show colored icons for sessions, projects, folders, and templates.
-These picker keybinds can be changed in `[settings.picker.bindings]`.
-The right-side preview shows tmux session summaries, folder listings, and project TOML files by default; those preview commands can be customized in `[settings.picker.preview]`.
 
 ## Configuration
 
