@@ -22,9 +22,14 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
     let zoxide_available = util::command_available("zoxide");
     let config_path = path_for_missing_config(config_path);
     let project_dir = config::projects_dir_for_config_path(&config_path);
+    let template_dir = config::templates_dir_for_config_path(&config_path);
 
     let schema_fix_summary = if fix {
-        Some(apply_schema_fixes(&config_path, &project_dir)?)
+        Some(apply_schema_fixes(
+            &config_path,
+            &project_dir,
+            &template_dir,
+        )?)
     } else {
         None
     };
@@ -69,6 +74,16 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
             }
             config_checks.push(Check::new(
                 Status::Ok,
+                "templates",
+                Some(format!(
+                    "{} in {}",
+                    loaded.config.templates.len(),
+                    loaded.template_dir.display()
+                )),
+            ));
+            config_checks.push(invalid_templates_check(loaded.invalid_templates.len()));
+            config_checks.push(Check::new(
+                Status::Ok,
                 "projects",
                 Some(format!(
                     "{} in {}",
@@ -77,7 +92,11 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
                 )),
             ));
             config_checks.push(invalid_projects_check(loaded.invalid_projects.len()));
-            schema_checks.extend(schema_checks_for(&loaded.path, &loaded.project_dir));
+            schema_checks.extend(schema_checks_for(
+                &loaded.path,
+                &loaded.project_dir,
+                &loaded.template_dir,
+            ));
             display_checks.push(icon_check(
                 loaded.config.settings.icons,
                 loaded.config.settings.icon_colors,
@@ -90,17 +109,26 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
                 "config",
                 Some("not found (using defaults)".to_owned()),
             ));
-            if project_dir.exists() || config_path.exists() {
+            if project_dir.exists() || template_dir.exists() || config_path.exists() {
+                config_checks.push(Check::new(
+                    Status::Ok,
+                    "templates",
+                    Some(format!("0 in {}", template_dir.display())),
+                ));
+                config_checks.push(invalid_templates_check(0));
                 config_checks.push(Check::new(
                     Status::Ok,
                     "projects",
                     Some(format!("0 in {}", project_dir.display())),
                 ));
-                schema_checks.extend(schema_checks_for(&config_path, &project_dir));
+                config_checks.push(invalid_projects_check(0));
+                schema_checks.extend(schema_checks_for(&config_path, &project_dir, &template_dir));
             } else {
+                config_checks.push(Check::new(Status::Ok, "templates", Some("0".to_owned())));
+                config_checks.push(invalid_templates_check(0));
                 config_checks.push(Check::new(Status::Ok, "projects", Some("0".to_owned())));
+                config_checks.push(invalid_projects_check(0));
             }
-            config_checks.push(invalid_projects_check(0));
             display_checks.push(icon_check(IconMode::Auto, Default::default()));
             folder_checks.push(folder_search_check(&Default::default()));
         }
@@ -110,7 +138,7 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
                 "config",
                 Some(format!("invalid: {error:#}")),
             ));
-            schema_checks.extend(schema_checks_for(&config_path, &project_dir));
+            schema_checks.extend(schema_checks_for(&config_path, &project_dir, &template_dir));
             display_checks.push(Check::new(
                 Status::Unavailable,
                 "icons",
@@ -376,6 +404,18 @@ fn invalid_projects_check(count: usize) -> Check {
     }
 }
 
+fn invalid_templates_check(count: usize) -> Check {
+    if count == 0 {
+        Check::new(Status::Ok, "invalid templates", Some("none".to_owned()))
+    } else {
+        Check::new(
+            Status::Missing,
+            "invalid templates",
+            Some(format!("{count} broken — fix or remove")),
+        )
+    }
+}
+
 fn icon_check(icon_mode: IconMode, icon_colors: crate::config::IconColors) -> Check {
     let style = DisplayStyle::new(icon_mode, icon_colors);
     let state = if style.icons_enabled() {
@@ -448,9 +488,10 @@ fn path_for_missing_config(config_path: Option<&Path>) -> PathBuf {
     }
 }
 
-fn schema_checks_for(config_path: &Path, project_dir: &Path) -> Vec<Check> {
+fn schema_checks_for(config_path: &Path, project_dir: &Path, template_dir: &Path) -> Vec<Check> {
     let config_expected = config::schema_url("smux-config.schema.json");
     let project_expected = config::schema_url("smux-project.schema.json");
+    let template_expected = config::schema_url("smux-template.schema.json");
 
     let config_check = match schema_state(config_path, &config_expected) {
         SchemaState::Ok => Check::new(Status::Ok, "config schema", Some("up to date".to_owned())),
@@ -466,7 +507,15 @@ fn schema_checks_for(config_path: &Path, project_dir: &Path) -> Vec<Check> {
         ),
     };
 
-    let (ok, missing, drift) = count_project_schema_states(project_dir, &project_expected);
+    vec![
+        config_check,
+        dir_schema_check("template schemas", template_dir, &template_expected),
+        dir_schema_check("project schemas", project_dir, &project_expected),
+    ]
+}
+
+fn dir_schema_check(label: &'static str, dir: &Path, expected: &str) -> Check {
+    let (ok, missing, drift) = count_dir_schema_states(dir, expected);
     let status = if drift > 0 {
         Status::Drift
     } else if missing > 0 {
@@ -474,21 +523,19 @@ fn schema_checks_for(config_path: &Path, project_dir: &Path) -> Vec<Check> {
     } else {
         Status::Ok
     };
-    let project_check = Check::new(
+    Check::new(
         status,
-        "project schemas",
+        label,
         Some(format!("{ok} ok · {drift} drift · {missing} missing")),
-    );
-
-    vec![config_check, project_check]
+    )
 }
 
-fn count_project_schema_states(project_dir: &Path, expected: &str) -> (usize, usize, usize) {
+fn count_dir_schema_states(dir: &Path, expected: &str) -> (usize, usize, usize) {
     let mut ok = 0;
     let mut missing = 0;
     let mut drift = 0;
 
-    if let Ok(entries) = fs::read_dir(project_dir) {
+    if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
@@ -530,10 +577,15 @@ fn schema_state(path: &Path, expected: &str) -> SchemaState {
     }
 }
 
-fn apply_schema_fixes(config_path: &Path, project_dir: &Path) -> Result<SchemaFixSummary> {
+fn apply_schema_fixes(
+    config_path: &Path,
+    project_dir: &Path,
+    template_dir: &Path,
+) -> Result<SchemaFixSummary> {
     let mut summary = SchemaFixSummary::default();
     let config_expected = config::schema_url("smux-config.schema.json");
     let project_expected = config::schema_url("smux-project.schema.json");
+    let template_expected = config::schema_url("smux-template.schema.json");
 
     if config_path.exists() {
         match rewrite_schema_line(config_path, &config_expected)? {
@@ -543,24 +595,33 @@ fn apply_schema_fixes(config_path: &Path, project_dir: &Path) -> Result<SchemaFi
         }
     }
 
-    if project_dir.exists() {
-        for entry in fs::read_dir(project_dir).with_context(|| {
-            format!("failed to read project directory {}", project_dir.display())
-        })? {
-            let path = entry?.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
-                continue;
-            }
+    fix_dir_schema_lines(template_dir, &template_expected, &mut summary)?;
+    fix_dir_schema_lines(project_dir, &project_expected, &mut summary)?;
 
-            match rewrite_schema_line(&path, &project_expected)? {
-                SchemaRewrite::Updated => summary.updated += 1,
-                SchemaRewrite::Inserted => summary.inserted += 1,
-                SchemaRewrite::Unchanged => {}
-            }
+    Ok(summary)
+}
+
+fn fix_dir_schema_lines(dir: &Path, expected: &str, summary: &mut SchemaFixSummary) -> Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    for entry in
+        fs::read_dir(dir).with_context(|| format!("failed to read directory {}", dir.display()))?
+    {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
+            continue;
+        }
+
+        match rewrite_schema_line(&path, expected)? {
+            SchemaRewrite::Updated => summary.updated += 1,
+            SchemaRewrite::Inserted => summary.inserted += 1,
+            SchemaRewrite::Unchanged => {}
         }
     }
 
-    Ok(summary)
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

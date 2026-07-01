@@ -110,11 +110,8 @@ fn doctor_reports_schema_drift_without_failing() {
     let config_path = tempdir.path().join("config.toml");
     let project_dir = tempdir.path().join("projects");
     fs::create_dir(&project_dir).expect("project dir should be created");
-    fs::write(
-        &config_path,
-        "[templates.default]\nwindows = [{ name = \"main\" }]\n",
-    )
-    .expect("config fixture should be written");
+    fs::write(&config_path, "[settings]\nicons = \"auto\"\n")
+        .expect("config fixture should be written");
     fs::write(
         project_dir.join("demo.toml"),
         "#:schema https://raw.githubusercontent.com/Aietes/smux/v0.1.0/schemas/smux-project.schema.json\npath = \"/tmp/demo\"\n",
@@ -143,11 +140,16 @@ fn doctor_fix_rewrites_missing_and_stale_schema_directives() {
     let config_path = tempdir.path().join("config.toml");
     let project_dir = tempdir.path().join("projects");
     fs::create_dir(&project_dir).expect("project dir should be created");
+    fs::write(&config_path, "[settings]\nicons = \"auto\"\n")
+        .expect("config fixture should be written");
+    let template_dir = tempdir.path().join("templates");
+    fs::create_dir(&template_dir).expect("template dir should be created");
+    let stale_template = template_dir.join("default.toml");
     fs::write(
-        &config_path,
-        "[templates.default]\nwindows = [{ name = \"main\" }]\n",
+        &stale_template,
+        "#:schema https://raw.githubusercontent.com/Aietes/smux/v0.1.0/schemas/smux-template.schema.json\nwindows = [{ name = \"main\" }]\n",
     )
-    .expect("config fixture should be written");
+    .expect("stale template fixture should be written");
     let stale_project = project_dir.join("stale.toml");
     fs::write(
         &stale_project,
@@ -168,7 +170,7 @@ fn doctor_fix_rewrites_missing_and_stale_schema_directives() {
         .assert()
         .success()
         .stdout(contains("schema fixes"))
-        .stdout(contains("updated 1 · inserted 2"));
+        .stdout(contains("updated 2 · inserted 2"));
 
     let config_contents = fs::read_to_string(&config_path).expect("config should be readable");
     assert!(config_contents.starts_with("#:schema "));
@@ -181,6 +183,13 @@ fn doctor_fix_rewrites_missing_and_stale_schema_directives() {
     let missing_contents =
         fs::read_to_string(&missing_project).expect("project should be readable");
     assert!(missing_contents.starts_with("#:schema "));
+    let template_contents =
+        fs::read_to_string(&stale_template).expect("template should be readable");
+    let expected_template_schema = format!(
+        "/v{}/schemas/smux-template.schema.json",
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(template_contents.contains(&expected_template_schema));
 }
 
 #[test]

@@ -333,10 +333,13 @@ mod tests {
             path: PathBuf::from("/tmp/config.toml"),
             config_exists: true,
             project_dir: PathBuf::from("/tmp/projects"),
+            template_dir: PathBuf::from("/tmp/templates"),
             config,
             projects: HashMap::new(),
             project_files: HashMap::new(),
             invalid_projects: Vec::new(),
+            template_files: HashMap::new(),
+            invalid_templates: Vec::new(),
         };
 
         let error =
@@ -373,6 +376,7 @@ mod tests {
             path: PathBuf::from("/tmp/config.toml"),
             config_exists: true,
             project_dir: PathBuf::from("/tmp/projects"),
+            template_dir: PathBuf::from("/tmp/templates"),
             config: Config {
                 settings: Settings {
                     default_template: default_template.map(|name| name.to_owned()),
@@ -383,6 +387,8 @@ mod tests {
             projects: HashMap::new(),
             project_files: HashMap::new(),
             invalid_projects: Vec::new(),
+            template_files: HashMap::new(),
+            invalid_templates: Vec::new(),
         }
     }
 
@@ -462,6 +468,7 @@ mod tests {
             path: PathBuf::from("/tmp/config.toml"),
             config_exists: true,
             project_dir: PathBuf::from("/tmp/projects"),
+            template_dir: PathBuf::from("/tmp/templates"),
             config: Config {
                 settings: Settings {
                     default_template: Some("default".to_owned()),
@@ -535,6 +542,8 @@ mod tests {
             )]),
             project_files: HashMap::new(),
             invalid_projects: Vec::new(),
+            template_files: HashMap::new(),
+            invalid_templates: Vec::new(),
         };
 
         let project = ResolvedProject {
@@ -583,10 +592,13 @@ mod tests {
             path: PathBuf::from("/tmp/config.toml"),
             config_exists: true,
             project_dir: PathBuf::from("/tmp/projects"),
+            template_dir: PathBuf::from("/tmp/templates"),
             config,
             projects: HashMap::new(),
             project_files: HashMap::new(),
             invalid_projects: Vec::new(),
+            template_files: HashMap::new(),
+            invalid_templates: Vec::new(),
         };
 
         let template = super::resolve_template(Some(&loaded), None, None, Path::new("/tmp/demo"))?;

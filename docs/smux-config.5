@@ -9,14 +9,13 @@ By default the file is loaded from \fB~/.config/smux/config.toml\fR.
 If \fBXDG_CONFIG_HOME\fR is set, \fBsmux\fR uses
 \fB$XDG_CONFIG_HOME/smux/config.toml\fR.
 .PP
-Project definitions live in \fB~/.config/smux/projects/*.toml\fR or
-\fB$XDG_CONFIG_HOME/smux/projects/*.toml\fR.
+Template definitions live in \fB~/.config/smux/templates/*.toml\fR and project
+definitions in \fB~/.config/smux/projects/*.toml\fR (or under
+\fB$XDG_CONFIG_HOME/smux/\fR), one file per definition.
 .SH OVERVIEW
-The main configuration has two top-level sections:
-.IP \(bu 2
-\fB[settings]\fR
-.IP \(bu 2
-\fB[templates.<name>]\fR
+\fBconfig.toml\fR holds a single \fB[settings]\fR section. Templates and projects
+each live in their own directory as one file per definition, where the file name
+is the template or project name.
 .SH SETTINGS
 .SS [settings]
 .nf
@@ -88,7 +87,9 @@ sessions, \fBeza\fR or \fBls -la\fR for folders, and \fBbat\fR or
 heavyweight directories such as \fBLibrary\fR, \fBnode_modules\fR, and
 \fBtarget\fR.
 .SH TEMPLATES
-Templates define the tmux layout used when \fBsmux\fR creates a new session.
+Each template is a file in \fB~/.config/smux/templates/\fR, one template per file,
+where the file name (without \fB.toml\fR) is the template name. A template defines
+the tmux layout used when \fBsmux\fR creates a new session.
 The recommended format uses TOML 1.1 inline tables for windows and panes.
 .PP
 \fBstartup_window\fR selects the window focused after creation.

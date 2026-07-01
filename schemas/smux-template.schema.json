@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Aietes/smux/main/schemas/smux-template.schema.json",
+  "title": "smux template",
+  "description": "A reusable tmux layout. One template per file; the file name (without .toml) is the template name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "windows"
+  ],
+  "properties": {
+    "root": {
+      "type": "string",
+      "description": "Optional session root; accepted by smux config."
+    },
+    "startup_window": {
+      "type": "string",
+      "description": "Window name focused after session creation."
+    },
+    "startup_pane": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based pane index within the startup window."
+    },
+    "windows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/window"
+      }
+    }
+  },
+  "$defs": {
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "pre_command": {
+          "type": "string",
+          "description": "Runs in each pane before the pane or window command."
+        },
+        "command": {
+          "type": "string"
+        },
+        "layout": {
+          "type": "string",
+          "description": "tmux window layout name passed to tmux select-layout."
+        },
+        "synchronize": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enables tmux synchronized panes for the window."
+        },
+        "panes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/pane"
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "command",
+          "panes"
+        ]
+      }
+    },
+    "pane": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "type": "string",
+          "pattern": "^(right|left|bottom|top)( [^\\s].*)?$",
+          "description": "Split direction, optionally followed by a tmux size such as 40%."
+        },
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "zoom": {
+          "type": "boolean",
+          "default": false,
+          "description": "Zooms this pane after the window has been created. At most one pane per window may set zoom = true."
+        }
+      }
+    }
+  }
+}

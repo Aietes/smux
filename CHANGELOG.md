@@ -6,6 +6,17 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-01
+
+### Changed
+
+- **BREAKING:** templates now live in their own files under `~/.config/smux/templates/*.toml` (one template per file; the file name is the template name) instead of inline `[templates.<name>]` tables in `config.toml`. `config.toml` now holds only `[settings]`, and `smux init` scaffolds the new `templates/` directory with `default` and `rust` starters. There is no automatic migration: move each `[templates.<name>]` block into `templates/<name>.toml` (dropping the header line). smux errors on startup if inline templates remain in `config.toml`.
+
+### Added
+
+- `schemas/smux-template.schema.json` and `#:schema` directives in template files, so schema-aware editors validate templates as you type
+- `smux doctor` reports template count, broken templates, and template schema drift; `smux doctor --fix` refreshes template `#:schema` directives alongside config and project files
+
 ## [0.2.2] - 2026-07-01
 
 ### Added

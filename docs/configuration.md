@@ -14,15 +14,17 @@ If `XDG_CONFIG_HOME` is set, `smux` uses:
 $XDG_CONFIG_HOME/smux/config.toml
 ```
 
-Project definitions live in:
+Template and project definitions live in:
 
 ```text
+~/.config/smux/templates/*.toml
 ~/.config/smux/projects/*.toml
 ```
 
 or, when `XDG_CONFIG_HOME` is set:
 
 ```text
+$XDG_CONFIG_HOME/smux/templates/*.toml
 $XDG_CONFIG_HOME/smux/projects/*.toml
 ```
 
@@ -34,17 +36,17 @@ Schema files live in this repo at:
 
 ```text
 schemas/smux-config.schema.json
+schemas/smux-template.schema.json
 schemas/smux-project.schema.json
 ```
 
 ## Structure
 
-The main config has two top-level sections:
+`config.toml` holds a single `[settings]` section. Templates and projects live
+in their own directories as one file per definition — `templates/<name>.toml`
+and `projects/<name>.toml`, where the file name is the template or project name.
 
-- `settings`
-- `templates`
-
-Example:
+Example `config.toml`:
 
 ```toml
 #:schema https://raw.githubusercontent.com/Aietes/smux/vX.Y.Z/schemas/smux-config.schema.json
@@ -81,21 +83,6 @@ toggle_hints = "?"
 # roots = ["~"]
 # max_depth = 3
 # include_hidden = false
-
-[templates.default]
-startup_window = "main"
-windows = [{ name = "main" }]
-
-[templates.rust]
-startup_window = "editor"
-startup_pane = 0
-windows = [
-  { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
-  { name = "run", synchronize = true, layout = "main-horizontal", panes = [
-      { command = "cargo run" },
-      { layout = "right 40%", command = "cargo test", zoom = true },
-    ] },
-]
 ```
 
 Example project file:
@@ -296,16 +283,17 @@ Fields:
 
 Folder search is bounded and skips common heavyweight directories such as `Library`, `node_modules`, and `target`.
 
-## `[templates.<name>]`
+## Template files
 
-Templates describe the tmux layout applied when `smux` creates a new session.
+Each template is a file in `~/.config/smux/templates/`, one template per file,
+where the file name (without `.toml`) is the template name. A template describes
+the tmux layout applied when `smux` creates a new session.
 The recommended and documented format uses TOML 1.1 inline tables for `windows` and nested `panes`.
-That means template definitions should normally be written as `windows = [{ ... }]` with nested `panes = [{ ... }]`, rather than verbose `[[templates...]]` arrays of tables.
+That means templates should normally be written as `windows = [{ ... }]` with nested `panes = [{ ... }]`, rather than verbose `[[...]]` arrays of tables.
 
-Example:
+Example — `~/.config/smux/templates/rust.toml`:
 
 ```toml
-[templates.rust]
 startup_window = "editor"
 startup_pane = 0
 windows = [
@@ -428,10 +416,9 @@ These examples are meant to show practical combinations of pane `layout` and win
 
 ### 2x2 grid
 
-Use `tiled` when you want a simple 2x2-style workspace and do not care about preserving a specific split sequence.
+Use `tiled` when you want a simple 2x2-style workspace and do not care about preserving a specific split sequence. As `templates/grid.toml`:
 
 ```toml
-[templates.grid]
 startup_window = "grid"
 windows = [
   { name = "grid", layout = "tiled", panes = [
@@ -445,10 +432,9 @@ windows = [
 
 ### One large top pane, two bottom panes
 
-This is a good fit for `main-horizontal`.
+This is a good fit for `main-horizontal`. As `templates/dev.toml`:
 
 ```toml
-[templates.dev]
 startup_window = "run"
 windows = [
   { name = "run", layout = "main-horizontal", panes = [
@@ -463,8 +449,9 @@ This gives you one dominant pane at the top and two smaller panes below it.
 
 ### Sidebar on the left, work area on the right
 
+As `templates/sidebar.toml`:
+
 ```toml
-[templates.sidebar]
 startup_window = "main"
 windows = [
   { name = "main", panes = [
@@ -476,8 +463,9 @@ windows = [
 
 ### Vertical stack
 
+As `templates/stack.toml`:
+
 ```toml
-[templates.stack]
 startup_window = "stack"
 windows = [
   { name = "stack", panes = [

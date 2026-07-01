@@ -4,20 +4,20 @@ A **template** is a reusable tmux layout — the windows, panes, splits, and
 startup commands that make up a workspace. Define a shape once and smux can
 apply it to any folder, so a new session always opens the way you work.
 
-Templates live **inline in your main config**, under `[templates.<name>]` in
-`~/.config/smux/config.toml`. (This is the main way they differ from projects,
-which are individual files in `~/.config/smux/projects/`. A template is a
+Each template is a **file in `~/.config/smux/templates/`**, one template per
+file, where the file name (without `.toml`) is the template name. (Projects work
+the same way, as individual files in `~/.config/smux/projects/`. A template is a
 reusable *shape*; a project is a concrete workspace that already knows its path
 and which template — or layout — it uses. See
 [Projects vs Templates](../README.md#projects-vs-templates).)
 
 ## Create your first template
 
-1. Open `~/.config/smux/config.toml`.
-2. Add a template block:
+1. Create `~/.config/smux/templates/dev.toml` — the file name is the template
+   name.
+2. Give it a layout:
 
    ```toml
-   [templates.dev]
    startup_window = "editor"
    windows = [
      { name = "editor", command = "nvim" },
@@ -38,15 +38,16 @@ and which template — or layout — it uses. See
    smux connect --template dev ~/code/anything
    ```
 
-That's the whole loop: edit config, list, apply. There is no separate file to
-manage and no command to scaffold one — templates are authored by hand.
+That's the whole loop: add a file, list, apply. There is no command to scaffold
+one — templates are authored by hand, though `smux init` drops in a couple of
+starters (`default`, `rust`) you can copy from.
 
 ## Anatomy of a template
 
-A slightly fuller example, with a split window:
+A slightly fuller example — `~/.config/smux/templates/rust.toml`, with a split
+window:
 
 ```toml
-[templates.rust]
 startup_window = "editor"
 startup_pane = 0
 windows = [
@@ -74,7 +75,7 @@ A few rules worth remembering (smux validates these on load):
 
 For the exhaustive field-by-field reference, the pane-vs-window layout
 interaction, and ready-made layout recipes (2×2 grid, sidebar, vertical stack,
-…), see [docs/configuration.md](./configuration.md#templatesname) — the same
+…), see [docs/configuration.md](./configuration.md#template-files) — the same
 content ships in the `smux-config(5)` man page.
 
 ## How smux picks a template
@@ -110,9 +111,9 @@ match*, smux applies it automatically. Detection keys off marker files:
 | `pom.xml`                        | `java`                       |
 | `build.gradle`                   | `java`                       |
 
-Detection only fires when a template with that name actually exists in your
-config. Define `[templates.rust]`, open any folder containing a `Cargo.toml`,
-and you land in your Rust workspace — no flag, no prompt.
+Detection only fires when a template with that name actually exists. Create
+`templates/rust.toml`, open any folder containing a `Cargo.toml`, and you land in
+your Rust workspace — no flag, no prompt.
 
 ### Ask only when it helps
 
@@ -140,8 +141,7 @@ Name your templates after how you work, and folders open themselves.
 - **List** them: `smux list-templates`
 - **Set a default**: `default_template = "dev"` under `[settings]` — but note it
   turns off smart selection (see above)
-- **Change or remove** one: edit or delete its `[templates.<name>]` block in
-  `config.toml`
+- **Change or remove** one: edit or delete its `templates/<name>.toml` file
 - **Validate**: `smux doctor` checks every template; `smux doctor --fix`
   refreshes schema directives after an upgrade
 
@@ -155,7 +155,7 @@ smux save-project scratch --stdout   # prints the captured windows/panes as TOML
 ```
 
 The `windows`/`panes` structure it prints is the same shape a template uses, so
-you can lift it into a `[templates.<name>]` block and generalize the paths.
+you can save it as `templates/<name>.toml` and generalize the paths.
 
 ## The built-in fallback
 
@@ -166,7 +166,7 @@ plain session on purpose.
 
 ## See also
 
-- [docs/configuration.md](./configuration.md#templatesname) — full field
+- [docs/configuration.md](./configuration.md#template-files) — full field
   reference, layout interaction, and recipes
 - `smux-config(5)` — the same reference as a man page
 - [Projects vs Templates](../README.md#projects-vs-templates) — when to use which

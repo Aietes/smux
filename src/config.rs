@@ -42,13 +42,18 @@ toggle_hints = "?"
 # roots = ["~"]
 # max_depth = 3
 # include_hidden = false
+"#;
 
-[templates.default]
-startup_window = "main"
+const STARTER_PROJECT_BODY: &str = r#"path = "~/code/example"
+session_name = "example"
+template = "rust"
+"#;
+
+const STARTER_TEMPLATE_DEFAULT_BODY: &str = r#"startup_window = "main"
 windows = [{ name = "main" }]
+"#;
 
-[templates.rust]
-startup_window = "editor"
+const STARTER_TEMPLATE_RUST_BODY: &str = r#"startup_window = "editor"
 startup_pane = 0
 windows = [
   { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
@@ -60,16 +65,14 @@ windows = [
 ]
 "#;
 
-const STARTER_PROJECT_BODY: &str = r#"path = "~/code/example"
-session_name = "example"
-template = "rust"
-"#;
-
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
     pub settings: Settings,
+    /// Templates are loaded from `templates/*.toml` files and merged in at load
+    /// time. Inline `[templates.*]` tables in `config.toml` are rejected during
+    /// loading; the field is kept only so the loader can populate it from files.
     #[serde(default)]
     pub templates: HashMap<String, Template>,
 }
@@ -336,10 +339,13 @@ pub struct LoadedConfig {
     pub path: PathBuf,
     pub config_exists: bool,
     pub project_dir: PathBuf,
+    pub template_dir: PathBuf,
     pub config: Config,
     pub projects: HashMap<String, Project>,
     pub project_files: HashMap<String, PathBuf>,
     pub invalid_projects: Vec<InvalidProject>,
+    pub template_files: HashMap<String, PathBuf>,
+    pub invalid_templates: Vec<InvalidTemplate>,
 }
 
 #[derive(Debug, Clone)]
@@ -356,10 +362,23 @@ pub struct InvalidProject {
     pub error: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct InvalidTemplate {
+    pub name: String,
+    pub path: PathBuf,
+    pub error: String,
+}
+
 type LoadedProjects = (
     HashMap<String, Project>,
     HashMap<String, PathBuf>,
     Vec<InvalidProject>,
+);
+
+type LoadedTemplates = (
+    HashMap<String, Template>,
+    HashMap<String, PathBuf>,
+    Vec<InvalidTemplate>,
 );
 
 pub fn starter_config() -> String {
@@ -375,6 +394,14 @@ pub fn starter_project() -> String {
         "#:schema {}\n{}",
         schema_url("smux-project.schema.json"),
         STARTER_PROJECT_BODY
+    )
+}
+
+pub fn starter_template(body: &str) -> String {
+    format!(
+        "#:schema {}\n{}",
+        schema_url("smux-template.schema.json"),
+        body
     )
 }
 
@@ -408,6 +435,16 @@ pub fn projects_dir_for_config_path(path: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("projects"))
 }
 
+pub fn default_templates_dir() -> Result<PathBuf> {
+    Ok(default_config_dir()?.join("templates"))
+}
+
+pub fn templates_dir_for_config_path(path: &Path) -> PathBuf {
+    path.parent()
+        .map(|parent| parent.join("templates"))
+        .unwrap_or_else(|| PathBuf::from("templates"))
+}
+
 pub fn load(path: Option<&Path>) -> Result<LoadedConfig> {
     let path = match path {
         Some(path) => path.to_path_buf(),
@@ -427,18 +464,29 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
         None => default_config_path()?,
     };
     let project_dir = projects_dir_for_config_path(&path);
+    let template_dir = templates_dir_for_config_path(&path);
     let config_exists = path.exists();
 
-    let config = if config_exists {
+    let mut config = if config_exists {
         let text = fs::read_to_string(&path)
             .with_context(|| format!("failed to read config {}", path.display()))?;
         let config: Config = toml::from_str(&text)
             .with_context(|| format!("failed to parse config {}", path.display()))?;
-        validate_config(&config)?;
+        if !config.templates.is_empty() {
+            bail!(
+                "templates are no longer defined in config.toml; move each `[templates.<name>]` block into its own file at {}/<name>.toml",
+                template_dir.display()
+            );
+        }
         config
     } else {
         Config::default()
     };
+
+    let (templates, template_files, invalid_templates) = load_templates(&template_dir)?;
+    config.templates = templates;
+
+    validate_config(&config)?;
 
     let (projects, project_files, invalid_projects) = load_projects(&project_dir, &config)?;
 
@@ -446,10 +494,13 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
         path,
         config_exists,
         project_dir,
+        template_dir,
         config,
         projects,
         project_files,
         invalid_projects,
+        template_files,
+        invalid_templates,
     })
 }
 
@@ -459,8 +510,9 @@ pub fn load_optional(path: Option<&Path>) -> Result<Option<LoadedConfig>> {
         None => default_config_path()?,
     };
     let project_dir = projects_dir_for_config_path(&path);
+    let template_dir = templates_dir_for_config_path(&path);
 
-    if !path.exists() && !project_dir.exists() {
+    if !path.exists() && !project_dir.exists() && !template_dir.exists() {
         return Ok(None);
     }
 
@@ -481,6 +533,7 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
         .parent()
         .context("config path did not have a parent directory")?;
     let project_dir = config_dir.join("projects");
+    let template_dir = config_dir.join("templates");
 
     fs::create_dir_all(config_dir)
         .with_context(|| format!("failed to create config directory {}", config_dir.display()))?;
@@ -488,6 +541,12 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
         format!(
             "failed to create project directory {}",
             project_dir.display()
+        )
+    })?;
+    fs::create_dir_all(&template_dir).with_context(|| {
+        format!(
+            "failed to create template directory {}",
+            template_dir.display()
         )
     })?;
 
@@ -501,6 +560,19 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
             starter_project_path.display()
         )
     })?;
+
+    for (name, body) in [
+        ("default", STARTER_TEMPLATE_DEFAULT_BODY),
+        ("rust", STARTER_TEMPLATE_RUST_BODY),
+    ] {
+        let template_path = template_dir.join(format!("{name}.toml"));
+        fs::write(&template_path, starter_template(body)).with_context(|| {
+            format!(
+                "failed to write starter template to {}",
+                template_path.display()
+            )
+        })?;
+    }
 
     Ok(path)
 }
@@ -717,6 +789,68 @@ fn load_project_file(path: &Path, name: &str, config: &Config) -> Result<Project
     Ok(project)
 }
 
+fn load_templates(template_dir: &Path) -> Result<LoadedTemplates> {
+    if !template_dir.exists() {
+        return Ok((HashMap::new(), HashMap::new(), Vec::new()));
+    }
+
+    let mut files = fs::read_dir(template_dir)
+        .with_context(|| {
+            format!(
+                "failed to read template directory {}",
+                template_dir.display()
+            )
+        })?
+        .collect::<std::io::Result<Vec<_>>>()
+        .with_context(|| {
+            format!(
+                "failed to read template directory {}",
+                template_dir.display()
+            )
+        })?;
+    files.sort_by_key(|entry| entry.file_name());
+
+    let mut templates = HashMap::new();
+    let mut template_files = HashMap::new();
+    let mut invalid_templates = Vec::new();
+
+    for entry in files {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
+            continue;
+        }
+
+        let name = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .context("template file name was not valid utf-8")?
+            .to_owned();
+
+        match load_template_file(&path, &name) {
+            Ok(template) => {
+                template_files.insert(name.clone(), path.clone());
+                templates.insert(name, template);
+            }
+            Err(error) => invalid_templates.push(InvalidTemplate {
+                name,
+                path: path.clone(),
+                error: error.to_string(),
+            }),
+        }
+    }
+
+    Ok((templates, template_files, invalid_templates))
+}
+
+fn load_template_file(path: &Path, name: &str) -> Result<Template> {
+    let text = fs::read_to_string(path)
+        .with_context(|| format!("failed to read template {}", path.display()))?;
+    let template: Template = toml::from_str(&text)
+        .with_context(|| format!("failed to parse template {}", path.display()))?;
+    validate_template(name, &template)?;
+    Ok(template)
+}
+
 fn validate_project(name: &str, project: &Project, config: &Config) -> Result<()> {
     util::expand_and_absolutize_path(Path::new(&project.path))
         .with_context(|| format!("project \"{name}\" has an invalid path {}", project.path))?;
@@ -866,9 +1000,10 @@ fn ensure_project_file_is_in_project_dir(project_dir: &Path, path: &Path) -> Res
 #[cfg(test)]
 mod tests {
     use super::{
-        Config, IconColors, IconMode, PickerBindings, default_projects_dir, load, load_optional,
+        Config, IconColors, IconMode, PickerBindings, STARTER_TEMPLATE_DEFAULT_BODY,
+        STARTER_TEMPLATE_RUST_BODY, Template, default_projects_dir, load, load_optional,
         load_workspace, materialize_project_template, resolve_project, schema_url, starter_config,
-        starter_project, validate_config,
+        starter_project, starter_template, validate_config, validate_template,
     };
     use anyhow::Result;
     use std::fs;
@@ -883,8 +1018,9 @@ mod tests {
         let starter = starter_config();
         assert!(starter.starts_with("#:schema "));
         let config: Config = toml::from_str(&strip_schema_directive(&starter))?;
-        validate_config(&config)?;
-        assert!(config.templates.contains_key("default"));
+        // Templates now live in their own files, so the starter config carries none.
+        assert!(config.templates.is_empty());
+        assert_eq!(config.settings.default_template.as_deref(), Some("default"));
         assert_eq!(config.settings.icons, IconMode::Auto);
         assert_eq!(config.settings.icon_colors, IconColors::default());
         assert_eq!(config.settings.picker.bindings, PickerBindings::default());
@@ -906,10 +1042,26 @@ mod tests {
     }
 
     #[test]
+    fn parses_starter_templates() -> Result<()> {
+        for (name, body, windows) in [
+            ("default", STARTER_TEMPLATE_DEFAULT_BODY, 1),
+            ("rust", STARTER_TEMPLATE_RUST_BODY, 2),
+        ] {
+            let starter = starter_template(body);
+            assert!(starter.starts_with("#:schema "));
+            let template: Template = toml::from_str(&strip_schema_directive(&starter))?;
+            validate_template(name, &template)?;
+            assert_eq!(template.windows.len(), windows);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn schema_urls_are_versioned() {
         let version = env!("CARGO_PKG_VERSION");
         assert!(schema_url("smux-config.schema.json").contains(&format!("/v{version}/")));
         assert!(schema_url("smux-project.schema.json").contains(&format!("/v{version}/")));
+        assert!(schema_url("smux-template.schema.json").contains(&format!("/v{version}/")));
     }
 
     #[test]
@@ -1210,12 +1362,11 @@ windows = [
         fs::create_dir(&workspace_dir)?;
         fs::create_dir(&project_dir)?;
 
+        let template_dir = tempdir.path().join("templates");
+        fs::create_dir(&template_dir)?;
         fs::write(
-            &config_path,
-            r#"
-[templates.default]
-windows = [{ name = "main" }]
-"#,
+            template_dir.join("default.toml"),
+            "windows = [{ name = \"main\" }]\n",
         )?;
         fs::write(
             project_dir.join("demo.toml"),
@@ -1239,13 +1390,6 @@ windows = [{ name = "main" }]
         let config_path = tempdir.path().join("config.toml");
         let project_dir = tempdir.path().join("projects");
         fs::create_dir(&project_dir)?;
-        fs::write(
-            &config_path,
-            r#"
-[templates.default]
-windows = [{ name = "main" }]
-"#,
-        )?;
         let project_path = project_dir.join("demo.toml");
         fs::write(&project_path, "path = \"/tmp/demo\"\n")?;
 
@@ -1263,13 +1407,6 @@ windows = [{ name = "main" }]
         let config_path = tempdir.path().join("config.toml");
         let project_dir = tempdir.path().join("projects");
         fs::create_dir(&project_dir)?;
-        fs::write(
-            &config_path,
-            r#"
-[templates.default]
-windows = [{ name = "main" }]
-"#,
-        )?;
         let project_path = project_dir.join("broken.toml");
         fs::write(&project_path, "not = [valid\n")?;
 
@@ -1313,13 +1450,25 @@ windows = [{ name = "editor", command = "nvim" }]
         let tempdir = tempfile::tempdir()?;
         let path = tempdir.path().join("config.toml");
         let project_dir = tempdir.path().join("projects");
+        let template_dir = tempdir.path().join("templates");
         fs::create_dir(&project_dir)?;
+        fs::create_dir(&template_dir)?;
         fs::write(&path, starter_config())?;
+        fs::write(
+            template_dir.join("default.toml"),
+            starter_template(STARTER_TEMPLATE_DEFAULT_BODY),
+        )?;
+        fs::write(
+            template_dir.join("rust.toml"),
+            starter_template(STARTER_TEMPLATE_RUST_BODY),
+        )?;
         fs::write(project_dir.join("example.toml"), starter_project())?;
 
         let loaded = load(Some(&path))?;
         assert_eq!(loaded.path, path);
         assert!(loaded.projects.contains_key("example"));
+        assert!(loaded.config.templates.contains_key("default"));
+        assert!(loaded.config.templates.contains_key("rust"));
         Ok(())
     }
 
