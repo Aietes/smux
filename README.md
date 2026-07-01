@@ -249,7 +249,7 @@ Template resolution order:
 1. `--template`
 2. matching project definition
 3. `settings.default_template`
-4. auto-detected template — the template whose `match` patterns are present in the directory (e.g. a `rust` template matching `Cargo.toml`); most specific pattern wins
+4. auto-detected template — a template whose `match` files or `match_dependencies` are present in the directory; when several match, highest `priority` wins, then the most specific (longest) pattern, then the alphabetically first name
 5. built-in fallback template
 
 When you open a folder from the picker and steps 1–4 don't resolve a template, smux prompts you to choose one instead of silently using the built-in fallback — but only if two or more templates are defined. With one or no templates, it opens straight away.

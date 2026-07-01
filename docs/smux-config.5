@@ -214,7 +214,7 @@ matching project definition
 .IP "3." 4
 \fBsettings.default_template\fR
 .IP "4." 4
-auto-detected template: the template whose \fBmatch\fR patterns are present in the directory (for example a \fBrust\fR template matching \fBCargo.toml\fR); when several match, the most specific (longest) pattern wins
+auto-detected template: a template whose \fBmatch\fR files or \fBmatch_dependencies\fR are present in the directory; when several match, highest \fBpriority\fR wins, then the most specific (longest) pattern, then the alphabetically first name
 .IP "5." 4
 built-in fallback template
 .PP

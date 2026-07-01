@@ -20,7 +20,7 @@ It relies on:
 - `tmux` for all session and window operations
 - `fzf` for interactive selection
 - `zoxide` for recent-directory discovery
-- TOML config for templates and project mappings
+- TOML config, with templates and projects as individual files
 
 The implementation intentionally prefers subprocess integration over embedding tool-specific internals. This keeps behavior close to the user’s existing shell setup and avoids coupling to unstable internal APIs.
 
@@ -64,17 +64,17 @@ This planning step exists to make template behavior deterministic and easier to 
 
 ## Config Model
 
-The config is intentionally small and centered on three sections:
+The config is intentionally small and split across three locations:
 
-- `settings`
-- `templates`
-- project definition files under `projects/`
+- `config.toml` — a single `[settings]` section of global defaults
+- `templates/*.toml` — one reusable tmux layout per file (the file name is the template name)
+- `projects/*.toml` — concrete named workspaces with a path and optional inline tmux layout
 
-This keeps the behavior understandable:
-
-- `settings` defines global defaults
-- `templates` describe tmux layouts
-- project files define concrete named workspaces with a path and optional inline tmux layout
+Keeping templates and projects as individual files (rather than inline config
+sections) makes them easy to add, edit, share, and scaffold, and lets each carry
+its own schema directive. A template also declares its own auto-detection markers
+(`match` / `match_dependencies`), so detection is driven by the templates
+themselves rather than a hardcoded table.
 
 The config path follows an XDG-style CLI convention:
 
