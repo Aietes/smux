@@ -53,7 +53,8 @@ const STARTER_TEMPLATE_DEFAULT_BODY: &str = r#"startup_window = "main"
 windows = [{ name = "main" }]
 "#;
 
-const STARTER_TEMPLATE_RUST_BODY: &str = r#"startup_window = "editor"
+const STARTER_TEMPLATE_RUST_BODY: &str = r#"match = ["Cargo.toml"]
+startup_window = "editor"
 startup_pane = 0
 windows = [
   { name = "editor", command = "nvim" },
@@ -64,7 +65,8 @@ windows = [
 ]
 "#;
 
-const STARTER_TEMPLATE_NODE_BODY: &str = r#"startup_window = "editor"
+const STARTER_TEMPLATE_NODE_BODY: &str = r#"match = ["package.json"]
+startup_window = "editor"
 startup_pane = 0
 windows = [
   { name = "editor", command = "nvim" },
@@ -75,7 +77,8 @@ windows = [
 ]
 "#;
 
-const STARTER_TEMPLATE_GO_BODY: &str = r#"startup_window = "editor"
+const STARTER_TEMPLATE_GO_BODY: &str = r#"match = ["go.mod"]
+startup_window = "editor"
 startup_pane = 0
 windows = [
   { name = "editor", command = "nvim" },
@@ -86,7 +89,8 @@ windows = [
 ]
 "#;
 
-const STARTER_TEMPLATE_PYTHON_BODY: &str = r#"startup_window = "editor"
+const STARTER_TEMPLATE_PYTHON_BODY: &str = r#"match = ["pyproject.toml", "requirements.txt"]
+startup_window = "editor"
 startup_pane = 0
 windows = [
   { name = "editor", command = "nvim" },
@@ -97,7 +101,8 @@ windows = [
 ]
 "#;
 
-const STARTER_TEMPLATE_RUBY_BODY: &str = r#"startup_window = "editor"
+const STARTER_TEMPLATE_RUBY_BODY: &str = r#"match = ["Gemfile"]
+startup_window = "editor"
 startup_pane = 0
 windows = [
   { name = "editor", command = "nvim" },
@@ -108,7 +113,8 @@ windows = [
 ]
 "#;
 
-const STARTER_TEMPLATE_JAVA_BODY: &str = r#"startup_window = "editor"
+const STARTER_TEMPLATE_JAVA_BODY: &str = r#"match = ["pom.xml", "build.gradle"]
+startup_window = "editor"
 startup_pane = 0
 windows = [
   { name = "editor", command = "nvim" },
@@ -373,6 +379,13 @@ pub struct Project {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Template {
+    /// Marker patterns that make this template auto-detected for a folder.
+    /// Each entry is an exact filename or a simple glob (`*`/`?`), for example
+    /// `Cargo.toml` or `nuxt.config.*`. Empty means the template is never
+    /// auto-detected (it is still usable via `--template`, a project, or the
+    /// picker's template chooser).
+    #[serde(default, rename = "match")]
+    pub detect: Vec<String>,
     pub root: Option<String>,
     pub startup_window: Option<String>,
     pub startup_pane: Option<usize>,
@@ -965,6 +978,7 @@ pub fn materialize_project_template(
     }
 
     let mut effective = base.unwrap_or(Template {
+        detect: Vec::new(),
         root: None,
         startup_window: None,
         startup_pane: None,

@@ -48,6 +48,7 @@ pub enum PanePosition {
 
 pub fn fallback_template() -> Template {
     Template {
+        detect: Vec::new(),
         root: None,
         startup_window: Some("main".to_owned()),
         startup_pane: Some(0),
@@ -271,6 +272,7 @@ mod tests {
     #[test]
     fn builds_window_and_pane_plan() -> Result<()> {
         let template = Template {
+            detect: Vec::new(),
             root: Some("workspace".to_owned()),
             startup_window: Some("editor".to_owned()),
             startup_pane: Some(0),
@@ -330,6 +332,7 @@ mod tests {
     fn rejects_window_name_with_target_separators() {
         for bad in ["api:v1", "build.step"] {
             let template = Template {
+                detect: Vec::new(),
                 root: None,
                 startup_window: None,
                 startup_pane: None,
@@ -362,6 +365,7 @@ mod tests {
             panes: None,
         };
         let template = Template {
+            detect: Vec::new(),
             root: None,
             startup_window: None,
             startup_pane: None,
@@ -376,6 +380,7 @@ mod tests {
     #[test]
     fn rejects_startup_pane_out_of_range() {
         let template = Template {
+            detect: Vec::new(),
             root: None,
             startup_window: Some("main".to_owned()),
             startup_pane: Some(2),
@@ -403,6 +408,7 @@ mod tests {
     #[test]
     fn rejects_invalid_pane_layout_string() {
         let template = Template {
+            detect: Vec::new(),
             root: None,
             startup_window: Some("main".to_owned()),
             startup_pane: Some(0),
@@ -443,6 +449,7 @@ mod tests {
         }
 
         let template = Template {
+            detect: Vec::new(),
             root: None,
             startup_window: Some("main".to_owned()),
             startup_pane: Some(0),

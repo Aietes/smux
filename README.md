@@ -211,7 +211,7 @@ See **[docs/projects.md](./docs/projects.md)** for the full guide to capturing a
 
 ### Smart template selection
 
-Templates shine because you rarely pick one by hand. When you open a folder, smux chooses a template for you: if the folder looks like a known project type - a `Cargo.toml`, `package.json`, `go.mod`, … - and you have a template named to match (`rust`, `node`, `go`, …), it applies automatically. If nothing matches but you have several templates, it pops up a quick chooser. Define your layouts once, name them after the project types you work in, and folders open with the right workspace on their own.
+Templates shine because you rarely pick one by hand. Each template declares the marker files it matches with a `match` list — exact names or globs like `nuxt.config.*` — and when you open a folder, smux applies the template whose markers are present (most specific pattern wins). The templates `smux init` ships already match the common project types (`Cargo.toml` → `rust`, `package.json` → `node`, …), and there's no built-in list to work around: adding a `match` to a template *is* how you extend detection. If nothing matches but you have several templates, smux pops up a quick chooser. Teach your templates what to match, and folders open with the right workspace on their own.
 
 See **[docs/templates.md](./docs/templates.md)** for the full guide to creating and managing templates.
 
@@ -249,7 +249,7 @@ Template resolution order:
 1. `--template`
 2. matching project definition
 3. `settings.default_template`
-4. auto-detected template — a same-named template (e.g. `rust` for a `Cargo.toml`, `node` for a `package.json`) when the directory has a recognized marker file
+4. auto-detected template — the template whose `match` patterns are present in the directory (e.g. a `rust` template matching `Cargo.toml`); most specific pattern wins
 5. built-in fallback template
 
 When you open a folder from the picker and steps 1–4 don't resolve a template, smux prompts you to choose one instead of silently using the built-in fallback — but only if two or more templates are defined. With one or no templates, it opens straight away.

@@ -116,24 +116,82 @@ fn resolve_template(
 /// Detect a template name from marker files in `path`, returning it only when a
 /// template with that conventional name actually exists in the config.
 fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<String> {
-    const MARKERS: &[(&str, &str)] = &[
-        ("Cargo.toml", "rust"),
-        ("package.json", "node"),
-        ("go.mod", "go"),
-        ("pyproject.toml", "python"),
-        ("requirements.txt", "python"),
-        ("Gemfile", "ruby"),
-        ("pom.xml", "java"),
-        ("build.gradle", "java"),
-    ];
+    let mut best: Option<(usize, &str)> = None; // (specificity, template name)
 
-    MARKERS.iter().find_map(|(marker, template)| {
-        if config.templates.contains_key(*template) && path.join(marker).exists() {
-            Some((*template).to_owned())
-        } else {
-            None
+    for (name, template) in &config.templates {
+        let Some(specificity) = template
+            .detect
+            .iter()
+            .filter(|pattern| marker_present(path, pattern))
+            .map(|pattern| pattern.len())
+            .max()
+        else {
+            continue;
+        };
+
+        // Prefer the most specific (longest) matched pattern; break ties
+        // alphabetically by template name so the result is deterministic.
+        let better = match best {
+            None => true,
+            Some((best_spec, best_name)) => {
+                specificity > best_spec || (specificity == best_spec && name.as_str() < best_name)
+            }
+        };
+        if better {
+            best = Some((specificity, name.as_str()));
         }
-    })
+    }
+
+    best.map(|(_, name)| name.to_owned())
+}
+
+/// Whether `pattern` — an exact filename or a simple `*`/`?` glob — matches an
+/// entry directly inside `dir`.
+fn marker_present(dir: &Path, pattern: &str) -> bool {
+    if pattern.contains('*') || pattern.contains('?') {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return false;
+        };
+        entries.flatten().any(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| wildcard_matches(pattern, name))
+        })
+    } else {
+        dir.join(pattern).exists()
+    }
+}
+
+/// Minimal glob matcher supporting `*` (any run, including empty) and `?` (a
+/// single character). Matches the whole string; no character classes.
+fn wildcard_matches(pattern: &str, text: &str) -> bool {
+    let pat: Vec<char> = pattern.chars().collect();
+    let txt: Vec<char> = text.chars().collect();
+    let (mut p, mut t) = (0usize, 0usize);
+    let (mut star, mut mark) = (None, 0usize);
+
+    while t < txt.len() {
+        if p < pat.len() && (pat[p] == '?' || pat[p] == txt[t]) {
+            p += 1;
+            t += 1;
+        } else if p < pat.len() && pat[p] == '*' {
+            star = Some(p);
+            mark = t;
+            p += 1;
+        } else if let Some(star_pos) = star {
+            p = star_pos + 1;
+            mark += 1;
+            t = mark;
+        } else {
+            return false;
+        }
+    }
+
+    while p < pat.len() && pat[p] == '*' {
+        p += 1;
+    }
+    p == pat.len()
 }
 
 /// Decide whether opening `path` from the picker should prompt for a template
@@ -228,6 +286,7 @@ mod tests {
         std::fs::write(tempdir.path().join("Cargo.toml"), "")?;
 
         let rust_template = Template {
+            detect: vec!["Cargo.toml".to_owned()],
             root: None,
             startup_window: None,
             startup_pane: None,
@@ -262,6 +321,73 @@ mod tests {
         let empty_dir = tempfile::tempdir()?;
         assert!(super::detect_template_name(&with_template, empty_dir.path()).is_none());
         Ok(())
+    }
+
+    fn template_matching(markers: &[&str]) -> Template {
+        Template {
+            detect: markers.iter().map(|marker| (*marker).to_owned()).collect(),
+            root: None,
+            startup_window: None,
+            startup_pane: None,
+            windows: vec![Window {
+                name: "main".to_owned(),
+                cwd: None,
+                pre_command: None,
+                command: None,
+                layout: None,
+                synchronize: false,
+                panes: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn detects_template_via_glob_pattern() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(tempdir.path().join("nuxt.config.ts"), "")?;
+
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([("nuxt".to_owned(), template_matching(&["nuxt.config.*"]))]),
+        };
+        assert_eq!(
+            super::detect_template_name(&config, tempdir.path()).as_deref(),
+            Some("nuxt")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn most_specific_pattern_wins_on_overlap() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(tempdir.path().join("package.json"), "")?;
+        std::fs::write(tempdir.path().join("nuxt.config.ts"), "")?;
+
+        // A Nuxt repo matches both templates; the more specific (longer) pattern
+        // `nuxt.config.*` beats the generic `package.json`.
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([
+                ("node".to_owned(), template_matching(&["package.json"])),
+                ("nuxt".to_owned(), template_matching(&["nuxt.config.*"])),
+            ]),
+        };
+        assert_eq!(
+            super::detect_template_name(&config, tempdir.path()).as_deref(),
+            Some("nuxt")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn wildcard_matches_simple_globs() {
+        assert!(super::wildcard_matches("nuxt.config.*", "nuxt.config.ts"));
+        assert!(super::wildcard_matches("*.csproj", "App.csproj"));
+        assert!(super::wildcard_matches("Cargo.toml", "Cargo.toml"));
+        assert!(super::wildcard_matches("?.txt", "a.txt"));
+        assert!(!super::wildcard_matches("nuxt.config.*", "package.json"));
+        assert!(!super::wildcard_matches("*.csproj", "App.sln"));
+        assert!(!super::wildcard_matches("?.txt", "ab.txt"));
     }
 
     #[test]
@@ -313,6 +439,7 @@ mod tests {
             templates: HashMap::from([(
                 "default".to_owned(),
                 Template {
+                    detect: Vec::new(),
                     root: None,
                     startup_window: None,
                     startup_pane: None,
@@ -348,6 +475,15 @@ mod tests {
         assert!(error.to_string().contains("unknown template"));
     }
 
+    fn marker_for(name: &str) -> Vec<String> {
+        match name {
+            "rust" => vec!["Cargo.toml".to_owned()],
+            "node" => vec!["package.json".to_owned()],
+            "go" => vec!["go.mod".to_owned()],
+            _ => Vec::new(),
+        }
+    }
+
     fn loaded_with(default_template: Option<&str>, template_names: &[&str]) -> LoadedConfig {
         let templates = template_names
             .iter()
@@ -355,6 +491,7 @@ mod tests {
                 (
                     (*name).to_owned(),
                     Template {
+                        detect: marker_for(name),
                         root: None,
                         startup_window: None,
                         startup_pane: None,
@@ -478,6 +615,7 @@ mod tests {
                     (
                         "default".to_owned(),
                         Template {
+                            detect: Vec::new(),
                             root: None,
                             startup_window: None,
                             startup_pane: None,
@@ -495,6 +633,7 @@ mod tests {
                     (
                         "project".to_owned(),
                         Template {
+                            detect: Vec::new(),
                             root: None,
                             startup_window: None,
                             startup_pane: None,
@@ -512,6 +651,7 @@ mod tests {
                     (
                         "explicit".to_owned(),
                         Template {
+                            detect: Vec::new(),
                             root: None,
                             startup_window: None,
                             startup_pane: None,
@@ -572,6 +712,7 @@ mod tests {
             templates: HashMap::from([(
                 "default".to_owned(),
                 Template {
+                    detect: Vec::new(),
                     root: None,
                     startup_window: None,
                     startup_pane: None,

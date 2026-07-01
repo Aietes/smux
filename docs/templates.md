@@ -88,7 +88,7 @@ When you open a directory, smux resolves a template in this order:
 1. an explicit `--template <name>`
 2. a matching saved project's template
 3. `default_template` from `[settings]`
-4. **smart auto-detection** from the folder's marker files
+4. **smart auto-detection** from each template's own `match` patterns
 5. the built-in fallback (a single plain window running your shell)
 
 The interesting parts are 4 and 5.
@@ -100,23 +100,48 @@ one by hand.
 
 ### Auto-detection by project type
 
-If a folder looks like a known kind of project and you have a template *named to
-match*, smux applies it automatically. Detection keys off marker files:
+Each template can declare a `match` list — the marker files that identify its
+project type. When you open a folder, smux applies the template whose markers are
+present:
 
-| Marker file in the folder        | Template name smux looks for |
-| -------------------------------- | ---------------------------- |
-| `Cargo.toml`                     | `rust`                       |
-| `package.json`                   | `node`                       |
-| `go.mod`                         | `go`                         |
-| `pyproject.toml`                 | `python`                     |
-| `requirements.txt`               | `python`                     |
-| `Gemfile`                        | `ruby`                       |
-| `pom.xml`                        | `java`                       |
-| `build.gradle`                   | `java`                       |
+```toml
+# templates/rust.toml
+match = ["Cargo.toml"]
+startup_window = "editor"
+windows = [{ name = "editor", command = "nvim" }]
+```
 
-Detection only fires when a template with that name actually exists. Create
-`templates/rust.toml`, open any folder containing a `Cargo.toml`, and you land in
-your Rust workspace — no flag, no prompt.
+Patterns are exact filenames or simple globs (`*`, `?`), so one entry can cover a
+family of config files:
+
+```toml
+# templates/nuxt.toml — these two lines are equivalent:
+match = ["nuxt.config.ts", "nuxt.config.js", "nuxt.config.mjs"]
+match = ["nuxt.config.*"]
+```
+
+The templates `smux init` ships already carry sensible markers:
+
+| Template | `match`                              |
+| -------- | ------------------------------------ |
+| `rust`   | `Cargo.toml`                         |
+| `node`   | `package.json`                       |
+| `go`     | `go.mod`                             |
+| `python` | `pyproject.toml`, `requirements.txt` |
+| `ruby`   | `Gemfile`                            |
+| `java`   | `pom.xml`, `build.gradle`            |
+
+There is **no built-in marker list** — detection is entirely driven by your
+templates, so adding a `match` to a template *is* how you extend it. Drop in a
+`templates/nuxt.toml` with a `match` and Nuxt folders start opening with it; no
+code change, no flag, no prompt.
+
+When more than one template matches — a Nuxt repo has both `nuxt.config.ts` and
+`package.json` — the **most specific pattern wins** (the longest matched pattern,
+ties broken alphabetically), so a `nuxt` template beats the generic `node` one.
+Detection is file-based and does not inspect file *contents*, so frameworks
+without a distinctive config file (plain React, Vite-only Vue) fall through to
+`node` unless you give them their own marker file.
 
 ### Ask only when it helps
 
@@ -132,12 +157,11 @@ The single most useful tip: **leave `default_template` unset.** A default always
 wins at step 3, so setting one suppresses both auto-detection and the chooser —
 every folder gets the same layout. Instead:
 
-- define per-type templates named after the markers you work with (`rust`,
-  `node`, `go`, `python`, …);
+- give each per-type template a `match` list for the project types you work in;
 - let smux route folders by type automatically;
 - fall back to the chooser for the folders it can't classify.
 
-Name your templates after how you work, and folders open themselves.
+Teach your templates what to match, and folders open themselves.
 
 ## Managing templates
 

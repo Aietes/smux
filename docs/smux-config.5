@@ -97,6 +97,8 @@ The recommended format uses TOML 1.1 inline tables for windows and panes.
 .PP
 Template fields:
 .IP \(bu 2
+\fBmatch\fR (array of marker patterns that auto-detect this template; exact filenames or simple \fB*\fR/\fB?\fR globs, for example \fBnuxt.config.*\fR)
+.IP \(bu 2
 \fBroot\fR
 .IP \(bu 2
 \fBstartup_window\fR
@@ -208,7 +210,7 @@ matching project definition
 .IP "3." 4
 \fBsettings.default_template\fR
 .IP "4." 4
-auto-detected template: a same-named template (for example \fBrust\fR for a \fBCargo.toml\fR, \fBnode\fR for a \fBpackage.json\fR) when the directory has a recognized marker file
+auto-detected template: the template whose \fBmatch\fR patterns are present in the directory (for example a \fBrust\fR template matching \fBCargo.toml\fR); when several match, the most specific (longest) pattern wins
 .IP "5." 4
 built-in fallback template
 .PP

@@ -9,6 +9,14 @@
     "windows"
   ],
   "properties": {
+    "match": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Marker patterns that auto-detect this template for a folder. Each entry is an exact filename or a simple glob (* / ?), e.g. \"Cargo.toml\" or \"nuxt.config.*\". When several templates match, the most specific (longest) pattern wins."
+    },
     "root": {
       "type": "string",
       "description": "Optional session root; accepted by smux config."

@@ -315,6 +315,11 @@ That restores the last saved Neovim session when the window opens.
 
 Template fields:
 
+- `match`
+  - type: array of strings
+  - optional
+  - marker patterns that auto-detect this template for a folder; each entry is an exact filename or a simple glob (`*`/`?`), e.g. `Cargo.toml` or `nuxt.config.*`
+  - when several templates match a folder, the most specific (longest) matched pattern wins, ties broken alphabetically by template name
 - `root`
   - type: string
   - optional
@@ -560,7 +565,7 @@ When creating or connecting to a session, template resolution order is:
 1. `--template`
 2. matching project definition
 3. `settings.default_template`
-4. auto-detected template — a same-named template (e.g. `rust` for a `Cargo.toml`, `node` for a `package.json`) when the directory has a recognized marker file
+4. auto-detected template — the template whose `match` patterns are present in the directory (e.g. a `rust` template matching `Cargo.toml`); when several match, the most specific pattern wins
 5. built-in fallback template
 
 When you open a folder from the picker and steps 1–4 don't resolve a template, smux prompts you to choose one instead of silently using the built-in fallback — but only if two or more templates are defined. With one or no templates, it opens straight away.
