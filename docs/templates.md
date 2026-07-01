@@ -120,28 +120,47 @@ match = ["nuxt.config.ts", "nuxt.config.js", "nuxt.config.mjs"]
 match = ["nuxt.config.*"]
 ```
 
-The templates `smux init` ships already carry sensible markers:
+Some project types have no distinctive config file — React and Vite-based Vue
+live in `package.json` dependencies rather than a marker file. For those, a
+template can also declare `match_dependencies`, and smux applies it when the
+folder's `package.json` lists any of them:
 
-| Template | `match`                              |
-| -------- | ------------------------------------ |
-| `rust`   | `Cargo.toml`                         |
-| `node`   | `package.json`                       |
-| `go`     | `go.mod`                             |
-| `python` | `pyproject.toml`, `requirements.txt` |
-| `ruby`   | `Gemfile`                            |
-| `java`   | `pom.xml`, `build.gradle`            |
+```toml
+# templates/react.toml
+match_dependencies = ["react"]
+priority = 10
+```
 
 There is **no built-in marker list** — detection is entirely driven by your
-templates, so adding a `match` to a template *is* how you extend it. Drop in a
-`templates/nuxt.toml` with a `match` and Nuxt folders start opening with it; no
-code change, no flag, no prompt.
+templates, so adding a `match` or `match_dependencies` to a template *is* how you
+extend it. No code change, no flag, no prompt.
 
-When more than one template matches — a Nuxt repo has both `nuxt.config.ts` and
-`package.json` — the **most specific pattern wins** (the longest matched pattern,
-ties broken alphabetically), so a `nuxt` template beats the generic `node` one.
-Detection is file-based and does not inspect file *contents*, so frameworks
-without a distinctive config file (plain React, Vite-only Vue) fall through to
-`node` unless you give them their own marker file.
+### When several templates match
+
+Overlap is common: a Nuxt repo has `nuxt.config.ts` *and* `package.json`; a
+Next.js repo depends on both `next` and `react`. smux resolves it in order:
+
+1. highest **`priority`** (an integer on the template, default `0`) — this is how
+   a meta-framework beats its base (`next` over `react`, `nuxt` over `vue`);
+2. then the **most specific** (longest) matched pattern — so `nuxt.config.*`
+   beats the generic `package.json`;
+3. then the alphabetically first template name, so the result is deterministic.
+
+### What `smux init` ships
+
+`smux init` writes templates for the common types, each with its markers already
+set, so detection works out of the box:
+
+| Template                                    | matches on                                     |
+| ------------------------------------------- | ---------------------------------------------- |
+| `rust` / `go` / `python` / `ruby` / `java`  | `Cargo.toml` / `go.mod` / `pyproject.toml` … |
+| `node`                                      | `package.json`                                 |
+| `nuxt` / `next`                             | `nuxt.config.*` / `next.config.*` (+ dep, priority 20) |
+| `svelte` / `angular` / `astro`              | `svelte.config.*` / `angular.json` / `astro.config.*` |
+| `react` / `vue`                             | `react` / `vue` package.json dependency        |
+
+The matcher is file- and dependency-based; it reads a folder's `package.json`
+once and doesn't do any deeper content analysis.
 
 ### Ask only when it helps
 

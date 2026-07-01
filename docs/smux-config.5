@@ -99,6 +99,10 @@ Template fields:
 .IP \(bu 2
 \fBmatch\fR (array of marker patterns that auto-detect this template; exact filenames or simple \fB*\fR/\fB?\fR globs, for example \fBnuxt.config.*\fR)
 .IP \(bu 2
+\fBmatch_dependencies\fR (array of \fBpackage.json\fR dependency names that also auto-detect this template, for example \fBreact\fR)
+.IP \(bu 2
+\fBpriority\fR (integer, default \fB0\fR; higher wins when several templates match, letting a meta-framework beat its base)
+.IP \(bu 2
 \fBroot\fR
 .IP \(bu 2
 \fBstartup_window\fR

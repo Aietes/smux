@@ -15,7 +15,20 @@
         "type": "string",
         "minLength": 1
       },
-      "description": "Marker patterns that auto-detect this template for a folder. Each entry is an exact filename or a simple glob (* / ?), e.g. \"Cargo.toml\" or \"nuxt.config.*\". When several templates match, the most specific (longest) pattern wins."
+      "description": "Marker patterns that auto-detect this template for a folder. Each entry is an exact filename or a simple glob (* / ?), e.g. \"Cargo.toml\" or \"nuxt.config.*\"."
+    },
+    "match_dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "package.json dependency names that also auto-detect this template, e.g. \"react\". A folder matches when its package.json lists any of these as a dependency; useful for project types without a distinctive marker file."
+    },
+    "priority": {
+      "type": "integer",
+      "default": 0,
+      "description": "Tie-breaker when several templates match the same folder; higher wins. Lets a meta-framework (e.g. next, which also depends on react) beat its base."
     },
     "root": {
       "type": "string",

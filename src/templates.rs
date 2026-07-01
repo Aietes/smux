@@ -49,6 +49,8 @@ pub enum PanePosition {
 pub fn fallback_template() -> Template {
     Template {
         detect: Vec::new(),
+        match_dependencies: Vec::new(),
+        priority: 0,
         root: None,
         startup_window: Some("main".to_owned()),
         startup_pane: Some(0),
@@ -273,6 +275,8 @@ mod tests {
     fn builds_window_and_pane_plan() -> Result<()> {
         let template = Template {
             detect: Vec::new(),
+            match_dependencies: Vec::new(),
+            priority: 0,
             root: Some("workspace".to_owned()),
             startup_window: Some("editor".to_owned()),
             startup_pane: Some(0),
@@ -333,6 +337,8 @@ mod tests {
         for bad in ["api:v1", "build.step"] {
             let template = Template {
                 detect: Vec::new(),
+                match_dependencies: Vec::new(),
+                priority: 0,
                 root: None,
                 startup_window: None,
                 startup_pane: None,
@@ -366,6 +372,8 @@ mod tests {
         };
         let template = Template {
             detect: Vec::new(),
+            match_dependencies: Vec::new(),
+            priority: 0,
             root: None,
             startup_window: None,
             startup_pane: None,
@@ -381,6 +389,8 @@ mod tests {
     fn rejects_startup_pane_out_of_range() {
         let template = Template {
             detect: Vec::new(),
+            match_dependencies: Vec::new(),
+            priority: 0,
             root: None,
             startup_window: Some("main".to_owned()),
             startup_pane: Some(2),
@@ -409,6 +419,8 @@ mod tests {
     fn rejects_invalid_pane_layout_string() {
         let template = Template {
             detect: Vec::new(),
+            match_dependencies: Vec::new(),
+            priority: 0,
             root: None,
             startup_window: Some("main".to_owned()),
             startup_pane: Some(0),
@@ -450,6 +462,8 @@ mod tests {
 
         let template = Template {
             detect: Vec::new(),
+            match_dependencies: Vec::new(),
+            priority: 0,
             root: None,
             startup_window: Some("main".to_owned()),
             startup_pane: Some(0),

@@ -319,7 +319,15 @@ Template fields:
   - type: array of strings
   - optional
   - marker patterns that auto-detect this template for a folder; each entry is an exact filename or a simple glob (`*`/`?`), e.g. `Cargo.toml` or `nuxt.config.*`
-  - when several templates match a folder, the most specific (longest) matched pattern wins, ties broken alphabetically by template name
+- `match_dependencies`
+  - type: array of strings
+  - optional
+  - `package.json` dependency names that also auto-detect this template (for types without a distinctive marker file, e.g. `react`); a folder matches when its `package.json` lists any of them
+- `priority`
+  - type: integer
+  - optional
+  - default: `0`
+  - tie-breaker when several templates match a folder; higher wins (e.g. `next`, which also depends on `react`, uses a higher priority to beat it). After priority, the most specific (longest) matched pattern wins, then the alphabetically first name.
 - `root`
   - type: string
   - optional

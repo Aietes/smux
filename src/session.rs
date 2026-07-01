@@ -113,36 +113,57 @@ fn resolve_template(
     Ok(templates::fallback_template())
 }
 
-/// Detect a template name from marker files in `path`, returning it only when a
-/// template with that conventional name actually exists in the config.
+/// Detect a template for `path` from the templates' own `match` patterns and
+/// `match_dependencies`. When several match, the highest `priority` wins, then
+/// the most specific (longest) matched marker, then the alphabetically first
+/// template name. Returns `None` when nothing matches.
 fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<String> {
-    let mut best: Option<(usize, &str)> = None; // (specificity, template name)
+    // Read package.json once (if present) so dependency matching scans it a
+    // single time regardless of how many templates are configured.
+    let package_json = std::fs::read_to_string(path.join("package.json")).ok();
+    let mut best: Option<(i64, usize, &str)> = None; // (priority, specificity, name)
 
     for (name, template) in &config.templates {
-        let Some(specificity) = template
+        let file_spec = template
             .detect
             .iter()
             .filter(|pattern| marker_present(path, pattern))
             .map(|pattern| pattern.len())
-            .max()
-        else {
+            .max();
+        let dep_spec = package_json.as_deref().and_then(|pkg| {
+            template
+                .match_dependencies
+                .iter()
+                .filter(|dependency| depends_on(pkg, dependency))
+                .map(|dependency| dependency.len())
+                .max()
+        });
+        let Some(specificity) = file_spec.into_iter().chain(dep_spec).max() else {
             continue;
         };
 
-        // Prefer the most specific (longest) matched pattern; break ties
-        // alphabetically by template name so the result is deterministic.
+        // Highest priority wins; then the most specific (longest) matched
+        // pattern; then alphabetical name, so the result is deterministic.
+        let key = (template.priority, specificity);
         let better = match best {
             None => true,
-            Some((best_spec, best_name)) => {
-                specificity > best_spec || (specificity == best_spec && name.as_str() < best_name)
+            Some((best_priority, best_spec, best_name)) => {
+                key > (best_priority, best_spec)
+                    || (key == (best_priority, best_spec) && name.as_str() < best_name)
             }
         };
         if better {
-            best = Some((specificity, name.as_str()));
+            best = Some((template.priority, specificity, name.as_str()));
         }
     }
 
-    best.map(|(_, name)| name.to_owned())
+    best.map(|(_, _, name)| name.to_owned())
+}
+
+/// Whether `package_json` declares `dependency`. A quoted-key scan that avoids
+/// pulling in a JSON parser: `"react"` matches without matching `"react-dom"`.
+fn depends_on(package_json: &str, dependency: &str) -> bool {
+    package_json.contains(&format!("\"{dependency}\""))
 }
 
 /// Whether `pattern` — an exact filename or a simple `*`/`?` glob — matches an
@@ -287,6 +308,8 @@ mod tests {
 
         let rust_template = Template {
             detect: vec!["Cargo.toml".to_owned()],
+            match_dependencies: Vec::new(),
+            priority: 0,
             root: None,
             startup_window: None,
             startup_pane: None,
@@ -323,9 +346,14 @@ mod tests {
         Ok(())
     }
 
-    fn template_matching(markers: &[&str]) -> Template {
+    fn template_with(detect: &[&str], match_dependencies: &[&str], priority: i64) -> Template {
         Template {
-            detect: markers.iter().map(|marker| (*marker).to_owned()).collect(),
+            detect: detect.iter().map(|marker| (*marker).to_owned()).collect(),
+            match_dependencies: match_dependencies
+                .iter()
+                .map(|dependency| (*dependency).to_owned())
+                .collect(),
+            priority,
             root: None,
             startup_window: None,
             startup_pane: None,
@@ -339,6 +367,10 @@ mod tests {
                 panes: None,
             }],
         }
+    }
+
+    fn template_matching(markers: &[&str]) -> Template {
+        template_with(markers, &[], 0)
     }
 
     #[test]
@@ -391,6 +423,70 @@ mod tests {
     }
 
     #[test]
+    fn depends_on_matches_whole_dependency_keys() {
+        let package_json = r#"{ "dependencies": { "react": "^18", "react-dom": "^18" } }"#;
+        assert!(super::depends_on(package_json, "react"));
+        assert!(super::depends_on(package_json, "react-dom"));
+        // A substring of another dependency name must not match.
+        assert!(!super::depends_on(
+            r#"{ "dependencies": { "react-dom": "^18" } }"#,
+            "react"
+        ));
+    }
+
+    #[test]
+    fn detects_template_from_package_json_dependency() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(
+            tempdir.path().join("package.json"),
+            r#"{ "dependencies": { "react": "^18" } }"#,
+        )?;
+
+        // A React app has a package.json but no distinctive marker file, so it is
+        // detected from its dependency and beats the generic `node` template.
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([
+                ("node".to_owned(), template_with(&["package.json"], &[], 0)),
+                ("react".to_owned(), template_with(&[], &["react"], 10)),
+            ]),
+        };
+        assert_eq!(
+            super::detect_template_name(&config, tempdir.path()).as_deref(),
+            Some("react")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn higher_priority_meta_framework_wins() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(tempdir.path().join("next.config.js"), "")?;
+        std::fs::write(
+            tempdir.path().join("package.json"),
+            r#"{ "dependencies": { "next": "14", "react": "^18" } }"#,
+        )?;
+
+        // A Next.js app matches both `next` and `react`; the higher-priority
+        // meta-framework wins.
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([
+                ("react".to_owned(), template_with(&[], &["react"], 10)),
+                (
+                    "next".to_owned(),
+                    template_with(&["next.config.*"], &["next"], 20),
+                ),
+            ]),
+        };
+        assert_eq!(
+            super::detect_template_name(&config, tempdir.path()).as_deref(),
+            Some("next")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn derives_session_name_from_path() -> Result<()> {
         let tempdir = tempfile::tempdir()?;
         let directory = tempdir.path().join("my-project");
@@ -440,6 +536,8 @@ mod tests {
                 "default".to_owned(),
                 Template {
                     detect: Vec::new(),
+                    match_dependencies: Vec::new(),
+                    priority: 0,
                     root: None,
                     startup_window: None,
                     startup_pane: None,
@@ -492,6 +590,8 @@ mod tests {
                     (*name).to_owned(),
                     Template {
                         detect: marker_for(name),
+                        match_dependencies: Vec::new(),
+                        priority: 0,
                         root: None,
                         startup_window: None,
                         startup_pane: None,
@@ -616,6 +716,8 @@ mod tests {
                         "default".to_owned(),
                         Template {
                             detect: Vec::new(),
+                            match_dependencies: Vec::new(),
+                            priority: 0,
                             root: None,
                             startup_window: None,
                             startup_pane: None,
@@ -634,6 +736,8 @@ mod tests {
                         "project".to_owned(),
                         Template {
                             detect: Vec::new(),
+                            match_dependencies: Vec::new(),
+                            priority: 0,
                             root: None,
                             startup_window: None,
                             startup_pane: None,
@@ -652,6 +756,8 @@ mod tests {
                         "explicit".to_owned(),
                         Template {
                             detect: Vec::new(),
+                            match_dependencies: Vec::new(),
+                            priority: 0,
                             root: None,
                             startup_window: None,
                             startup_pane: None,
@@ -713,6 +819,8 @@ mod tests {
                 "default".to_owned(),
                 Template {
                     detect: Vec::new(),
+                    match_dependencies: Vec::new(),
+                    priority: 0,
                     root: None,
                     startup_window: None,
                     startup_pane: None,
