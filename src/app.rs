@@ -11,6 +11,7 @@ use crate::folder_search;
 use crate::fzf;
 use crate::project_export;
 use crate::session;
+use crate::skill;
 use crate::tmux::Tmux;
 use crate::ui::DisplayStyle;
 use crate::util;
@@ -164,6 +165,12 @@ pub fn run(cli: Cli) -> Result<()> {
                 for path in paths {
                     println!("{}", path.display());
                 }
+            }
+            Ok(())
+        }
+        Commands::Skill { dir } => {
+            if let Some(path) = skill::write_skill(dir.as_deref())? {
+                println!("{}", path.display());
             }
             Ok(())
         }

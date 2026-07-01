@@ -358,3 +358,33 @@ fn detect_reports_the_winning_template_and_its_markers() {
         .stdout(contains("rust"))
         .stdout(contains("Cargo.toml"));
 }
+
+#[test]
+fn skill_writes_skill_md_to_the_given_dir() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let skill_dir = tempdir.path().join("skills").join("smux");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["skill", "--dir"]);
+    command.arg(&skill_dir);
+
+    command.assert().success().stdout(contains("SKILL.md"));
+
+    let written =
+        fs::read_to_string(skill_dir.join("SKILL.md")).expect("SKILL.md should be written");
+    assert!(written.starts_with("---\nname: smux-config\n"));
+    assert!(written.contains("## Troubleshooting"));
+    assert!(written.contains("## Errors → fixes"));
+}
+
+#[test]
+fn skill_without_dir_prints_to_stdout() {
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.arg("skill");
+
+    command
+        .assert()
+        .success()
+        .stdout(contains("name: smux-config"))
+        .stdout(contains("Authoring smux templates and projects"));
+}

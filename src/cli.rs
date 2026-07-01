@@ -131,4 +131,13 @@ pub enum Commands {
         #[arg(value_hint = ValueHint::DirPath)]
         dir: Option<PathBuf>,
     },
+    /// Write the bundled Claude Code skill for authoring smux config.
+    #[command(
+        long_about = "Write (or print) the bundled Claude Code skill that teaches an AI assistant how to author and debug smux templates and projects. With --dir, writes <dir>/SKILL.md (creating the directory), e.g. `smux skill --dir ~/.claude/skills/smux`. Without --dir, prints the skill to stdout. The skill is embedded in the binary, so it always matches this version — re-run after an upgrade to refresh it."
+    )]
+    Skill {
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::DirPath)]
+        dir: Option<PathBuf>,
+    },
 }

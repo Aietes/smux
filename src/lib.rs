@@ -8,6 +8,7 @@ pub mod fzf;
 pub mod process;
 pub mod project_export;
 pub mod session;
+pub mod skill;
 pub mod templates;
 pub mod tmux;
 pub mod ui;

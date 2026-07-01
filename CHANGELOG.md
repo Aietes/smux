@@ -9,6 +9,7 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 ### Added
 
 - `smux detect <dir>` prints the templates whose `match` files or `match_dependencies` are present in a directory, ranked the way smux auto-selects them (the top entry, marked with an arrow, is the one it would apply). Lets you debug why a folder resolves to a given template without launching a session
+- `smux skill [--dir <dir>]` writes (or prints) a bundled Claude Code skill that teaches an AI assistant how to author, validate, and debug smux templates and projects. The skill is embedded in the binary, so it always matches the installed version; typical use is `smux skill --dir ~/.claude/skills/smux`
 
 ### Fixed
 
