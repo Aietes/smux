@@ -142,6 +142,7 @@ Type to fuzzy-match, then use a keyboard shortcut to act on the highlighted item
 - `Alt-S` saves (or updates) the selected tmux session as a project
 - `Ctrl-R` renames the selected tmux session
 - `Ctrl-E` opens the selected project (or broken project) file in `$EDITOR`
+- `Ctrl-T` opens the selected folder and lets you pick its template by hand, even when one would auto-detect
 - `Ctrl-X` closes the selected non-current session, or deletes the selected project file
 - `?` shows or hides the keyboard-shortcut hint bar
 - `Esc` cancels
@@ -285,6 +286,7 @@ delete_session = "ctrl-x"
 save_project = "alt-s"
 rename_session = "ctrl-r"
 edit_project = "ctrl-e"
+choose_template = "ctrl-t"
 toggle_hints = "?"
 
 [settings.picker.preview]

@@ -72,6 +72,7 @@ delete_session = "ctrl-x"
 save_project = "alt-s"
 rename_session = "ctrl-r"
 edit_project = "ctrl-e"
+choose_template = "ctrl-t"
 toggle_hints = "?"
 
 [settings.picker.preview]
@@ -169,6 +170,7 @@ delete_session = "ctrl-x"
 save_project = "alt-s"
 rename_session = "ctrl-r"
 edit_project = "ctrl-e"
+choose_template = "ctrl-t"
 toggle_hints = "?"
 ```
 
@@ -210,6 +212,13 @@ Fields:
   - default: `ctrl-e`
   - opens the selected project (or broken project) file in `$VISUAL`/`$EDITOR`
   - returns to the picker when the editor exits
+- `choose_template`
+  - type: string
+  - default: `ctrl-t`
+  - opens the selected folder and prompts for its template by hand, overriding
+    auto-detection for that one folder (like `smux select --choose-template`, but
+    scoped to the highlighted folder instead of the whole session)
+  - only applies to folder entries; ignored on sessions and projects
 - `toggle_hints`
   - type: string
   - default: `?`
@@ -626,6 +635,7 @@ Current behavior:
 - `Alt-S` saves (or updates) the selected tmux session as a project, and keeps the picker open
 - `Ctrl-R` renames the selected tmux session, and keeps the picker open
 - `Ctrl-E` opens the selected project (or broken project) file in `$EDITOR`, and returns to the picker
+- `Ctrl-T` opens the selected folder and prompts for its template, overriding auto-detection for that folder
 - `?` shows or hides the keyboard-shortcut hint bar
 - these keybinds are configurable through `[settings.picker.bindings]`
 

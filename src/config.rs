@@ -31,6 +31,7 @@ delete_session = "ctrl-x"
 save_project = "alt-s"
 rename_session = "ctrl-r"
 edit_project = "ctrl-e"
+choose_template = "ctrl-t"
 toggle_hints = "?"
 
 [settings.picker.preview]
@@ -271,6 +272,8 @@ pub struct PickerBindings {
     pub rename_session: String,
     #[serde(default = "default_picker_edit_project")]
     pub edit_project: String,
+    #[serde(default = "default_picker_choose_template")]
+    pub choose_template: String,
     #[serde(default = "default_picker_toggle_hints")]
     pub toggle_hints: String,
 }
@@ -323,6 +326,7 @@ impl Default for PickerBindings {
             save_project: default_picker_save_project(),
             rename_session: default_picker_rename_session(),
             edit_project: default_picker_edit_project(),
+            choose_template: default_picker_choose_template(),
             toggle_hints: default_picker_toggle_hints(),
         }
     }
@@ -358,6 +362,10 @@ fn default_picker_rename_session() -> String {
 
 fn default_picker_edit_project() -> String {
     "ctrl-e".to_owned()
+}
+
+fn default_picker_choose_template() -> String {
+    "ctrl-t".to_owned()
 }
 
 fn default_picker_toggle_hints() -> String {

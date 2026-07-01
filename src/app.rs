@@ -217,12 +217,17 @@ fn run_select(
                     Err(error) => eprintln!("warning: {error:#}"),
                 }
             }
-            (fzf::SelectAction::Open, fzf::EntryKind::Directory) => {
+            (fzf::SelectAction::Open, fzf::EntryKind::Directory)
+            | (fzf::SelectAction::ChooseTemplate, fzf::EntryKind::Directory) => {
                 let path = Path::new(&selection.entry.value);
-                // Offer the template picker when explicitly requested, or when no
-                // template would resolve on its own but several are available.
-                let offer_choice =
-                    choose_template || session::should_offer_template_choice(loaded.as_ref(), path);
+                // Offer the template picker when explicitly requested — via the
+                // choose-template key on this folder or the session-wide
+                // `--choose-template` flag — or when no template would resolve on
+                // its own but several are available.
+                let force_choice = matches!(selection.action, fzf::SelectAction::ChooseTemplate);
+                let offer_choice = force_choice
+                    || choose_template
+                    || session::should_offer_template_choice(loaded.as_ref(), path);
                 let template = if offer_choice {
                     let Some(template) = choose_template_name(config, display_style)? else {
                         return Ok(());
@@ -263,6 +268,8 @@ fn run_select(
             (fzf::SelectAction::SaveProject, _) => continue,
             (fzf::SelectAction::Rename, _) => continue,
             (fzf::SelectAction::Edit, _) => continue,
+            // Choosing a template only applies to folders; ignore it elsewhere.
+            (fzf::SelectAction::ChooseTemplate, _) => continue,
         }
     }
 }

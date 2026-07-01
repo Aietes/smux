@@ -245,8 +245,15 @@ windows = [{ name = "editor", command = "nvim" }, { name = "dev", command = "npm
 If none of steps 1–4 resolve a template but you have **two or more** templates
 defined, smux opens a quick template chooser instead of dropping you into a bare
 session — you decide in the moment, with the folder already in hand. With one or
-no templates, it just opens. `smux select --choose-template` forces the chooser
-every time.
+no templates, it just opens.
+
+You can also reach for the chooser deliberately, even when a template *would*
+auto-detect:
+
+- press **`Ctrl-T`** on a folder in the picker to open it and pick the template
+  by hand (configurable via `[settings.picker.bindings] choose_template`);
+- run `smux select --choose-template` to force the chooser on every folder you
+  open that session.
 
 ### Getting the most out of it
 

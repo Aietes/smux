@@ -16,6 +16,7 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 - `smux init` now scaffolds templates for the common languages (`rust`, `node`, `go`, `python`, `ruby`, `java`), each carrying its own marker, so opening a recognized folder applies the right layout out of the box; the starter config leaves `default_template` unset so smart selection stays on. Copy-paste framework templates (React, Vue, Svelte, Angular, Astro, Next, Nuxt) live in the templates guide and auto-detect once added
 - `schemas/smux-template.schema.json` and `#:schema` directives in template files, so schema-aware editors validate templates as you type
 - `smux doctor` reports template count, broken templates, and template schema drift; `smux doctor --fix` refreshes template `#:schema` directives alongside config and project files
+- picker action to open the selected folder with the template chooser (default `Ctrl-T`, configurable via `[settings.picker.bindings] choose_template`), overriding auto-detection for that one folder — the folder-scoped counterpart to `smux select --choose-template`
 
 ## [0.2.2] - 2026-07-01
 

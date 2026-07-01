@@ -36,6 +36,10 @@ folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
 save_project = "alt-s"
+rename_session = "ctrl-r"
+edit_project = "ctrl-e"
+choose_template = "ctrl-t"
+toggle_hints = "?"
 
 [settings.picker.preview]
 # sessions = "tmux capture-pane -p -t \"$SMUX_PREVIEW_SESSION\""
@@ -62,7 +66,10 @@ directories, templates, and projects.
 \fBfolders\fR filters to folders, \fBprojects\fR filters to saved projects,
 \fBdelete_session\fR deletes the selected session or project,
 \fBsave_project\fR saves the selected tmux session as a project,
-\fBrename_session\fR renames the selected tmux session, and
+\fBrename_session\fR renames the selected tmux session,
+\fBedit_project\fR opens the selected project file in the editor,
+\fBchoose_template\fR opens the selected folder and prompts for its template
+by hand (overriding auto-detection for that folder), and
 \fBtoggle_hints\fR shows or hides the keyboard-shortcut hint bar.
 .PP
 \fBsettings.picker.show_hints\fR (boolean, default true) sets whether the hint

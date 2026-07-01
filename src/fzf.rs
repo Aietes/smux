@@ -24,6 +24,7 @@ pub enum SelectAction {
     SaveProject,
     Rename,
     Edit,
+    ChooseTemplate,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -320,6 +321,7 @@ fn render_picker_hints(bindings: &PickerBindings) -> String {
         hint_segment(&pretty_key(&bindings.save_project), "save"),
         hint_segment(&pretty_key(&bindings.rename_session), "ren"),
         hint_segment(&pretty_key(&bindings.edit_project), "edit"),
+        hint_segment(&pretty_key(&bindings.choose_template), "tmpl"),
     ]);
     let filters = join_hints(&[
         hint_segment(&pretty_key(&bindings.reset), "all"),
@@ -507,11 +509,12 @@ fn select_with_runner(
     args.extend([
         "--expect".to_owned(),
         format!(
-            "{},{},{},{}",
+            "{},{},{},{},{}",
             bindings.delete_session,
             bindings.save_project,
             bindings.rename_session,
-            bindings.edit_project
+            bindings.edit_project,
+            bindings.choose_template
         ),
     ]);
     let output = runner
@@ -552,6 +555,7 @@ fn select_with_runner(
                 key if key == bindings.save_project => SelectAction::SaveProject,
                 key if key == bindings.rename_session => SelectAction::Rename,
                 key if key == bindings.edit_project => SelectAction::Edit,
+                key if key == bindings.choose_template => SelectAction::ChooseTemplate,
                 other => bail!("unknown picker action: {other}"),
             };
             (action, encoded_entry)
@@ -650,7 +654,7 @@ mod tests {
         assert!(
             recorded[0]
                 .args
-                .contains(&"ctrl-x,alt-s,ctrl-r,ctrl-e".to_owned())
+                .contains(&"ctrl-x,alt-s,ctrl-r,ctrl-e,ctrl-t".to_owned())
         );
         // The hint bar is restyled (ANSI-decorated), so assert on stable
         // visible fragments rather than the whole literal line.
@@ -857,6 +861,38 @@ mod tests {
     }
 
     #[test]
+    fn selector_supports_choose_template_action_for_directories() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"ctrl-t\nfolder\t/tmp/example\tdir  /tmp/example\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let result = select_with_runner(
+            runner,
+            vec![Entry::directory(
+                DisplayStyle::from_icon_mode(IconMode::Never),
+                "/tmp/example".to_owned(),
+            )],
+            "smux> ",
+            &PickerBindings::default(),
+            &PickerPreviewSettings::default(),
+            true,
+            None,
+        )
+        .expect("selection should succeed")
+        .expect("selection should be present");
+
+        assert_eq!(result.action, SelectAction::ChooseTemplate);
+        assert_eq!(result.entry.kind, EntryKind::Directory);
+        assert_eq!(result.entry.value, "/tmp/example");
+    }
+
+    #[test]
     fn selector_treats_empty_expect_key_as_open() {
         let runner = Arc::new(FakeCommandRunner::new());
         runner.push_capture(Ok(CommandOutput {
@@ -909,6 +945,7 @@ mod tests {
             save_project: "alt-y".to_owned(),
             rename_session: "alt-r".to_owned(),
             edit_project: "alt-e".to_owned(),
+            choose_template: "alt-t".to_owned(),
             toggle_hints: "alt-h".to_owned(),
         };
 
@@ -930,7 +967,7 @@ mod tests {
         assert!(
             recorded[0]
                 .args
-                .contains(&"alt-x,alt-y,alt-r,alt-e".to_owned())
+                .contains(&"alt-x,alt-y,alt-r,alt-e,alt-t".to_owned())
         );
         assert!(
             recorded[0]
