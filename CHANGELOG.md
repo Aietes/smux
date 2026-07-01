@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-01
+
 ### Added
 
 - picker action to open the selected project (or broken project) file in `$EDITOR` (default `Ctrl-E`), configurable via `[settings.picker.bindings] edit_project`; the picker returns when the editor exits
