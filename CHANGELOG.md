@@ -14,6 +14,7 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ### Added
 
+- `smux init` now scaffolds templates for common project types (`rust`, `node`, `go`, `python`, `ruby`, `java`) named to match marker-based auto-detection, so opening a recognized folder applies the right layout out of the box; the starter config leaves `default_template` unset so smart selection stays on
 - `schemas/smux-template.schema.json` and `#:schema` directives in template files, so schema-aware editors validate templates as you type
 - `smux doctor` reports template count, broken templates, and template schema drift; `smux doctor --fix` refreshes template `#:schema` directives alongside config and project files
 

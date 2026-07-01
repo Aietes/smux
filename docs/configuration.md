@@ -51,7 +51,7 @@ Example `config.toml`:
 ```toml
 #:schema https://raw.githubusercontent.com/Aietes/smux/vX.Y.Z/schemas/smux-config.schema.json
 [settings]
-default_template = "default"
+# default_template = "default"   # force one template everywhere; leaving it unset keeps smart auto-detection on
 icons = "auto"
 
 [settings.icon_colors]

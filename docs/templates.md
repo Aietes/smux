@@ -39,8 +39,11 @@ and which template — or layout — it uses. See
    ```
 
 That's the whole loop: add a file, list, apply. There is no command to scaffold
-one — templates are authored by hand, though `smux init` drops in a couple of
-starters (`default`, `rust`) you can copy from.
+one — templates are authored by hand. `smux init` gives you a head start,
+dropping in a `default` template plus one for each auto-detected project type
+(`rust`, `node`, `go`, `python`, `ruby`, `java`), so opening a recognized folder
+applies the right layout immediately. Edit them to taste or delete the ones you
+don't use.
 
 ## Anatomy of a template
 

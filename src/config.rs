@@ -10,7 +10,7 @@ use crate::util;
 const MAX_FOLDER_SEARCH_DEPTH: usize = 16;
 
 const STARTER_CONFIG_BODY: &str = r#"[settings]
-default_template = "default"
+# default_template = "default"   # force one template everywhere; leaving it unset keeps smart auto-detection on
 icons = "auto"
 
 [settings.icon_colors]
@@ -56,14 +56,82 @@ windows = [{ name = "main" }]
 const STARTER_TEMPLATE_RUST_BODY: &str = r#"startup_window = "editor"
 startup_pane = 0
 windows = [
-  { name = "editor", pre_command = "source .venv/bin/activate", command = "nvim" },
-  { name = "run", synchronize = true, layout = "main-horizontal", panes = [
-      { command = "source .venv/bin/activate" },
-      { layout = "bottom", command = "cargo run" },
+  { name = "editor", command = "nvim" },
+  { name = "cargo", layout = "main-horizontal", panes = [
+      { command = "cargo run" },
       { layout = "right 40%", command = "cargo test" },
     ] },
 ]
 "#;
+
+const STARTER_TEMPLATE_NODE_BODY: &str = r#"startup_window = "editor"
+startup_pane = 0
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "dev", layout = "main-horizontal", panes = [
+      { command = "npm run dev" },
+      { layout = "right 40%", command = "npm test" },
+    ] },
+]
+"#;
+
+const STARTER_TEMPLATE_GO_BODY: &str = r#"startup_window = "editor"
+startup_pane = 0
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "go", layout = "main-horizontal", panes = [
+      { command = "go run ." },
+      { layout = "right 40%", command = "go test ./..." },
+    ] },
+]
+"#;
+
+const STARTER_TEMPLATE_PYTHON_BODY: &str = r#"startup_window = "editor"
+startup_pane = 0
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "python", layout = "main-horizontal", panes = [
+      { command = "python" },
+      { layout = "right 40%", command = "pytest" },
+    ] },
+]
+"#;
+
+const STARTER_TEMPLATE_RUBY_BODY: &str = r#"startup_window = "editor"
+startup_pane = 0
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "ruby", layout = "main-horizontal", panes = [
+      { command = "bundle exec irb" },
+      { layout = "right 40%", command = "bundle exec rspec" },
+    ] },
+]
+"#;
+
+const STARTER_TEMPLATE_JAVA_BODY: &str = r#"startup_window = "editor"
+startup_pane = 0
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "build", layout = "main-horizontal", panes = [
+      { command = "./gradlew run" },
+      { layout = "right 40%", command = "./gradlew test" },
+    ] },
+]
+"#;
+
+/// Templates written by `smux init`. The first (`default`) is a plain fallback;
+/// the rest are named to match smux's marker-based auto-detection (`rust` for
+/// `Cargo.toml`, `node` for `package.json`, …) so opening a recognized folder
+/// applies the right layout with no configuration.
+const STARTER_TEMPLATES: &[(&str, &str)] = &[
+    ("default", STARTER_TEMPLATE_DEFAULT_BODY),
+    ("rust", STARTER_TEMPLATE_RUST_BODY),
+    ("node", STARTER_TEMPLATE_NODE_BODY),
+    ("go", STARTER_TEMPLATE_GO_BODY),
+    ("python", STARTER_TEMPLATE_PYTHON_BODY),
+    ("ruby", STARTER_TEMPLATE_RUBY_BODY),
+    ("java", STARTER_TEMPLATE_JAVA_BODY),
+];
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -561,10 +629,7 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
         )
     })?;
 
-    for (name, body) in [
-        ("default", STARTER_TEMPLATE_DEFAULT_BODY),
-        ("rust", STARTER_TEMPLATE_RUST_BODY),
-    ] {
+    for &(name, body) in STARTER_TEMPLATES {
         let template_path = template_dir.join(format!("{name}.toml"));
         fs::write(&template_path, starter_template(body)).with_context(|| {
             format!(
@@ -1001,9 +1066,9 @@ fn ensure_project_file_is_in_project_dir(project_dir: &Path, path: &Path) -> Res
 mod tests {
     use super::{
         Config, IconColors, IconMode, PickerBindings, STARTER_TEMPLATE_DEFAULT_BODY,
-        STARTER_TEMPLATE_RUST_BODY, Template, default_projects_dir, load, load_optional,
-        load_workspace, materialize_project_template, resolve_project, schema_url, starter_config,
-        starter_project, starter_template, validate_config, validate_template,
+        STARTER_TEMPLATE_RUST_BODY, STARTER_TEMPLATES, Template, default_projects_dir, load,
+        load_optional, load_workspace, materialize_project_template, resolve_project, schema_url,
+        starter_config, starter_project, starter_template, validate_config, validate_template,
     };
     use anyhow::Result;
     use std::fs;
@@ -1020,7 +1085,8 @@ mod tests {
         let config: Config = toml::from_str(&strip_schema_directive(&starter))?;
         // Templates now live in their own files, so the starter config carries none.
         assert!(config.templates.is_empty());
-        assert_eq!(config.settings.default_template.as_deref(), Some("default"));
+        // default_template is commented out in the starter so smart selection stays on
+        assert_eq!(config.settings.default_template, None);
         assert_eq!(config.settings.icons, IconMode::Auto);
         assert_eq!(config.settings.icon_colors, IconColors::default());
         assert_eq!(config.settings.picker.bindings, PickerBindings::default());
@@ -1042,16 +1108,20 @@ mod tests {
     }
 
     #[test]
-    fn parses_starter_templates() -> Result<()> {
-        for (name, body, windows) in [
-            ("default", STARTER_TEMPLATE_DEFAULT_BODY, 1),
-            ("rust", STARTER_TEMPLATE_RUST_BODY, 2),
-        ] {
+    fn starter_templates_are_valid() -> Result<()> {
+        for &(name, body) in STARTER_TEMPLATES {
             let starter = starter_template(body);
             assert!(starter.starts_with("#:schema "));
             let template: Template = toml::from_str(&strip_schema_directive(&starter))?;
             validate_template(name, &template)?;
-            assert_eq!(template.windows.len(), windows);
+            assert!(!template.windows.is_empty());
+        }
+        // marker-detected types ship so smart auto-detection works out of the box
+        for expected in ["rust", "node", "go", "python", "ruby", "java"] {
+            assert!(
+                STARTER_TEMPLATES.iter().any(|(name, _)| *name == expected),
+                "missing starter template: {expected}"
+            );
         }
         Ok(())
     }
@@ -1508,6 +1578,10 @@ windows = [{ name = "main", command = "nvim" }]
                 .join("example.toml")
                 .exists()
         );
+        let template_dir = tempdir.path().join("templates");
+        assert!(template_dir.is_dir());
+        assert!(template_dir.join("rust.toml").exists());
+        assert!(template_dir.join("node.toml").exists());
         Ok(())
     }
 
