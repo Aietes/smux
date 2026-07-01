@@ -149,7 +149,7 @@ smux save-project           # name defaults to the current session
 
 The name is optional and defaults to the source session's name, so a bare `smux save-project` (or the `Alt-S` action in the picker) captures the session you are in. Re-running it after adding windows or panes updates the existing project: the picker action overwrites in place, and on the command line pass `--force` to overwrite.
 
-Saved projects are plain TOML in `~/.config/smux/projects/`, so you can edit them by hand. For example, a pane command can launch Neovim and restore the last `persistence.nvim` session:
+Saved projects are plain TOML in `~/.config/smux/projects/`, so you can edit them by hand — press `Ctrl-E` on a project in the picker to open its file in `$EDITOR` right after saving it. For example, a pane command can launch Neovim and restore the last `persistence.nvim` session:
 
 ```toml
 windows = [
@@ -210,7 +210,7 @@ In the picker:
 - `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file and keeps the picker open
 - `Alt-S` saves (or updates) the selected tmux session as a project and keeps the picker open
 - `Ctrl-R` renames the selected tmux session and keeps the picker open
-- `Ctrl-E` opens the selected project file in `$EDITOR` and returns to the picker
+- `Ctrl-E` opens the selected project (or broken project) file in `$EDITOR` and returns to the picker
 - `?` shows or hides the keyboard-shortcut hint bar
 
 If you use a Nerd Font, `smux` can show colored icons for sessions, projects, folders, and templates.
