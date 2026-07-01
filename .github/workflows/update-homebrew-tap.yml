@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   update-tap:
     name: Update Aietes/homebrew-smux
