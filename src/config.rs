@@ -579,7 +579,8 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
 
     validate_config(&config)?;
 
-    let (projects, project_files, invalid_projects) = load_projects(&project_dir, &config)?;
+    let (projects, project_files, invalid_projects) =
+        load_projects(&project_dir, &template_dir, &config)?;
 
     Ok(LoadedConfig {
         path,
@@ -733,6 +734,22 @@ fn validate_template(name: &str, template: &Template) -> Result<()> {
         bail!("{name} must contain at least one window");
     }
 
+    for pattern in &template.detect {
+        if pattern.trim().is_empty() {
+            bail!("{name} has an empty `match` pattern");
+        }
+        if pattern.contains('/') || pattern.contains('\\') {
+            bail!("{name} `match` pattern \"{pattern}\" must be a bare filename, not a path");
+        }
+    }
+    if template
+        .match_dependencies
+        .iter()
+        .any(|dep| dep.trim().is_empty())
+    {
+        bail!("{name} has an empty `match_dependencies` entry");
+    }
+
     if let Some(startup_window) = &template.startup_window
         && !template
             .windows
@@ -825,7 +842,11 @@ fn validate_window(owner_name: &str, window: &Window) -> Result<()> {
     Ok(())
 }
 
-fn load_projects(project_dir: &Path, config: &Config) -> Result<LoadedProjects> {
+fn load_projects(
+    project_dir: &Path,
+    template_dir: &Path,
+    config: &Config,
+) -> Result<LoadedProjects> {
     if !project_dir.exists() {
         return Ok((HashMap::new(), HashMap::new(), Vec::new()));
     }
@@ -852,7 +873,7 @@ fn load_projects(project_dir: &Path, config: &Config) -> Result<LoadedProjects> 
             .context("project file name was not valid utf-8")?
             .to_owned();
 
-        match load_project_file(&path, &name, config) {
+        match load_project_file(&path, &name, config, template_dir) {
             Ok(project) => {
                 project_files.insert(name.clone(), path.clone());
                 projects.insert(name, project);
@@ -868,12 +889,17 @@ fn load_projects(project_dir: &Path, config: &Config) -> Result<LoadedProjects> 
     Ok((projects, project_files, invalid_projects))
 }
 
-fn load_project_file(path: &Path, name: &str, config: &Config) -> Result<Project> {
+fn load_project_file(
+    path: &Path,
+    name: &str,
+    config: &Config,
+    template_dir: &Path,
+) -> Result<Project> {
     let text = fs::read_to_string(path)
         .with_context(|| format!("failed to read project {}", path.display()))?;
     let project: Project = toml::from_str(&text)
         .with_context(|| format!("failed to parse project {}", path.display()))?;
-    validate_project(name, &project, config)?;
+    validate_project(name, &project, config, template_dir)?;
     Ok(project)
 }
 
@@ -908,11 +934,15 @@ fn load_templates(template_dir: &Path) -> Result<LoadedTemplates> {
             continue;
         }
 
-        let name = path
+        let Some(name) = path
             .file_stem()
             .and_then(|stem| stem.to_str())
-            .context("template file name was not valid utf-8")?
-            .to_owned();
+            .map(str::to_owned)
+        else {
+            // A non-UTF-8 filename can't name a template anyone references; skip
+            // it rather than failing every command.
+            continue;
+        };
 
         match load_template_file(&path, &name) {
             Ok(template) => {
@@ -939,13 +969,23 @@ fn load_template_file(path: &Path, name: &str) -> Result<Template> {
     Ok(template)
 }
 
-fn validate_project(name: &str, project: &Project, config: &Config) -> Result<()> {
+fn validate_project(
+    name: &str,
+    project: &Project,
+    config: &Config,
+    template_dir: &Path,
+) -> Result<()> {
     util::expand_and_absolutize_path(Path::new(&project.path))
         .with_context(|| format!("project \"{name}\" has an invalid path {}", project.path))?;
 
     if let Some(template_name) = &project.template
         && !config.templates.contains_key(template_name)
     {
+        if template_dir.join(format!("{template_name}.toml")).exists() {
+            bail!(
+                "template \"{template_name}\" referenced by project \"{name}\" failed to load; run `smux doctor`"
+            );
+        }
         bail!("template \"{template_name}\" referenced by project \"{name}\" was not found");
     }
 
@@ -1153,6 +1193,38 @@ mod tests {
     }
 
     #[test]
+    fn rejects_empty_and_path_match_patterns() {
+        let base = "startup_window = \"main\"\nwindows = [{ name = \"main\" }]\n";
+
+        let empty: Template =
+            toml::from_str(&format!("match = [\"\"]\n{base}")).expect("template should parse");
+        assert!(
+            validate_template("t", &empty)
+                .unwrap_err()
+                .to_string()
+                .contains("empty `match`")
+        );
+
+        let path: Template = toml::from_str(&format!("match = [\"src/main.rs\"]\n{base}"))
+            .expect("template should parse");
+        assert!(
+            validate_template("t", &path)
+                .unwrap_err()
+                .to_string()
+                .contains("bare filename")
+        );
+
+        let empty_dep: Template = toml::from_str(&format!("match_dependencies = [\"\"]\n{base}"))
+            .expect("template should parse");
+        assert!(
+            validate_template("t", &empty_dep)
+                .unwrap_err()
+                .to_string()
+                .contains("empty `match_dependencies`")
+        );
+    }
+
+    #[test]
     fn schema_urls_are_versioned() {
         let version = env!("CARGO_PKG_VERSION");
         assert!(schema_url("smux-config.schema.json").contains(&format!("/v{version}/")));
@@ -1354,9 +1426,34 @@ windows = [
         let project: super::Project =
             toml::from_str("path = \"/tmp/demo\"\ntemplate = \"missing\"\n")
                 .expect("project should parse");
-        let error =
-            super::validate_project("demo", &project, &config).expect_err("validation should fail");
-        assert!(error.to_string().contains("referenced by project"));
+        let template_dir = Path::new("/nonexistent/templates");
+        let error = super::validate_project("demo", &project, &config, template_dir)
+            .expect_err("validation should fail");
+        let message = error.to_string();
+        assert!(message.contains("referenced by project"));
+        assert!(message.contains("was not found"));
+    }
+
+    #[test]
+    fn broken_referenced_template_reports_load_failure_not_missing() -> Result<()> {
+        let template_dir = tempfile::tempdir()?;
+        // The template file exists on disk but wasn't loaded (e.g. it failed to
+        // parse), so it's absent from config.templates.
+        std::fs::write(
+            template_dir.path().join("broken.toml"),
+            "not = valid = toml",
+        )?;
+
+        let config = Config::default();
+        let project: super::Project =
+            toml::from_str("path = \"/tmp/demo\"\ntemplate = \"broken\"\n")
+                .expect("project should parse");
+        let error = super::validate_project("demo", &project, &config, template_dir.path())
+            .expect_err("validation should fail");
+        let message = error.to_string();
+        assert!(message.contains("failed to load"));
+        assert!(message.contains("smux doctor"));
+        Ok(())
     }
 
     #[test]

@@ -121,16 +121,22 @@ fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<S
     // Read package.json once (if present) so dependency matching scans it a
     // single time regardless of how many templates are configured.
     let package_json = std::fs::read_to_string(path.join("package.json")).ok();
-    let mut best: Option<(i64, usize, &str)> = None; // (priority, specificity, name)
+    // Ranking key: (priority, specificity, name). Specificity is (kind, longest
+    // matched marker), where a matched dependency (kind 1) outranks a matched file
+    // marker (kind 0): declaring a dependency is a stronger signal than a marker
+    // file merely being present, so `react` beats the generic `node` even at the
+    // same priority. Comparing a file-pattern length against a dependency-name
+    // length directly would be meaningless, so kind is compared first.
+    let mut best: Option<(i64, (u8, usize), &str)> = None;
 
     for (name, template) in &config.templates {
-        let file_spec = template
+        let file_len = template
             .detect
             .iter()
             .filter(|pattern| marker_present(path, pattern))
             .map(|pattern| pattern.len())
             .max();
-        let dep_spec = package_json.as_deref().and_then(|pkg| {
+        let dep_len = package_json.as_deref().and_then(|pkg| {
             template
                 .match_dependencies
                 .iter()
@@ -138,18 +144,20 @@ fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<S
                 .map(|dependency| dependency.len())
                 .max()
         });
-        let Some(specificity) = file_spec.into_iter().chain(dep_spec).max() else {
-            continue;
+        let specificity = match (dep_len, file_len) {
+            (Some(dep), _) => (1u8, dep),
+            (None, Some(file)) => (0u8, file),
+            (None, None) => continue,
         };
 
-        // Highest priority wins; then the most specific (longest) matched
-        // pattern; then alphabetical name, so the result is deterministic.
+        // Highest priority wins; then the strongest/most specific match; then the
+        // alphabetically first name, so the result is deterministic.
         let key = (template.priority, specificity);
         let better = match best {
             None => true,
-            Some((best_priority, best_spec, best_name)) => {
-                key > (best_priority, best_spec)
-                    || (key == (best_priority, best_spec) && name.as_str() < best_name)
+            Some((best_priority, best_specificity, best_name)) => {
+                key > (best_priority, best_specificity)
+                    || (key == (best_priority, best_specificity) && name.as_str() < best_name)
             }
         };
         if better {
@@ -160,10 +168,12 @@ fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<S
     best.map(|(_, _, name)| name.to_owned())
 }
 
-/// Whether `package_json` declares `dependency`. A quoted-key scan that avoids
-/// pulling in a JSON parser: `"react"` matches without matching `"react-dom"`.
+/// Whether `package_json` declares `dependency`. A quoted-key scan (`"react":`)
+/// that avoids pulling in a JSON parser: it matches the dependency as an object
+/// key, not a substring of another key (`"react-dom"`) or a plain string value
+/// (a package whose `"name"` happens to be `"react"`).
 fn depends_on(package_json: &str, dependency: &str) -> bool {
-    package_json.contains(&format!("\"{dependency}\""))
+    package_json.contains(&format!("\"{dependency}\":"))
 }
 
 /// Whether `pattern` — an exact filename or a simple `*`/`?` glob — matches an
@@ -427,11 +437,76 @@ mod tests {
         let package_json = r#"{ "dependencies": { "react": "^18", "react-dom": "^18" } }"#;
         assert!(super::depends_on(package_json, "react"));
         assert!(super::depends_on(package_json, "react-dom"));
+        assert!(super::depends_on(
+            r#"{ "dependencies": { "@sveltejs/kit": "^2" } }"#,
+            "@sveltejs/kit"
+        ));
         // A substring of another dependency name must not match.
         assert!(!super::depends_on(
             r#"{ "dependencies": { "react-dom": "^18" } }"#,
             "react"
         ));
+        // A dependency name appearing only as a value or the package's own name
+        // must not match — it has to be an object key.
+        assert!(!super::depends_on(
+            r#"{ "name": "react", "scripts": { "build": "react-scripts build" } }"#,
+            "react"
+        ));
+    }
+
+    #[test]
+    fn dependency_match_outranks_file_match_at_equal_priority() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(
+            tempdir.path().join("package.json"),
+            r#"{ "dependencies": { "react": "^18" } }"#,
+        )?;
+
+        // node and react share priority 0; the dependency match must still beat
+        // the generic `package.json` file match.
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([
+                ("node".to_owned(), template_with(&["package.json"], &[], 0)),
+                ("react".to_owned(), template_with(&[], &["react"], 0)),
+            ]),
+        };
+        assert_eq!(
+            super::detect_template_name(&config, tempdir.path()).as_deref(),
+            Some("react")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn dependency_match_requires_a_package_json() -> Result<()> {
+        let tempdir = tempfile::tempdir()?; // no package.json
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([("react".to_owned(), template_with(&[], &["react"], 10))]),
+        };
+        assert!(super::detect_template_name(&config, tempdir.path()).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn detection_ties_break_alphabetically() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(tempdir.path().join("Cargo.toml"), "")?;
+
+        // Same priority, same matched marker -> alphabetically first name wins.
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([
+                ("zzz".to_owned(), template_with(&["Cargo.toml"], &[], 0)),
+                ("aaa".to_owned(), template_with(&["Cargo.toml"], &[], 0)),
+            ]),
+        };
+        assert_eq!(
+            super::detect_template_name(&config, tempdir.path()).as_deref(),
+            Some("aaa")
+        );
+        Ok(())
     }
 
     #[test]
