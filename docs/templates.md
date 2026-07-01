@@ -142,9 +142,22 @@ Next.js repo depends on both `next` and `react`. smux resolves it in order:
 
 1. highest **`priority`** (an integer on the template, default `0`) — this is how
    a meta-framework beats its base (`next` over `react`, `nuxt` over `vue`);
-2. then the **most specific** (longest) matched pattern — so `nuxt.config.*`
+2. then a **dependency** match (`match_dependencies`) beats a **file** match, so a
+   `react` template wins over the generic `node` template even at the same
+   priority;
+3. then the **most specific** (longest) matched pattern — so `nuxt.config.*`
    beats the generic `package.json`;
-3. then the alphabetically first template name, so the result is deterministic.
+4. then the alphabetically first template name, so the result is deterministic.
+
+To see how this plays out for a real folder without launching a session, run
+`smux detect <dir>` — it lists every template that matches, ranked, with the
+markers that matched, and marks the one smux would apply:
+
+```bash
+$ smux detect ~/code/my-nuxt-app
+→ nuxt  priority 20  nuxt.config.*, dependency "nuxt"
+  node  priority 0   package.json
+```
 
 ### What `smux init` ships
 

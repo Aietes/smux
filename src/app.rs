@@ -109,8 +109,42 @@ pub fn run(cli: Cli) -> Result<()> {
             names.sort();
             for name in names {
                 let project = &loaded.projects[&name];
-                let resolved = util::normalize_path(Path::new(&project.path))?;
+                // Use the graceful resolver: a project whose directory doesn't
+                // exist yet is still listed (its absolute path shown) rather than
+                // aborting the whole command — consistent with how `doctor` and
+                // project validation treat missing paths.
+                let resolved = util::expand_and_absolutize_path(Path::new(&project.path))?;
                 println!("{name}\t{}", resolved.display());
+            }
+            Ok(())
+        }
+        Commands::Detect { path, config } => {
+            let loaded = config::load_workspace(config.as_deref())?;
+            let matches = session::detect_matches(&loaded.config, &path);
+            if matches.is_empty() {
+                println!("no template auto-detects {}", path.display());
+                println!(
+                    "smux would use the built-in fallback (or prompt if two or more templates are defined)"
+                );
+                return Ok(());
+            }
+
+            let width = matches.iter().map(|m| m.name.len()).max().unwrap_or(0);
+            for (index, matched) in matches.iter().enumerate() {
+                let mut reasons: Vec<String> = Vec::new();
+                if !matched.matched_files.is_empty() {
+                    reasons.push(matched.matched_files.join(", "));
+                }
+                for dependency in &matched.matched_dependencies {
+                    reasons.push(format!("dependency \"{dependency}\""));
+                }
+                let arrow = if index == 0 { "→" } else { " " };
+                println!(
+                    "{arrow} {:<width$}  priority {}  {}",
+                    matched.name,
+                    matched.priority,
+                    reasons.join(", "),
+                );
             }
             Ok(())
         }

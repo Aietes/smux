@@ -50,6 +50,17 @@ pub enum Commands {
         #[arg(value_hint = ValueHint::FilePath)]
         config: Option<PathBuf>,
     },
+    /// Show which template smux would auto-detect for a directory, and why.
+    #[command(
+        long_about = "Print every template whose `match` files or `match_dependencies` are present in a directory, ranked the way smux auto-selects them: highest `priority` first, then a dependency match over a file match, then the longest matched marker, then the alphabetically first name. The top entry (marked with an arrow) is the template smux would apply. Useful for debugging why a folder opens with an unexpected layout, without launching a session."
+    )]
+    Detect {
+        #[arg(value_hint = ValueHint::DirPath)]
+        path: PathBuf,
+        #[arg(long)]
+        #[arg(value_hint = ValueHint::FilePath)]
+        config: Option<PathBuf>,
+    },
     /// Switch to or attach an existing tmux session.
     Switch { session: String },
     /// Switch to the most recently used tmux session.

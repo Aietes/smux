@@ -113,59 +113,89 @@ fn resolve_template(
     Ok(templates::fallback_template())
 }
 
-/// Detect a template for `path` from the templates' own `match` patterns and
-/// `match_dependencies`. When several match, the highest `priority` wins, then
-/// the most specific (longest) matched marker, then the alphabetically first
-/// template name. Returns `None` when nothing matches.
-fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<String> {
+/// A template whose markers are present in a directory, with the specific
+/// `match` patterns and `match_dependencies` that matched.
+pub struct TemplateMatch {
+    pub name: String,
+    pub priority: i64,
+    pub matched_files: Vec<String>,
+    pub matched_dependencies: Vec<String>,
+}
+
+/// Templates whose `match` files or `match_dependencies` are present in `path`,
+/// ranked best-first the way smux auto-selects: highest `priority` wins, then a
+/// dependency match over a file match, then the most specific (longest) matched
+/// marker, then the alphabetically first name. The first entry, if any, is the
+/// template smux would apply. This is the single source of truth for detection —
+/// [`detect_template_name`] just takes its first result.
+pub fn detect_matches(config: &crate::config::Config, path: &Path) -> Vec<TemplateMatch> {
     // Read package.json once (if present) so dependency matching scans it a
     // single time regardless of how many templates are configured.
     let package_json = std::fs::read_to_string(path.join("package.json")).ok();
-    // Ranking key: (priority, specificity, name). Specificity is (kind, longest
-    // matched marker), where a matched dependency (kind 1) outranks a matched file
-    // marker (kind 0): declaring a dependency is a stronger signal than a marker
-    // file merely being present, so `react` beats the generic `node` even at the
-    // same priority. Comparing a file-pattern length against a dependency-name
-    // length directly would be meaningless, so kind is compared first.
-    let mut best: Option<(i64, (u8, usize), &str)> = None;
+    // Specificity is (kind, longest matched marker), where a matched dependency
+    // (kind 1) outranks a matched file marker (kind 0): declaring a dependency is
+    // a stronger signal than a marker file merely being present, so `react` beats
+    // the generic `node` even at the same priority. Comparing a file-pattern
+    // length against a dependency-name length directly would be meaningless, so
+    // kind is compared first.
+    let mut ranked: Vec<(i64, (u8, usize), TemplateMatch)> = Vec::new();
 
     for (name, template) in &config.templates {
-        let file_len = template
+        let matched_files: Vec<String> = template
             .detect
             .iter()
             .filter(|pattern| marker_present(path, pattern))
-            .map(|pattern| pattern.len())
-            .max();
-        let dep_len = package_json.as_deref().and_then(|pkg| {
-            template
-                .match_dependencies
-                .iter()
-                .filter(|dependency| depends_on(pkg, dependency))
-                .map(|dependency| dependency.len())
-                .max()
-        });
+            .cloned()
+            .collect();
+        let matched_dependencies: Vec<String> = package_json
+            .as_deref()
+            .map(|pkg| {
+                template
+                    .match_dependencies
+                    .iter()
+                    .filter(|dependency| depends_on(pkg, dependency))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let file_len = matched_files.iter().map(String::len).max();
+        let dep_len = matched_dependencies.iter().map(String::len).max();
         let specificity = match (dep_len, file_len) {
             (Some(dep), _) => (1u8, dep),
             (None, Some(file)) => (0u8, file),
             (None, None) => continue,
         };
 
-        // Highest priority wins; then the strongest/most specific match; then the
-        // alphabetically first name, so the result is deterministic.
-        let key = (template.priority, specificity);
-        let better = match best {
-            None => true,
-            Some((best_priority, best_specificity, best_name)) => {
-                key > (best_priority, best_specificity)
-                    || (key == (best_priority, best_specificity) && name.as_str() < best_name)
-            }
-        };
-        if better {
-            best = Some((template.priority, specificity, name.as_str()));
-        }
+        ranked.push((
+            template.priority,
+            specificity,
+            TemplateMatch {
+                name: name.clone(),
+                priority: template.priority,
+                matched_files,
+                matched_dependencies,
+            },
+        ));
     }
 
-    best.map(|(_, _, name)| name.to_owned())
+    // Highest priority first, then most specific, then the alphabetically first
+    // name, so the result is deterministic.
+    ranked.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| b.1.cmp(&a.1))
+            .then_with(|| a.2.name.cmp(&b.2.name))
+    });
+    ranked.into_iter().map(|(_, _, matched)| matched).collect()
+}
+
+/// Detect a template for `path`. Returns the name smux would auto-select, or
+/// `None` when nothing matches.
+fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<String> {
+    detect_matches(config, path)
+        .into_iter()
+        .next()
+        .map(|m| m.name)
 }
 
 /// Whether `package_json` declares `dependency`. A quoted-key scan (`"react":`)
@@ -558,6 +588,51 @@ mod tests {
             super::detect_template_name(&config, tempdir.path()).as_deref(),
             Some("next")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn detect_matches_ranks_candidates_and_reports_markers() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        std::fs::write(tempdir.path().join("nuxt.config.ts"), "")?;
+        std::fs::write(
+            tempdir.path().join("package.json"),
+            r#"{ "dependencies": { "nuxt": "^3", "vue": "^3" } }"#,
+        )?;
+
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([
+                ("node".to_owned(), template_with(&["package.json"], &[], 0)),
+                (
+                    "nuxt".to_owned(),
+                    template_with(&["nuxt.config.*"], &["nuxt"], 20),
+                ),
+            ]),
+        };
+
+        let matches = super::detect_matches(&config, tempdir.path());
+        // Both match; the higher-priority nuxt is first and carries the exact
+        // markers that matched.
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].name, "nuxt");
+        assert_eq!(matches[0].priority, 20);
+        assert_eq!(matches[0].matched_files, vec!["nuxt.config.*".to_owned()]);
+        assert_eq!(matches[0].matched_dependencies, vec!["nuxt".to_owned()]);
+        assert_eq!(matches[1].name, "node");
+        assert_eq!(matches[1].matched_files, vec!["package.json".to_owned()]);
+        assert!(matches[1].matched_dependencies.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn detect_matches_is_empty_when_nothing_matches() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let config = Config {
+            settings: Settings::default(),
+            templates: HashMap::from([("rust".to_owned(), template_with(&["Cargo.toml"], &[], 0))]),
+        };
+        assert!(super::detect_matches(&config, tempdir.path()).is_empty());
         Ok(())
     }
 

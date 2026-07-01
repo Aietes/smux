@@ -294,3 +294,67 @@ fn save_project_stdout_exports_project_toml() {
         .stdout(contains("startup_window = \"editor\""))
         .stdout(contains("windows = ["));
 }
+
+#[test]
+fn list_projects_lists_a_project_whose_path_does_not_exist() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let config_path = tempdir.path().join("config.toml");
+    let project_dir = tempdir.path().join("projects");
+    fs::create_dir(&project_dir).expect("project dir should be created");
+    fs::write(&config_path, "[settings]\n").expect("config fixture should be written");
+    // Points at a directory that does not exist (like the starter example.toml).
+    fs::write(
+        project_dir.join("ghost.toml"),
+        "path = \"/tmp/definitely-not-a-real-smux-dir\"\n",
+    )
+    .expect("project fixture should be written");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["list-projects", "--config"]);
+    command.arg(&config_path);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+
+    // Must succeed and still list the project, not abort on the missing path.
+    command
+        .assert()
+        .success()
+        .stdout(contains("ghost"))
+        .stdout(contains("/tmp/definitely-not-a-real-smux-dir"));
+}
+
+#[test]
+fn detect_reports_the_winning_template_and_its_markers() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let config_path = tempdir.path().join("config.toml");
+    let template_dir = tempdir.path().join("templates");
+    fs::create_dir(&template_dir).expect("template dir should be created");
+    fs::write(&config_path, "[settings]\n").expect("config fixture should be written");
+    fs::write(
+        template_dir.join("rust.toml"),
+        "match = [\"Cargo.toml\"]\nwindows = [{ name = \"main\" }]\n",
+    )
+    .expect("template fixture should be written");
+
+    // A directory carrying the marker the template matches on.
+    let target = tempdir.path().join("proj");
+    fs::create_dir(&target).expect("target dir should be created");
+    fs::write(target.join("Cargo.toml"), "").expect("marker should be written");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["detect"]);
+    command.arg(&target);
+    command.args(["--config"]);
+    command.arg(&config_path);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+
+    command
+        .assert()
+        .success()
+        .stdout(contains("→"))
+        .stdout(contains("rust"))
+        .stdout(contains("Cargo.toml"));
+}
