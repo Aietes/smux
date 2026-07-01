@@ -125,108 +125,10 @@ windows = [
 ]
 "#;
 
-const STARTER_TEMPLATE_REACT_BODY: &str = r#"match_dependencies = ["react"]
-priority = 10
-startup_window = "editor"
-startup_pane = 0
-windows = [
-  { name = "editor", command = "nvim" },
-  { name = "dev", layout = "main-horizontal", panes = [
-      { command = "npm run dev" },
-      { layout = "right 40%", command = "npm test" },
-    ] },
-]
-"#;
-
-const STARTER_TEMPLATE_VUE_BODY: &str = r#"match = ["vue.config.js"]
-match_dependencies = ["vue"]
-priority = 10
-startup_window = "editor"
-startup_pane = 0
-windows = [
-  { name = "editor", command = "nvim" },
-  { name = "dev", layout = "main-horizontal", panes = [
-      { command = "npm run dev" },
-      { layout = "right 40%", command = "npm test" },
-    ] },
-]
-"#;
-
-const STARTER_TEMPLATE_SVELTE_BODY: &str = r#"match = ["svelte.config.js", "svelte.config.ts"]
-match_dependencies = ["svelte", "@sveltejs/kit"]
-priority = 10
-startup_window = "editor"
-startup_pane = 0
-windows = [
-  { name = "editor", command = "nvim" },
-  { name = "dev", layout = "main-horizontal", panes = [
-      { command = "npm run dev" },
-      { layout = "right 40%", command = "npm test" },
-    ] },
-]
-"#;
-
-const STARTER_TEMPLATE_ANGULAR_BODY: &str = r#"match = ["angular.json"]
-match_dependencies = ["@angular/core"]
-priority = 10
-startup_window = "editor"
-startup_pane = 0
-windows = [
-  { name = "editor", command = "nvim" },
-  { name = "dev", layout = "main-horizontal", panes = [
-      { command = "npm start" },
-      { layout = "right 40%", command = "npm test" },
-    ] },
-]
-"#;
-
-const STARTER_TEMPLATE_ASTRO_BODY: &str = r#"match = ["astro.config.mjs", "astro.config.ts", "astro.config.js"]
-match_dependencies = ["astro"]
-priority = 10
-startup_window = "editor"
-startup_pane = 0
-windows = [
-  { name = "editor", command = "nvim" },
-  { name = "dev", layout = "main-horizontal", panes = [
-      { command = "npm run dev" },
-      { layout = "right 40%", command = "npm run build" },
-    ] },
-]
-"#;
-
-// Meta-frameworks: they depend on their base (next → react, nuxt → vue), so they
-// carry a higher priority to win when both match.
-const STARTER_TEMPLATE_NEXT_BODY: &str = r#"match = ["next.config.js", "next.config.ts", "next.config.mjs"]
-match_dependencies = ["next"]
-priority = 20
-startup_window = "editor"
-startup_pane = 0
-windows = [
-  { name = "editor", command = "nvim" },
-  { name = "dev", layout = "main-horizontal", panes = [
-      { command = "npm run dev" },
-      { layout = "right 40%", command = "npm test" },
-    ] },
-]
-"#;
-
-const STARTER_TEMPLATE_NUXT_BODY: &str = r#"match = ["nuxt.config.ts", "nuxt.config.js", "nuxt.config.mjs"]
-match_dependencies = ["nuxt"]
-priority = 20
-startup_window = "editor"
-startup_pane = 0
-windows = [
-  { name = "editor", command = "nvim" },
-  { name = "dev", layout = "main-horizontal", panes = [
-      { command = "npm run dev" },
-      { layout = "right 40%", command = "npm test" },
-    ] },
-]
-"#;
-
-/// Templates written by `smux init`. `default` is a plain fallback; the rest are
-/// named after project types and carry their own `match` / `match_dependencies`
-/// so opening a recognized folder applies the right layout with no configuration.
+/// Templates written by `smux init`: a plain `default` plus one per common
+/// project type, each carrying its own `match` markers. Framework templates
+/// (`react`, `vue`, `nuxt`, …) are intentionally not scaffolded — copy them from
+/// the gallery in `docs/templates.md` when you need them.
 const STARTER_TEMPLATES: &[(&str, &str)] = &[
     ("default", STARTER_TEMPLATE_DEFAULT_BODY),
     ("rust", STARTER_TEMPLATE_RUST_BODY),
@@ -235,13 +137,6 @@ const STARTER_TEMPLATES: &[(&str, &str)] = &[
     ("python", STARTER_TEMPLATE_PYTHON_BODY),
     ("ruby", STARTER_TEMPLATE_RUBY_BODY),
     ("java", STARTER_TEMPLATE_JAVA_BODY),
-    ("react", STARTER_TEMPLATE_REACT_BODY),
-    ("vue", STARTER_TEMPLATE_VUE_BODY),
-    ("svelte", STARTER_TEMPLATE_SVELTE_BODY),
-    ("angular", STARTER_TEMPLATE_ANGULAR_BODY),
-    ("astro", STARTER_TEMPLATE_ASTRO_BODY),
-    ("next", STARTER_TEMPLATE_NEXT_BODY),
-    ("nuxt", STARTER_TEMPLATE_NUXT_BODY),
 ];
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -1248,10 +1143,7 @@ mod tests {
             assert!(!template.windows.is_empty());
         }
         // marker-detected types ship so smart auto-detection works out of the box
-        for expected in [
-            "rust", "node", "go", "python", "ruby", "java", "react", "vue", "svelte", "angular",
-            "astro", "next", "nuxt",
-        ] {
+        for expected in ["rust", "node", "go", "python", "ruby", "java"] {
             assert!(
                 STARTER_TEMPLATES.iter().any(|(name, _)| *name == expected),
                 "missing starter template: {expected}"

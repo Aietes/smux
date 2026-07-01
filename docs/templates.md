@@ -148,19 +148,97 @@ Next.js repo depends on both `next` and `react`. smux resolves it in order:
 
 ### What `smux init` ships
 
-`smux init` writes templates for the common types, each with its markers already
+`smux init` writes one template per common language, each with its marker already
 set, so detection works out of the box:
 
-| Template                                    | matches on                                     |
-| ------------------------------------------- | ---------------------------------------------- |
-| `rust` / `go` / `python` / `ruby` / `java`  | `Cargo.toml` / `go.mod` / `pyproject.toml` … |
-| `node`                                      | `package.json`                                 |
-| `nuxt` / `next`                             | `nuxt.config.*` / `next.config.*` (+ dep, priority 20) |
-| `svelte` / `angular` / `astro`              | `svelte.config.*` / `angular.json` / `astro.config.*` |
-| `react` / `vue`                             | `react` / `vue` package.json dependency        |
+| Template | matches on                           |
+| -------- | ------------------------------------ |
+| `rust`   | `Cargo.toml`                         |
+| `node`   | `package.json`                       |
+| `go`     | `go.mod`                             |
+| `python` | `pyproject.toml`, `requirements.txt` |
+| `ruby`   | `Gemfile`                            |
+| `java`   | `pom.xml`, `build.gradle`            |
 
-The matcher is file- and dependency-based; it reads a folder's `package.json`
-once and doesn't do any deeper content analysis.
+JavaScript framework templates are **not** scaffolded — the base `node` template
+already runs `npm run dev`/`npm test`, which works for most of them. When you
+want a framework-specific layout, copy one from the gallery below; it will
+auto-detect as soon as the file exists. The matcher is file- and
+dependency-based, reading a folder's `package.json` once with no deeper analysis.
+
+### Framework templates to copy
+
+Drop any of these into `~/.config/smux/templates/<name>.toml` and edit to taste.
+The meta-frameworks (`next`, `nuxt`) use `priority = 20` so they win over their
+base (`react`, `vue`) when both match.
+
+```toml
+# templates/react.toml
+match_dependencies = ["react"]
+priority = 10
+startup_window = "editor"
+windows = [
+  { name = "editor", command = "nvim" },
+  { name = "dev", layout = "main-horizontal", panes = [
+      { command = "npm run dev" },
+      { layout = "right 40%", command = "npm test" },
+    ] },
+]
+```
+
+```toml
+# templates/vue.toml
+match = ["vue.config.js"]
+match_dependencies = ["vue"]
+priority = 10
+startup_window = "editor"
+windows = [{ name = "editor", command = "nvim" }, { name = "dev", command = "npm run dev" }]
+```
+
+```toml
+# templates/svelte.toml
+match = ["svelte.config.js", "svelte.config.ts"]
+match_dependencies = ["svelte", "@sveltejs/kit"]
+priority = 10
+startup_window = "editor"
+windows = [{ name = "editor", command = "nvim" }, { name = "dev", command = "npm run dev" }]
+```
+
+```toml
+# templates/angular.toml
+match = ["angular.json"]
+match_dependencies = ["@angular/core"]
+priority = 10
+startup_window = "editor"
+windows = [{ name = "editor", command = "nvim" }, { name = "dev", command = "npm start" }]
+```
+
+```toml
+# templates/astro.toml
+match = ["astro.config.mjs", "astro.config.ts"]
+match_dependencies = ["astro"]
+priority = 10
+startup_window = "editor"
+windows = [{ name = "editor", command = "nvim" }, { name = "dev", command = "npm run dev" }]
+```
+
+```toml
+# templates/next.toml
+match = ["next.config.js", "next.config.ts", "next.config.mjs"]
+match_dependencies = ["next"]
+priority = 20
+startup_window = "editor"
+windows = [{ name = "editor", command = "nvim" }, { name = "dev", command = "npm run dev" }]
+```
+
+```toml
+# templates/nuxt.toml
+match = ["nuxt.config.ts", "nuxt.config.js", "nuxt.config.mjs"]
+match_dependencies = ["nuxt"]
+priority = 20
+startup_window = "editor"
+windows = [{ name = "editor", command = "nvim" }, { name = "dev", command = "npm run dev" }]
+```
 
 ### Ask only when it helps
 
