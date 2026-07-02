@@ -6,6 +6,10 @@ The format is based on Keep a Changelog and uses semantic-versioned release head
 
 ## [Unreleased]
 
+### Changed
+
+- the picker now jumps the cursor back to the top (best) match whenever you change the search query, instead of leaving it wherever you had scrolled — so refining a search always lands on the most relevant result
+
 ## [0.3.1] - 2026-07-01
 
 ### Added
