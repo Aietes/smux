@@ -104,6 +104,6 @@ Current status:
 
 - the project is packaged in nixpkgs as `smux`
 - the initial nixpkgs PR was merged as [NixOS/nixpkgs#505348](https://github.com/NixOS/nixpkgs/pull/505348)
-- the merged package version is `0.3.1`
+- check your selected nixpkgs channel/registry for the current packaged version
 
 The repository flake remains useful for local development, local installation, and users whose selected nixpkgs registry or channel has not caught up to the merged package yet.
