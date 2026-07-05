@@ -9,7 +9,7 @@ Current distribution channels:
 - GitHub Releases
 - crates.io as `smux-cli`
 - Homebrew tap: `Aietes/homebrew-smux`
-- nixpkgs (PR opened, pending review/merge)
+- nixpkgs as `smux`
 
 ## Current Status
 
@@ -19,11 +19,11 @@ What is already live:
 - generated man pages and zsh completions are included in release artifacts
 - crates.io publication is live for `cargo install smux-cli`
 - Homebrew installation is live through `brew install Aietes/homebrew-smux/smux`
-- local Nix installation works with `nix profile install .#smux`
+- nixpkgs installation is live through `nix profile install nixpkgs#smux`
+- local Nix installation still works with `nix profile install .#smux`
 
 What is still pending:
 
-- nixpkgs package merge
 - possible later submission to Homebrew core if the project becomes a good fit
 
 ## Install Commands
@@ -44,6 +44,18 @@ Nix:
 
 ```bash
 nix profile install nixpkgs#smux
+```
+
+Nix, from this repository checkout:
+
+```bash
+nix profile install .#smux
+```
+
+Nix, from the project flake:
+
+```bash
+nix profile install github:Aietes/smux
 ```
 
 ## Automation
@@ -90,8 +102,8 @@ Homebrew core is not the primary path right now. It may make sense later if proj
 
 Current status:
 
-- the project already builds cleanly in nixpkgs package form
-- a nixpkgs PR has been created ([NixOS/nixpkgs#505348](https://github.com/NixOS/nixpkgs/pull/505348))
-- the remaining work is review and merge on the nixpkgs side
+- the project is packaged in nixpkgs as `smux`
+- the initial nixpkgs PR was merged as [NixOS/nixpkgs#505348](https://github.com/NixOS/nixpkgs/pull/505348)
+- the merged package version is `0.3.1`
 
-The repository flake remains useful for local development and local installation regardless of nixpkgs merge timing.
+The repository flake remains useful for local development, local installation, and users whose selected nixpkgs registry or channel has not caught up to the merged package yet.
