@@ -372,6 +372,11 @@ fn add_common_picker_args(
         header.to_owned(),
         "--bind".to_owned(),
         "tab:down,btab:up".to_owned(),
+        // Jump back to the top (best match) whenever the query changes, so
+        // refining a search always lands on the most relevant result instead of
+        // leaving the cursor wherever it was scrolled to.
+        "--bind".to_owned(),
+        "change:first".to_owned(),
         "--bind".to_owned(),
         bindings.to_owned(),
         "--bind".to_owned(),
@@ -651,6 +656,8 @@ mod tests {
         assert!(recorded[0].args.contains(&"1,2,3".to_owned()));
         assert!(recorded[0].args.contains(&"--expect".to_owned()));
         assert!(recorded[0].args.contains(&"--preview".to_owned()));
+        // Refining a search resets the cursor to the top (best) match.
+        assert!(recorded[0].args.contains(&"change:first".to_owned()));
         assert!(
             recorded[0]
                 .args
