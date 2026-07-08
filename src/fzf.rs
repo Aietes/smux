@@ -12,6 +12,10 @@ use crate::ui::DisplayStyle;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EntryKind {
     Session,
+    /// A tmux window across sessions; `value` is its globally unique window
+    /// id (`@n`). Windows appear only in the window-filter view, never in the
+    /// default list.
+    Window,
     Directory,
     Project,
     InvalidProject,
@@ -42,6 +46,17 @@ impl Entry {
             label: style.session_label(&value),
             value,
             preview: None,
+        }
+    }
+
+    pub fn window(style: DisplayStyle, session: &str, name: &str, window_id: String) -> Self {
+        Self {
+            kind: EntryKind::Window,
+            label: style.window_label(&format!("{session}: {name}")),
+            value: window_id,
+            // The owning session rides in the preview slot so the session
+            // preview command can render the window in context.
+            preview: Some(session.to_owned()),
         }
     }
 
@@ -85,6 +100,7 @@ impl Entry {
     fn encode(&self) -> String {
         let kind = match self.kind {
             EntryKind::Session => "session",
+            EntryKind::Window => "window",
             EntryKind::Directory => "folder",
             EntryKind::Project => "project",
             EntryKind::InvalidProject => "project-broken",
@@ -108,6 +124,7 @@ impl Entry {
 
         let kind = match kind {
             "session" => EntryKind::Session,
+            "window" => EntryKind::Window,
             "folder" => EntryKind::Directory,
             "project" => EntryKind::Project,
             "project-broken" => EntryKind::InvalidProject,
@@ -283,6 +300,15 @@ fn cat_command(file: &TempInputFile) -> String {
     format!("cat {}", file.shell_quoted_path())
 }
 
+/// The default (and reset) picker view: everything except windows, which
+/// would drown the list — they only appear under the window filter.
+fn default_view_command(file: &TempInputFile) -> String {
+    format!(
+        "awk -F '\\t' '$1 != \"window\"' {}",
+        file.shell_quoted_path()
+    )
+}
+
 fn filter_command(file: &TempInputFile, kind: &str) -> String {
     if kind == "project" {
         format!(
@@ -335,6 +361,7 @@ fn render_picker_hints(bindings: &PickerBindings) -> String {
     let filters = join_hints(&[
         hint_segment(&pretty_key(&bindings.reset), "all"),
         hint_segment(&pretty_key(&bindings.sessions), "sess"),
+        hint_segment(&pretty_key(&bindings.windows), "win"),
         hint_segment(&pretty_key(&bindings.folders), "dirs"),
         hint_segment(&pretty_key(&bindings.projects), "proj"),
     ]);
@@ -416,7 +443,7 @@ fn add_preview_args(args: &mut Vec<String>, preview: &PickerPreviewSettings) {
     let folder_preview = shell_quote_str(folder_preview);
     let project_preview = shell_quote_str(project_preview);
     let preview_command = format!(
-        "SMUX_SESSION_PREVIEW={session_preview} SMUX_FOLDER_PREVIEW={folder_preview} SMUX_PROJECT_PREVIEW={project_preview} sh -c 'kind=\"$1\"; value=\"$2\"; extra=\"$3\"; case \"$kind\" in session) SMUX_PREVIEW_KIND=\"$kind\" SMUX_PREVIEW_SESSION=\"$value\" sh -lc \"$SMUX_SESSION_PREVIEW\" ;; folder) SMUX_PREVIEW_PATH=\"$value\" SMUX_PREVIEW_KIND=\"$kind\" sh -lc \"$SMUX_FOLDER_PREVIEW\" ;; project|project-broken) if [ -n \"$extra\" ] && [ -f \"$extra\" ]; then SMUX_PREVIEW_KIND=\"$kind\" SMUX_PREVIEW_FILE=\"$extra\" sh -lc \"$SMUX_PROJECT_PREVIEW\"; else printf \"No preview available\\n\"; fi ;; *) printf \"No preview available\\n\" ;; esac' _ {{1}} {{2}} {{4}}"
+        "SMUX_SESSION_PREVIEW={session_preview} SMUX_FOLDER_PREVIEW={folder_preview} SMUX_PROJECT_PREVIEW={project_preview} sh -c 'kind=\"$1\"; value=\"$2\"; extra=\"$3\"; case \"$kind\" in session) SMUX_PREVIEW_KIND=\"$kind\" SMUX_PREVIEW_SESSION=\"$value\" sh -lc \"$SMUX_SESSION_PREVIEW\" ;; window) SMUX_PREVIEW_KIND=\"$kind\" SMUX_PREVIEW_SESSION=\"$extra\" sh -lc \"$SMUX_SESSION_PREVIEW\" ;; folder) SMUX_PREVIEW_PATH=\"$value\" SMUX_PREVIEW_KIND=\"$kind\" sh -lc \"$SMUX_FOLDER_PREVIEW\" ;; project|project-broken) if [ -n \"$extra\" ] && [ -f \"$extra\" ]; then SMUX_PREVIEW_KIND=\"$kind\" SMUX_PREVIEW_FILE=\"$extra\" sh -lc \"$SMUX_PROJECT_PREVIEW\"; else printf \"No preview available\\n\"; fi ;; *) printf \"No preview available\\n\" ;; esac' _ {{1}} {{2}} {{4}}"
     );
     args.extend([
         "--preview".to_owned(),
@@ -496,15 +523,26 @@ fn select_with_runner(
     hint_state_path: Option<&Path>,
 ) -> Result<Option<Selection>> {
     let mut args = Vec::new();
-    let input = entries
-        .into_iter()
-        .map(|entry| entry.encode())
+    // The temp file backing the reload filters holds every entry; the initial
+    // stdin view holds everything except windows, which are opt-in via the
+    // window filter key.
+    let encoded = entries
+        .iter()
+        .map(Entry::encode)
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    let input_file = TempInputFile::new(&input)?;
-    let all_command = cat_command(&input_file);
+    let input = entries
+        .iter()
+        .filter(|entry| entry.kind != EntryKind::Window)
+        .map(Entry::encode)
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let input_file = TempInputFile::new(&encoded)?;
+    let all_command = default_view_command(&input_file);
     let session_command = filter_command(&input_file, "session");
+    let window_command = filter_command(&input_file, "window");
     let folder_command = filter_command(&input_file, "folder");
     let project_command = filter_command(&input_file, "project");
     add_common_picker_args(
@@ -512,9 +550,10 @@ fn select_with_runner(
         prompt,
         &render_picker_hints(bindings),
         &format!(
-            "{reset}:change-prompt(smux> )+clear-query+reload({all_command}),{sessions}:change-prompt(session> )+clear-query+reload({session_command}),{folders}:change-prompt(folder> )+clear-query+reload({folder_command}),{projects}:change-prompt(project> )+clear-query+reload({project_command})",
+            "{reset}:change-prompt(smux> )+clear-query+reload({all_command}),{sessions}:change-prompt(session> )+clear-query+reload({session_command}),{windows}:change-prompt(window> )+clear-query+reload({window_command}),{folders}:change-prompt(folder> )+clear-query+reload({folder_command}),{projects}:change-prompt(project> )+clear-query+reload({project_command})",
             reset = bindings.reset,
             sessions = bindings.sessions,
+            windows = bindings.windows,
             folders = bindings.folders,
             projects = bindings.projects,
         ),
@@ -718,6 +757,64 @@ mod tests {
         let selection = result.expect("selection should be present");
         assert_eq!(selection.action, SelectAction::Open);
         assert_eq!(selection.entry.kind, EntryKind::Directory);
+    }
+
+    #[test]
+    fn windows_are_hidden_from_the_default_view_but_reachable_via_filter() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: true,
+                code: Some(0),
+            },
+            stdout: b"window\t@3\twindow   demo: editor\tdemo\n".to_vec(),
+            stderr: Vec::new(),
+        }));
+
+        let style = DisplayStyle::from_icon_mode(IconMode::Never);
+        let result = select_with_runner(
+            runner.clone(),
+            vec![
+                Entry::session(style, "demo".to_owned()),
+                Entry::window(style, "demo", "editor", "@3".to_owned()),
+            ],
+            "smux> ",
+            &PickerBindings::default(),
+            &PickerPreviewSettings::default(),
+            true,
+            None,
+        )
+        .expect("selection should succeed");
+
+        let recorded = runner.recorded();
+        // The initial list excludes window rows...
+        let stdin = recorded[0].stdin.as_deref().expect("stdin should be set");
+        assert!(stdin.contains("session\tdemo"));
+        assert!(!stdin.contains("window\t@3"));
+        // ...the window filter key reloads them...
+        assert!(
+            recorded[0].args.iter().any(|arg| arg.contains(
+                "ctrl-w:change-prompt(window> )+clear-query+reload(awk -F '\\t' '$1 == \"window\"'"
+            ))
+        );
+        // ...and reset shows everything except windows.
+        assert!(
+            recorded[0].args.iter().any(|arg| arg.contains(
+                "ctrl-c:change-prompt(smux> )+clear-query+reload(awk -F '\\t' '$1 != \"window\"'"
+            ))
+        );
+        assert!(
+            recorded[0]
+                .args
+                .iter()
+                .any(|arg| arg.contains("^w") && arg.contains(" win"))
+        );
+
+        // A window row decodes with its id and its session in the preview slot.
+        let selection = result.expect("selection should be present");
+        assert_eq!(selection.entry.kind, EntryKind::Window);
+        assert_eq!(selection.entry.value, "@3");
+        assert_eq!(selection.entry.preview.as_deref(), Some("demo"));
     }
 
     #[test]
@@ -967,6 +1064,7 @@ mod tests {
         let bindings = PickerBindings {
             reset: "alt-a".to_owned(),
             sessions: "alt-s".to_owned(),
+            windows: "alt-w".to_owned(),
             folders: "alt-f".to_owned(),
             projects: "alt-p".to_owned(),
             delete_session: "alt-x".to_owned(),

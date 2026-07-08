@@ -32,6 +32,7 @@ project = 81
 [settings.picker.bindings]
 reset = "ctrl-c"
 sessions = "ctrl-s"
+windows = "ctrl-w"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
@@ -63,6 +64,8 @@ directories, templates, and projects.
 .PP
 \fBsettings.picker.bindings\fR customizes the main picker keybinds.
 \fBreset\fR resets to the full list, \fBsessions\fR filters to tmux sessions,
+\fBwindows\fR switches to individual tmux windows across all sessions (hidden
+from the default list; Enter jumps straight to the selected window),
 \fBfolders\fR filters to folders, \fBprojects\fR filters to saved projects,
 \fBdelete_session\fR deletes the selected session or project,
 \fBsave_project\fR saves the selected tmux session as a project,

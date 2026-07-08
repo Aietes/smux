@@ -66,6 +66,7 @@ show_hints = true
 [settings.picker.bindings]
 reset = "ctrl-c"
 sessions = "ctrl-s"
+windows = "ctrl-w"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
@@ -164,6 +165,7 @@ Fields:
 [settings.picker.bindings]
 reset = "ctrl-c"
 sessions = "ctrl-s"
+windows = "ctrl-w"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"
@@ -184,6 +186,10 @@ Fields:
   - type: string
   - default: `ctrl-s`
   - filters the main picker to tmux sessions
+- `windows`
+  - type: string
+  - default: `ctrl-w`
+  - switches the main picker to individual tmux windows across all sessions; Enter jumps straight to the selected window. Windows are hidden from the default list — they appear only in this view. Delete closes the selected non-current window, rename renames it.
 - `folders`
   - type: string
   - default: `ctrl-f`

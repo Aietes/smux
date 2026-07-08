@@ -3,6 +3,7 @@ use std::env;
 use crate::config::{Config, IconColors, IconMode};
 
 const SESSION_ICON: &str = "";
+const WINDOW_ICON: &str = "󰖲";
 const DIRECTORY_ICON: &str = "󰉋";
 const TEMPLATE_ICON: &str = "󰙅";
 const PROJECT_ICON: &str = "󰏖";
@@ -70,6 +71,12 @@ impl DisplayStyle {
         } else {
             format!("current  {value}")
         }
+    }
+
+    /// Windows share the session icon color: in the picker they are the
+    /// finer-grained view of the same things.
+    pub fn window_label(self, value: &str) -> String {
+        self.label(WINDOW_ICON, self.icon_colors.session, "window", value)
     }
 
     pub fn directory_label(self, value: &str) -> String {

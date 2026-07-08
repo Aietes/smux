@@ -345,6 +345,32 @@ fn existing_session_name(session: &str) -> Result<&str> {
     Ok(session)
 }
 
+/// Jump to a specific window (by its globally unique `@n` id): make it the
+/// active window of its session, then switch or attach to that session.
+pub fn switch_to_window(tmux: &Tmux, window_id: &str) -> Result<()> {
+    let session = tmux.window_session(window_id)?;
+    tmux.select_window_by_id(window_id)?;
+    tmux.switch_or_attach(&session)
+}
+
+pub fn kill_window(tmux: &Tmux, window_id: &str) -> Result<()> {
+    tmux.kill_window(window_id)
+}
+
+pub fn rename_window(tmux: &Tmux, window_id: &str, new_name: &str) -> Result<String> {
+    let new_name = new_name.trim();
+    if new_name.is_empty() {
+        anyhow::bail!("window name must not be empty");
+    }
+    // The same rule smux enforces on template windows: `:` and `.` are tmux
+    // target separators and would mis-address the window later.
+    if new_name.contains(':') || new_name.contains('.') {
+        anyhow::bail!("window name must not contain ':' or '.'");
+    }
+    tmux.rename_window(window_id, new_name)?;
+    Ok(new_name.to_owned())
+}
+
 /// `smux kill [<session>]`: kill the named session, or — with no name, inside
 /// tmux — switch the client to the last session first and then kill the one
 /// it was on, so the terminal survives the kill. Returns the killed name.
@@ -420,6 +446,60 @@ mod tests {
         let recorded = runner.recorded();
         assert_eq!(recorded[0].args, ["has-session", "-t", "=my app"]);
         assert_eq!(recorded[1].args, ["kill-session", "-t", "=my app"]);
+    }
+
+    #[test]
+    fn switch_to_window_selects_then_switches_to_its_session() {
+        use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner};
+        use crate::tmux::Tmux;
+        use std::sync::Arc;
+
+        let _guard = crate::util::test_env::lock();
+        unsafe {
+            std::env::set_var("TMUX", "/tmp/tmux-1000/default,42,0");
+        }
+
+        let ok = |stdout: &[u8]| {
+            Ok(CommandOutput {
+                status: CommandStatus {
+                    success: true,
+                    code: Some(0),
+                },
+                stdout: stdout.to_vec(),
+                stderr: Vec::new(),
+            })
+        };
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok(b"demo\n")); // display-message: owning session
+        runner.push_capture(ok(b"")); // select-window
+        runner.push_capture(ok(b"")); // switch-client
+        let tmux = Tmux::with_runner(runner.clone());
+
+        super::switch_to_window(&tmux, "@5").expect("switch should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(
+            recorded[0].args,
+            vec!["display-message", "-p", "-t", "@5", "#{session_name}"]
+        );
+        assert_eq!(recorded[1].args, vec!["select-window", "-t", "@5"]);
+        assert_eq!(recorded[2].args, vec!["switch-client", "-t", "=demo"]);
+
+        unsafe {
+            std::env::remove_var("TMUX");
+        }
+    }
+
+    #[test]
+    fn rename_window_rejects_target_separators() {
+        use crate::process::FakeCommandRunner;
+        use crate::tmux::Tmux;
+        use std::sync::Arc;
+
+        let tmux = Tmux::with_runner(Arc::new(FakeCommandRunner::new()));
+        assert!(super::rename_window(&tmux, "@1", "vim.main").is_err());
+        assert!(super::rename_window(&tmux, "@1", "a:b").is_err());
+        assert!(super::rename_window(&tmux, "@1", "   ").is_err());
     }
 
     #[test]

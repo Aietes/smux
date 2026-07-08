@@ -142,12 +142,13 @@ Type to fuzzy-match, then use a keyboard shortcut to act on the highlighted item
 
 - `Enter` opens it — switch to a session, launch a project, or create/reuse a session for a directory
 - `Ctrl-S` / `Ctrl-P` / `Ctrl-F` limit the list to sessions / projects / folders
+- `Ctrl-W` switches to individual tmux windows across all sessions — fuzzy-search "logs" and jump straight to the right window of the right session
 - `Ctrl-C` resets to the full list
 - `Alt-S` saves (or updates) the selected tmux session as a project
-- `Ctrl-R` renames the selected tmux session
+- `Ctrl-R` renames the selected tmux session or window
 - `Ctrl-E` opens the selected project (or broken project) file in `$EDITOR`
 - `Ctrl-T` opens the selected folder and lets you pick its template by hand, even when one would auto-detect
-- `Ctrl-X` closes the selected non-current session, or deletes the selected project file
+- `Ctrl-X` closes the selected non-current session or window, or deletes the selected project file
 - `?` shows or hides the keyboard-shortcut hint bar
 - `Esc` cancels
 
@@ -293,6 +294,7 @@ show_hints = true
 [settings.picker.bindings]
 reset = "ctrl-c"
 sessions = "ctrl-s"
+windows = "ctrl-w"
 folders = "ctrl-f"
 projects = "ctrl-p"
 delete_session = "ctrl-x"

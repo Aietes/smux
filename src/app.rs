@@ -295,6 +295,7 @@ fn run_select(
             .map(|config| config.settings.picker.preview.clone())
             .unwrap_or_default();
         let current_session = tmux.current_session().ok().flatten();
+        let current_window = tmux.current_window_id().ok().flatten();
         let entries = select_entries(
             tmux,
             loaded.as_ref(),
@@ -326,6 +327,27 @@ fn run_select(
             (fzf::SelectAction::Rename, fzf::EntryKind::Session) => {
                 if let Some(new_name) = rename_session_from_picker(tmux, &selection.entry.value)? {
                     eprintln!("renamed session to {new_name}");
+                }
+            }
+            (fzf::SelectAction::Open, fzf::EntryKind::Window) => {
+                return session::switch_to_window(tmux, &selection.entry.value);
+            }
+            (fzf::SelectAction::Delete, fzf::EntryKind::Window) => {
+                if current_window.as_deref() == Some(selection.entry.value.as_str()) {
+                    eprintln!("cannot close the current window from the picker");
+                    continue;
+                }
+                if let Err(error) = session::kill_window(tmux, &selection.entry.value) {
+                    eprintln!("warning: {error:#}");
+                }
+            }
+            (fzf::SelectAction::Rename, fzf::EntryKind::Window) => {
+                if let Some(new_name) = rename_window_from_picker(
+                    tmux,
+                    &selection.entry.label,
+                    &selection.entry.value,
+                )? {
+                    eprintln!("renamed window to {new_name}");
                 }
             }
             (fzf::SelectAction::Delete, fzf::EntryKind::Project)
@@ -426,6 +448,24 @@ fn require_interactive_terminal() -> Result<()> {
         .open("/dev/tty")
         .map(|_| ())
         .map_err(|_| anyhow::anyhow!("smux select requires an interactive terminal"))
+}
+
+fn rename_window_from_picker(
+    tmux: &Tmux,
+    label: &str,
+    window_id: &str,
+) -> Result<Option<String>> {
+    // Prompt with the human-readable "session: window" label, not the @id.
+    let Some(input) = prompt_line(&format!("rename window \"{label}\" to: "))? else {
+        return Ok(None);
+    };
+    match session::rename_window(tmux, window_id, &input) {
+        Ok(new_name) => Ok(Some(new_name)),
+        Err(error) => {
+            eprintln!("warning: {error:#}");
+            Ok(None)
+        }
+    }
 }
 
 fn rename_session_from_picker(tmux: &Tmux, session_name: &str) -> Result<Option<String>> {
@@ -604,6 +644,21 @@ fn select_entries(
             fzf::Entry::session(display_style, session)
         };
         entries.push(entry);
+    }
+
+    // Windows across all sessions; shown only under the window filter key.
+    match tmux.list_all_windows() {
+        Ok(windows) => {
+            for window in windows {
+                entries.push(fzf::Entry::window(
+                    display_style,
+                    &window.session,
+                    &window.name,
+                    window.id,
+                ));
+            }
+        }
+        Err(error) => eprintln!("warning: {error:#}"),
     }
 
     if let Some(loaded) = loaded {

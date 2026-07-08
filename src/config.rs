@@ -264,6 +264,8 @@ pub struct PickerBindings {
     pub folders: String,
     #[serde(default = "default_picker_projects")]
     pub projects: String,
+    #[serde(default = "default_picker_windows")]
+    pub windows: String,
     #[serde(default = "default_picker_delete_session")]
     pub delete_session: String,
     #[serde(default = "default_picker_save_project")]
@@ -322,6 +324,7 @@ impl Default for PickerBindings {
             sessions: default_picker_sessions(),
             folders: default_picker_folders(),
             projects: default_picker_projects(),
+            windows: default_picker_windows(),
             delete_session: default_picker_delete_session(),
             save_project: default_picker_save_project(),
             rename_session: default_picker_rename_session(),
@@ -346,6 +349,10 @@ fn default_picker_folders() -> String {
 
 fn default_picker_projects() -> String {
     "ctrl-p".to_owned()
+}
+
+fn default_picker_windows() -> String {
+    "ctrl-w".to_owned()
 }
 
 fn default_picker_delete_session() -> String {
@@ -732,6 +739,7 @@ fn validate_picker_bindings(bindings: &PickerBindings) -> Result<()> {
         ("sessions", bindings.sessions.trim()),
         ("folders", bindings.folders.trim()),
         ("projects", bindings.projects.trim()),
+        ("windows", bindings.windows.trim()),
         ("delete_session", bindings.delete_session.trim()),
         ("save_project", bindings.save_project.trim()),
         ("rename_session", bindings.rename_session.trim()),

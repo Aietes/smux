@@ -31,6 +31,14 @@ pub struct PaneSnapshot {
     pub layout: Option<PaneLayout>,
 }
 
+/// A window on the running tmux server, across all sessions.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct GlobalWindow {
+    pub id: String,
+    pub session: String,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct SessionListing {
     activity: i64,
@@ -268,6 +276,119 @@ impl Tmux {
     pub fn rename_session(&self, session: &str, new_name: &str) -> Result<()> {
         self.run_tmux(["rename-session", "-t", &exact_target(session), new_name])
             .context("failed to execute tmux rename-session")
+    }
+
+    /// All windows on the server, across sessions. Window ids (`@n`) are
+    /// globally unique, so they make unambiguous targets — no session:window
+    /// string parsing, no collisions between same-named windows.
+    pub fn list_all_windows(&self) -> Result<Vec<GlobalWindow>> {
+        let output = self.runner.run_capture(
+            "tmux",
+            &[
+                "list-windows".to_owned(),
+                "-a".to_owned(),
+                "-F".to_owned(),
+                "#{window_id}\t#{session_name}\t#{window_name}".to_owned(),
+            ],
+        );
+
+        match output {
+            Ok(output) if output.status.success => {
+                let stdout =
+                    String::from_utf8(output.stdout).context("tmux output was not utf-8")?;
+                Ok(stdout
+                    .lines()
+                    .filter_map(|line| {
+                        let mut parts = line.splitn(3, '\t');
+                        Some(GlobalWindow {
+                            id: parts.next()?.to_owned(),
+                            session: parts.next()?.to_owned(),
+                            name: parts.next()?.to_owned(),
+                        })
+                    })
+                    .collect())
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if is_empty_session_state(stderr.as_ref()) {
+                    Ok(Vec::new())
+                } else {
+                    bail!("tmux list-windows failed: {}", stderr.trim())
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                bail!("tmux is not installed or not on PATH")
+            }
+            Err(error) => Err(error).context("failed to execute tmux list-windows"),
+        }
+    }
+
+    /// Session that owns a window id.
+    pub fn window_session(&self, window_id: &str) -> Result<String> {
+        let output = self.run_tmux_capture([
+            "display-message",
+            "-p",
+            "-t",
+            window_id,
+            "#{session_name}",
+        ])?;
+
+        if !output.status.success {
+            bail!("tmux window not found: {window_id}");
+        }
+        let stdout = String::from_utf8(output.stdout).context("tmux output was not utf-8")?;
+        let session = stdout.trim();
+        if session.is_empty() {
+            bail!("tmux window not found: {window_id}");
+        }
+        Ok(session.to_owned())
+    }
+
+    pub fn select_window_by_id(&self, window_id: &str) -> Result<()> {
+        self.run_tmux(["select-window", "-t", window_id])
+            .context("failed to execute tmux select-window")
+    }
+
+    pub fn kill_window(&self, window_id: &str) -> Result<()> {
+        self.run_tmux(["kill-window", "-t", window_id])
+            .context("failed to execute tmux kill-window")
+    }
+
+    pub fn rename_window(&self, window_id: &str, new_name: &str) -> Result<()> {
+        self.run_tmux(["rename-window", "-t", window_id, new_name])
+            .context("failed to execute tmux rename-window")
+    }
+
+    /// Window id of the active window in the current session, inside tmux.
+    pub fn current_window_id(&self) -> Result<Option<String>> {
+        if !util::inside_tmux() {
+            return Ok(None);
+        }
+
+        let output = self
+            .runner
+            .run_capture(
+                "tmux",
+                &[
+                    "display-message".to_owned(),
+                    "-p".to_owned(),
+                    "#{window_id}".to_owned(),
+                ],
+            )
+            .context("failed to execute tmux display-message")?;
+
+        if !output.status.success {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("tmux display-message failed: {}", stderr.trim());
+        }
+
+        let stdout = String::from_utf8(output.stdout).context("tmux output was not utf-8")?;
+        let id = stdout.trim();
+        if id.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(id.to_owned()))
+        }
     }
 
     /// Switch to (or attach) the most recently used session other than the
@@ -1510,6 +1631,66 @@ mod tests {
             stdout,
             stderr: Vec::new(),
         })
+    }
+
+    #[test]
+    fn lists_all_windows_across_sessions() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(b"@1\tdemo\teditor\n@2\tapi\tserver\n".to_vec()));
+        let tmux = Tmux::with_runner(runner.clone());
+
+        let windows = tmux.list_all_windows().expect("listing should succeed");
+        assert_eq!(
+            windows,
+            vec![
+                super::GlobalWindow {
+                    id: "@1".to_owned(),
+                    session: "demo".to_owned(),
+                    name: "editor".to_owned(),
+                },
+                super::GlobalWindow {
+                    id: "@2".to_owned(),
+                    session: "api".to_owned(),
+                    name: "server".to_owned(),
+                },
+            ]
+        );
+        assert_eq!(
+            runner.recorded()[0].args,
+            vec![
+                "list-windows",
+                "-a",
+                "-F",
+                "#{window_id}\t#{session_name}\t#{window_name}",
+            ]
+        );
+    }
+
+    #[test]
+    fn window_operations_target_window_ids() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(b"demo\n".to_vec())); // display-message
+        runner.push_capture(ok_capture(Vec::new())); // select-window
+        runner.push_capture(ok_capture(Vec::new())); // kill-window
+        runner.push_capture(ok_capture(Vec::new())); // rename-window
+        let tmux = Tmux::with_runner(runner.clone());
+
+        assert_eq!(
+            tmux.window_session("@7").expect("lookup should succeed"),
+            "demo"
+        );
+        tmux.select_window_by_id("@7").expect("select should work");
+        tmux.kill_window("@7").expect("kill should work");
+        tmux.rename_window("@7", "logs").expect("rename should work");
+
+        let recorded = runner.recorded();
+        assert_eq!(
+            recorded[0].args,
+            vec!["display-message", "-p", "-t", "@7", "#{session_name}"]
+        );
+        assert_eq!(recorded[1].args, vec!["select-window", "-t", "@7"]);
+        assert_eq!(recorded[2].args, vec!["kill-window", "-t", "@7"]);
+        assert_eq!(recorded[3].args, vec!["rename-window", "-t", "@7", "logs"]);
     }
 
     #[test]
