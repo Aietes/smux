@@ -367,6 +367,32 @@ impl Tmux {
             .context("failed to execute tmux new-session")
     }
 
+    /// Run a session lifecycle hook on the host: `sh -c <command>` in the
+    /// session root with the session env applied, blocking until it finishes.
+    pub fn run_session_hook(
+        &self,
+        command: &str,
+        cwd: &Path,
+        env: &[(String, String)],
+    ) -> Result<()> {
+        let args = vec!["-c".to_owned(), command.to_owned()];
+        let output = self
+            .runner
+            .run_capture_in("sh", &args, cwd, env)
+            .context("failed to execute on_create hook")?;
+        if output.status.success {
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        if stderr.is_empty() {
+            bail!(
+                "on_create hook failed with {}: {command}",
+                util::exit_status_label(output.status.code)
+            );
+        }
+        bail!("on_create hook failed: {stderr}");
+    }
 
     fn new_window_after(
         &self,
@@ -1522,4 +1548,48 @@ mod tests {
         );
     }
 
+    #[test]
+    fn session_hook_runs_shell_in_root_with_env() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(Vec::new()));
+        let tmux = Tmux::with_runner(runner.clone());
+
+        tmux.run_session_hook(
+            "docker compose up -d",
+            std::path::Path::new("/tmp/demo"),
+            &[("AWS_PROFILE".to_owned(), "dev".to_owned())],
+        )
+        .expect("hook should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded[0].program, "sh");
+        assert_eq!(recorded[0].args, vec!["-c", "docker compose up -d"]);
+        assert_eq!(
+            recorded[0].cwd.as_deref(),
+            Some(std::path::Path::new("/tmp/demo"))
+        );
+        assert_eq!(
+            recorded[0].env,
+            vec![("AWS_PROFILE".to_owned(), "dev".to_owned())]
+        );
+    }
+
+    #[test]
+    fn session_hook_failure_reports_stderr() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: false,
+                code: Some(1),
+            },
+            stdout: Vec::new(),
+            stderr: b"compose file not found".to_vec(),
+        }));
+        let tmux = Tmux::with_runner(runner.clone());
+
+        let error = tmux
+            .run_session_hook("docker compose up -d", std::path::Path::new("/tmp/demo"), &[])
+            .expect_err("hook should fail");
+        assert!(error.to_string().contains("compose file not found"));
+    }
 }

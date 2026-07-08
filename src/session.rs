@@ -64,6 +64,13 @@ pub fn connect_path(
         }
     }
 
+    // The hook runs before the session exists so services it starts
+    // (docker-compose, direnv, ...) are ready when pane commands launch —
+    // and a failing hook leaves no half-built session behind.
+    if let Some(on_create) = &plan.on_create {
+        tmux.run_session_hook(on_create, &plan.root, &plan.env)?;
+    }
+
     tmux.create_session_from_plan(&plan)?;
     tmux.switch_or_attach(&session_name)
 }

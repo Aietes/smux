@@ -72,6 +72,7 @@ You are writing to the user's real `~/.config/smux`. Before changing anything:
 | `startup_window`     | string      | Name of the window to focus. Must match a real window `name`. |
 | `startup_pane`       | integer     | 0-based pane index within `startup_window`. |
 | `env`                | table       | Environment variables set on the session, e.g. `env = { AWS_PROFILE = "dev" }`. Applied via `tmux new-session -e` (needs tmux ≥ 3.2). Keys must not contain `=`. |
+| `on_create`          | string      | Shell command run **once, in the session root, before the session is created** (e.g. `"docker compose up -d"`). Runs with `env` applied and blocks; a failure aborts the connect and no session is created. Not re-run when re-attaching to an existing session. |
 | `windows`            | `[window]`  | **Required**, ≥1. |
 
 **Window** (`name` required):
@@ -146,6 +147,7 @@ windows = [
 | `session_name`   | string | tmux session name; defaults to the file/dir name. |
 | `template`       | string | Name of a template in `templates/`. |
 | `env`            | table  | Merged over the template's `env`; project entries win on conflicts. |
+| `on_create`      | string | Overrides the template's `on_create`. |
 | `root`, `startup_window`, `startup_pane`, `windows` | | Inline layout, same shape as a template. Use *instead of* `template` for a one-off layout. |
 
 ```toml

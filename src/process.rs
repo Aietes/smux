@@ -1,6 +1,10 @@
 use std::io;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, OnceLock};
+
+#[cfg(test)]
+use std::path::PathBuf;
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -29,6 +33,15 @@ pub trait CommandRunner: Send + Sync {
         input: &str,
     ) -> io::Result<CommandOutput>;
     fn run_inherit(&self, program: &str, args: &[String]) -> io::Result<CommandStatus>;
+    /// Run a program in a working directory with extra environment variables,
+    /// capturing output. Used for session lifecycle hooks.
+    fn run_capture_in(
+        &self,
+        program: &str,
+        args: &[String],
+        cwd: &Path,
+        env: &[(String, String)],
+    ) -> io::Result<CommandOutput>;
 }
 
 pub fn default_runner() -> Arc<dyn CommandRunner> {
@@ -95,6 +108,28 @@ impl CommandRunner for RealCommandRunner {
             code: status.code(),
         })
     }
+
+    fn run_capture_in(
+        &self,
+        program: &str,
+        args: &[String],
+        cwd: &Path,
+        env: &[(String, String)],
+    ) -> io::Result<CommandOutput> {
+        let output = Command::new(program)
+            .args(args)
+            .current_dir(cwd)
+            .envs(env.iter().map(|(key, value)| (key, value)))
+            .output()?;
+        Ok(CommandOutput {
+            status: CommandStatus {
+                success: output.status.success(),
+                code: output.status.code(),
+            },
+            stdout: output.stdout,
+            stderr: output.stderr,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -111,6 +146,8 @@ pub struct RecordedCommand {
     pub args: Vec<String>,
     pub stdin: Option<String>,
     pub io_mode: IoMode,
+    pub cwd: Option<PathBuf>,
+    pub env: Vec<(String, String)>,
 }
 
 #[cfg(test)]
@@ -176,6 +213,8 @@ impl CommandRunner for FakeCommandRunner {
                 args: args.to_vec(),
                 stdin: None,
                 io_mode: IoMode::Capture,
+                cwd: None,
+                env: Vec::new(),
             });
 
         match self
@@ -206,6 +245,8 @@ impl CommandRunner for FakeCommandRunner {
                 args: args.to_vec(),
                 stdin: Some(input.to_owned()),
                 io_mode: IoMode::Capture,
+                cwd: None,
+                env: Vec::new(),
             });
 
         match self
@@ -231,6 +272,8 @@ impl CommandRunner for FakeCommandRunner {
                 args: args.to_vec(),
                 stdin: None,
                 io_mode: IoMode::Inherit,
+                cwd: None,
+                env: Vec::new(),
             });
 
         match self
@@ -243,6 +286,39 @@ impl CommandRunner for FakeCommandRunner {
             PlannedResponse::Inherit(result) => result,
             PlannedResponse::Capture(_) => {
                 panic!("expected inherit response but capture response was queued")
+            }
+        }
+    }
+
+    fn run_capture_in(
+        &self,
+        program: &str,
+        args: &[String],
+        cwd: &Path,
+        env: &[(String, String)],
+    ) -> io::Result<CommandOutput> {
+        self.recorded
+            .lock()
+            .expect("recorded queue should lock")
+            .push(RecordedCommand {
+                program: program.to_owned(),
+                args: args.to_vec(),
+                stdin: None,
+                io_mode: IoMode::Capture,
+                cwd: Some(cwd.to_path_buf()),
+                env: env.to_vec(),
+            });
+
+        match self
+            .planned
+            .lock()
+            .expect("planned queue should lock")
+            .pop_front()
+            .expect("missing planned capture-in response")
+        {
+            PlannedResponse::Capture(result) => result,
+            PlannedResponse::Inherit(_) => {
+                panic!("expected capture response but inherit response was queued")
             }
         }
     }

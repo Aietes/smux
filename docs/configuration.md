@@ -354,6 +354,10 @@ Template fields:
   - type: table of strings
   - optional
   - environment variables set on sessions created from this template, e.g. `env = { AWS_PROFILE = "dev" }`; applied via `tmux new-session -e` (needs tmux >= 3.2)
+- `on_create`
+  - type: string
+  - optional
+  - shell command run once in the session root before the session is created (e.g. `docker compose up -d`); it runs with `env` applied and blocks until it finishes — a failing command aborts the connect, and no session is created
 - `windows`
   - type: array of inline tables
   - required
@@ -572,6 +576,10 @@ Project fields:
   - type: table of strings
   - optional
   - merged over the template's `env`; project entries win on conflicts
+- `on_create`
+  - type: string
+  - optional
+  - overrides the template's `on_create`
 
 Project behavior:
 

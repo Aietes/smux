@@ -42,6 +42,10 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "on_create": {
+      "type": "string",
+      "description": "Shell command run once in the session root before the session is created; overrides the template's on_create."
     }
   },
   "$defs": {
