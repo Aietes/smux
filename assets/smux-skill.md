@@ -71,6 +71,7 @@ You are writing to the user's real `~/.config/smux`. Before changing anything:
 | `root`               | string      | Base cwd applied to windows/panes that don't set their own `cwd`. |
 | `startup_window`     | string      | Name of the window to focus. Must match a real window `name`. |
 | `startup_pane`       | integer     | 0-based pane index within `startup_window`. |
+| `env`                | table       | Environment variables set on the session, e.g. `env = { AWS_PROFILE = "dev" }`. Applied via `tmux new-session -e` (needs tmux ≥ 3.2). Keys must not contain `=`. |
 | `windows`            | `[window]`  | **Required**, ≥1. |
 
 **Window** (`name` required):
@@ -144,6 +145,7 @@ windows = [
 | `path`           | string | **Required.** Project directory (supports `~`). |
 | `session_name`   | string | tmux session name; defaults to the file/dir name. |
 | `template`       | string | Name of a template in `templates/`. |
+| `env`            | table  | Merged over the template's `env`; project entries win on conflicts. |
 | `root`, `startup_window`, `startup_pane`, `windows` | | Inline layout, same shape as a template. Use *instead of* `template` for a one-off layout. |
 
 ```toml

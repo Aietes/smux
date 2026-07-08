@@ -49,6 +49,13 @@
       "items": {
         "$ref": "#/$defs/window"
       }
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment variables set on the session via `tmux new-session -e` (needs tmux >= 3.2).",
+      "additionalProperties": {
+        "type": "string"
+      }
     }
   },
   "$defs": {

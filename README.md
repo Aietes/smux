@@ -310,6 +310,7 @@ Example template file, saved as `~/.config/smux/templates/rust.toml` (the file n
 match = ["Cargo.toml"]   # auto-detect this template for folders with a Cargo.toml
 startup_window = "editor"
 startup_pane = 0
+env = { RUST_LOG = "debug" }   # session environment (tmux >= 3.2)
 windows = [
   { name = "editor", command = "nvim" },
   { name = "run", synchronize = true, layout = "main-horizontal", panes = [

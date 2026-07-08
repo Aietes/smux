@@ -199,7 +199,7 @@ impl Tmux {
     }
 
     pub fn create_session(&self, session: &str, directory: &Path) -> Result<()> {
-        self.create_session_with_window(session, "main", directory)
+        self.create_session_with_window(session, "main", directory, &[])
     }
 
     pub fn create_session_from_plan(&self, plan: &SessionPlan) -> Result<()> {
@@ -212,6 +212,7 @@ impl Tmux {
             &plan.session_name,
             &first_window.name,
             initial_pane_cwd(first_window),
+            &plan.env,
         )?;
         self.configure_panes(&plan.session_name, &first_window.name, first_window)?;
 
@@ -343,20 +344,29 @@ impl Tmux {
         session: &str,
         window: &str,
         directory: &Path,
+        env: &[(String, String)],
     ) -> Result<()> {
         let directory = util::path_to_string(directory)?;
-        self.run_tmux([
-            "new-session",
-            "-d",
-            "-s",
-            session,
-            "-c",
-            &directory,
-            "-n",
-            window,
-        ])
-        .context("failed to execute tmux new-session")
+        let mut args = vec![
+            "new-session".to_owned(),
+            "-d".to_owned(),
+            "-s".to_owned(),
+            session.to_owned(),
+            "-c".to_owned(),
+            directory,
+            "-n".to_owned(),
+            window.to_owned(),
+        ];
+        // `-e` needs tmux >= 3.2; only emitted when a template or project
+        // actually configures env, so older tmux keeps working otherwise.
+        for (key, value) in env {
+            args.push("-e".to_owned());
+            args.push(format!("{key}={value}"));
+        }
+        self.run_tmux_owned(args)
+            .context("failed to execute tmux new-session")
     }
+
 
     fn new_window_after(
         &self,
@@ -581,13 +591,23 @@ impl Tmux {
     }
 
     fn run_tmux<const N: usize>(&self, args: [&str; N]) -> Result<()> {
-        let subcommand = args.first().copied().unwrap_or("tmux");
-        let output = self.run_tmux_capture(args)?;
+        self.run_tmux_owned(args.into_iter().map(ToOwned::to_owned).collect())
+    }
+
+    fn run_tmux_owned(&self, args: Vec<String>) -> Result<()> {
+        let subcommand = args.first().cloned().unwrap_or_else(|| "tmux".to_owned());
+        let output = self.runner.run_capture("tmux", &args).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!("tmux is not installed or not on PATH")
+            } else {
+                anyhow::Error::new(error).context("failed to execute tmux")
+            }
+        })?;
 
         if output.status.success {
             Ok(())
         } else {
-            bail!("{}", tmux_failure_message(subcommand, &output))
+            bail!("{}", tmux_failure_message(&subcommand, &output))
         }
     }
 
@@ -823,6 +843,7 @@ fn initial_pane_cwd(window: &crate::templates::WindowPlan) -> &Path {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::sync::Arc;
 
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner, IoMode};
@@ -1065,6 +1086,9 @@ mod tests {
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
+            root: PathBuf::from("/tmp/demo"),
+            env: Vec::new(),
+            on_create: None,
             session_name: "demo".to_owned(),
             startup_window: "editor".to_owned(),
             startup_pane: 0,
@@ -1217,6 +1241,9 @@ mod tests {
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
+            root: PathBuf::from("/tmp/demo"),
+            env: Vec::new(),
+            on_create: None,
             session_name: "demo".to_owned(),
             startup_window: "main".to_owned(),
             startup_pane: 0,
@@ -1347,6 +1374,9 @@ mod tests {
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
+            root: PathBuf::from("/tmp/demo"),
+            env: Vec::new(),
+            on_create: None,
             session_name: "demo".to_owned(),
             startup_window: "main".to_owned(),
             startup_pane: 1,
@@ -1405,6 +1435,9 @@ mod tests {
 
         let tmux = Tmux::with_runner(runner.clone());
         let plan = SessionPlan {
+            root: PathBuf::from("/tmp/demo"),
+            env: Vec::new(),
+            on_create: None,
             session_name: "demo".to_owned(),
             startup_window: "main".to_owned(),
             startup_pane: 0,
@@ -1452,4 +1485,41 @@ mod tests {
             stderr: Vec::new(),
         })
     }
+
+    #[test]
+    fn new_session_passes_env_flags() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(Vec::new()));
+        let tmux = Tmux::with_runner(runner.clone());
+
+        tmux.create_session_with_window(
+            "demo",
+            "main",
+            std::path::Path::new("/tmp/demo"),
+            &[
+                ("AWS_PROFILE".to_owned(), "dev".to_owned()),
+                ("DATABASE_URL".to_owned(), "postgres://x".to_owned()),
+            ],
+        )
+        .expect("new-session should succeed");
+
+        assert_eq!(
+            runner.recorded()[0].args,
+            vec![
+                "new-session",
+                "-d",
+                "-s",
+                "demo",
+                "-c",
+                "/tmp/demo",
+                "-n",
+                "main",
+                "-e",
+                "AWS_PROFILE=dev",
+                "-e",
+                "DATABASE_URL=postgres://x",
+            ]
+        );
+    }
+
 }

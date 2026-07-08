@@ -116,6 +116,8 @@ Template fields:
 .IP \(bu 2
 \fBstartup_pane\fR
 .IP \(bu 2
+\fBenv\fR (table of environment variables set on the session via \fBtmux new-session -e\fR; needs tmux >= 3.2)
+.IP \(bu 2
 \fBwindows\fR (array of inline tables)
 .PP
 Window fields:
@@ -212,6 +214,8 @@ Project fields:
 \fBstartup_pane\fR (optional)
 .IP \(bu 2
 \fBwindows\fR (optional; same structure as template windows)
+.IP \(bu 2
+\fBenv\fR (optional; merged over the template's \fBenv\fR, project entries win)
 .SH RESOLUTION ORDER
 Template resolution order:
 .IP "1." 4

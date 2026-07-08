@@ -382,6 +382,13 @@ pub struct Project {
     pub startup_window: Option<String>,
     pub startup_pane: Option<usize>,
     pub windows: Option<Vec<Window>>,
+    /// Environment variables set on the session (`tmux new-session -e`).
+    /// Merged over the template's `env`; project entries win on conflict.
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+    /// Shell command run once in the session root before the session is
+    /// created. Overrides the template's `on_create`.
+    pub on_create: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -408,6 +415,14 @@ pub struct Template {
     pub startup_window: Option<String>,
     pub startup_pane: Option<usize>,
     pub windows: Vec<Window>,
+    /// Environment variables set on sessions created from this template
+    /// (`tmux new-session -e KEY=VALUE`; needs tmux >= 3.2).
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+    /// Shell command run once in the session root before the session is
+    /// created (e.g. `docker-compose up -d`). A failing command aborts the
+    /// connect.
+    pub on_create: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -772,6 +787,8 @@ fn validate_template(name: &str, template: &Template) -> Result<()> {
     }
 
     validate_startup_pane(name, template)?;
+    validate_env(name, &template.env)?;
+    validate_hook(name, template.on_create.as_deref())?;
 
     // Enforce the tmux-target window-name rules at load time too, so a bad
     // name surfaces in `doctor` and the picker instead of at connect time.
@@ -1006,6 +1023,9 @@ fn validate_project(
         bail!("template \"{template_name}\" referenced by project \"{name}\" was not found");
     }
 
+    validate_env(&format!("project \"{name}\""), &project.env)?;
+    validate_hook(&format!("project \"{name}\""), project.on_create.as_deref())?;
+
     let has_direct_session_definition = project.root.is_some()
         || project.startup_window.is_some()
         || project.startup_pane.is_some()
@@ -1017,6 +1037,27 @@ fn validate_project(
         validate_template(&format!("project \"{name}\""), &effective)?;
     }
 
+    Ok(())
+}
+
+fn validate_env(owner: &str, env: &std::collections::BTreeMap<String, String>) -> Result<()> {
+    for key in env.keys() {
+        if key.trim().is_empty() {
+            bail!("{owner} has an env entry with an empty name");
+        }
+        if key.contains('=') {
+            bail!("{owner} env name \"{key}\" must not contain '='");
+        }
+    }
+    Ok(())
+}
+
+fn validate_hook(owner: &str, hook: Option<&str>) -> Result<()> {
+    if let Some(hook) = hook
+        && hook.trim().is_empty()
+    {
+        bail!("{owner} has an empty on_create command");
+    }
     Ok(())
 }
 
@@ -1052,6 +1093,8 @@ pub fn materialize_project_template(
         startup_window: None,
         startup_pane: None,
         windows: Vec::new(),
+        env: std::collections::BTreeMap::new(),
+        on_create: None,
     });
 
     if let Some(root) = &project.root {
@@ -1065,6 +1108,15 @@ pub fn materialize_project_template(
     }
     if let Some(windows) = &project.windows {
         effective.windows = windows.clone();
+    }
+    // Session-level extras merge over the base template; `connect_path`
+    // applies the same project-wins merge for templates that resolve via
+    // auto-detection instead of materialization.
+    effective
+        .env
+        .extend(project.env.iter().map(|(k, v)| (k.clone(), v.clone())));
+    if let Some(on_create) = &project.on_create {
+        effective.on_create = Some(on_create.clone());
     }
 
     Ok(Some(effective))
@@ -1384,6 +1436,81 @@ windows = [ { name = "vim.main", command = "nvim" } ]
 
         let error = validate_config(&config).expect_err("validation should fail");
         assert!(error.to_string().contains("invalid window name"));
+    }
+
+    #[test]
+    fn project_env_and_hook_merge_over_template() -> Result<()> {
+        let config: super::Config = toml::from_str(
+            r#"
+[templates.rust]
+windows = [ { name = "main" } ]
+env = { AWS_PROFILE = "dev", RUST_LOG = "info" }
+on_create = "template-hook"
+"#,
+        )?;
+
+        let project = super::Project {
+            path: "/tmp/demo".to_owned(),
+            session_name: None,
+            template: Some("rust".to_owned()),
+            root: Some(".".to_owned()),
+            startup_window: None,
+            startup_pane: None,
+            windows: None,
+            env: std::collections::BTreeMap::from([
+                ("RUST_LOG".to_owned(), "debug".to_owned()),
+                ("DATABASE_URL".to_owned(), "postgres://x".to_owned()),
+            ]),
+            on_create: Some("project-hook".to_owned()),
+        };
+
+        let effective = materialize_project_template(&config, &project)?
+            .expect("project should materialize");
+        assert_eq!(
+            effective.env.get("AWS_PROFILE").map(String::as_str),
+            Some("dev")
+        );
+        // The project wins on conflicts and adds its own entries.
+        assert_eq!(
+            effective.env.get("RUST_LOG").map(String::as_str),
+            Some("debug")
+        );
+        assert_eq!(
+            effective.env.get("DATABASE_URL").map(String::as_str),
+            Some("postgres://x")
+        );
+        assert_eq!(effective.on_create.as_deref(), Some("project-hook"));
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_env_names_containing_equals() {
+        let config: Config = toml::from_str(
+            r#"
+[templates.default]
+windows = [ { name = "main" } ]
+env = { "BAD=NAME" = "x" }
+"#,
+        )
+        .expect("config should parse");
+
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("must not contain '='"));
+    }
+
+    #[test]
+    fn rejects_blank_on_create() {
+        let config: Config = toml::from_str(
+            r#"
+[templates.default]
+windows = [ { name = "main" } ]
+on_create = "   "
+"#,
+        )
+        .expect("config should parse");
+
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("empty on_create"));
     }
 
     #[test]

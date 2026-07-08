@@ -8,9 +8,15 @@ use crate::util;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionPlan {
     pub session_name: String,
+    /// Resolved session root; the working directory for `on_create`.
+    pub root: PathBuf,
     pub windows: Vec<WindowPlan>,
     pub startup_window: String,
     pub startup_pane: usize,
+    /// KEY=VALUE pairs applied via `tmux new-session -e`, sorted by key.
+    pub env: Vec<(String, String)>,
+    /// Shell command run once in `root` before the session is created.
+    pub on_create: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +69,8 @@ pub fn fallback_template() -> Template {
             synchronize: false,
             panes: None,
         }],
+        env: std::collections::BTreeMap::new(),
+        on_create: None,
     }
 }
 
@@ -93,9 +101,16 @@ pub fn build_session_plan(
 
     Ok(SessionPlan {
         session_name: session_name.to_owned(),
+        root: template_root,
         windows,
         startup_window,
         startup_pane,
+        env: template
+            .env
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+        on_create: template.on_create.clone(),
     })
 }
 
@@ -271,6 +286,8 @@ mod tests {
     #[test]
     fn builds_window_and_pane_plan() -> Result<()> {
         let template = Template {
+            env: Default::default(),
+            on_create: None,
             detect: Vec::new(),
             match_dependencies: Vec::new(),
             priority: 0,
@@ -333,6 +350,8 @@ mod tests {
     fn rejects_window_name_with_target_separators() {
         for bad in ["api:v1", "build.step"] {
             let template = Template {
+                env: Default::default(),
+                on_create: None,
                 detect: Vec::new(),
                 match_dependencies: Vec::new(),
                 priority: 0,
@@ -368,6 +387,8 @@ mod tests {
             panes: None,
         };
         let template = Template {
+            env: Default::default(),
+            on_create: None,
             detect: Vec::new(),
             match_dependencies: Vec::new(),
             priority: 0,
@@ -385,6 +406,8 @@ mod tests {
     #[test]
     fn rejects_startup_pane_out_of_range() {
         let template = Template {
+            env: Default::default(),
+            on_create: None,
             detect: Vec::new(),
             match_dependencies: Vec::new(),
             priority: 0,
@@ -415,6 +438,8 @@ mod tests {
     #[test]
     fn rejects_invalid_pane_layout_string() {
         let template = Template {
+            env: Default::default(),
+            on_create: None,
             detect: Vec::new(),
             match_dependencies: Vec::new(),
             priority: 0,
@@ -458,6 +483,8 @@ mod tests {
         }
 
         let template = Template {
+            env: Default::default(),
+            on_create: None,
             detect: Vec::new(),
             match_dependencies: Vec::new(),
             priority: 0,

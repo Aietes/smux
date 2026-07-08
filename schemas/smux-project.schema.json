@@ -35,6 +35,13 @@
       "items": {
         "$ref": "#/$defs/window"
       }
+    },
+    "env": {
+      "type": "object",
+      "description": "Environment variables merged over the template's env; project entries win on conflicts.",
+      "additionalProperties": {
+        "type": "string"
+      }
     }
   },
   "$defs": {

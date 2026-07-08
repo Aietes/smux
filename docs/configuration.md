@@ -350,6 +350,10 @@ Template fields:
   - optional
   - default: `0`
   - zero-based pane index within the startup window
+- `env`
+  - type: table of strings
+  - optional
+  - environment variables set on sessions created from this template, e.g. `env = { AWS_PROFILE = "dev" }`; applied via `tmux new-session -e` (needs tmux >= 3.2)
 - `windows`
   - type: array of inline tables
   - required
@@ -564,6 +568,10 @@ Project fields:
 - `windows`
   - type: array of inline tables
   - optional
+- `env`
+  - type: table of strings
+  - optional
+  - merged over the template's `env`; project entries win on conflicts
 
 Project behavior:
 

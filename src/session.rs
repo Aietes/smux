@@ -46,7 +46,24 @@ pub fn connect_path(
         return tmux.switch_or_attach(&session_name);
     }
 
-    let plan = templates::build_session_plan(&session_name, &normalized, &template)?;
+    let mut plan = templates::build_session_plan(&session_name, &normalized, &template)?;
+
+    // A project's env and on_create apply regardless of where the template
+    // came from (materialized, auto-detected, or the built-in fallback);
+    // project entries win on key conflicts.
+    if let Some(resolved) = &resolved_project {
+        let project = resolved.project;
+        if !project.env.is_empty() {
+            let mut env: std::collections::BTreeMap<String, String> =
+                plan.env.into_iter().collect();
+            env.extend(project.env.iter().map(|(k, v)| (k.clone(), v.clone())));
+            plan.env = env.into_iter().collect();
+        }
+        if let Some(on_create) = &project.on_create {
+            plan.on_create = Some(on_create.clone());
+        }
+    }
+
     tmux.create_session_from_plan(&plan)?;
     tmux.switch_or_attach(&session_name)
 }
@@ -389,6 +406,8 @@ mod tests {
         std::fs::write(tempdir.path().join("Cargo.toml"), "")?;
 
         let rust_template = Template {
+            env: Default::default(),
+            on_create: None,
             detect: vec!["Cargo.toml".to_owned()],
             match_dependencies: Vec::new(),
             priority: 0,
@@ -430,6 +449,8 @@ mod tests {
 
     fn template_with(detect: &[&str], match_dependencies: &[&str], priority: i64) -> Template {
         Template {
+            env: Default::default(),
+            on_create: None,
             detect: detect.iter().map(|marker| (*marker).to_owned()).collect(),
             match_dependencies: match_dependencies
                 .iter()
@@ -695,6 +716,8 @@ mod tests {
         let projects = HashMap::from([(
             "demo".to_owned(),
             Project {
+                env: Default::default(),
+                on_create: None,
                 path: "/tmp/demo".to_owned(),
                 template: None,
                 session_name: Some("demo-session".to_owned()),
@@ -727,6 +750,8 @@ mod tests {
             templates: HashMap::from([(
                 "default".to_owned(),
                 Template {
+                    env: Default::default(),
+                    on_create: None,
                     detect: Vec::new(),
                     match_dependencies: Vec::new(),
                     priority: 0,
@@ -781,6 +806,8 @@ mod tests {
                 (
                     (*name).to_owned(),
                     Template {
+                        env: Default::default(),
+                        on_create: None,
                         detect: marker_for(name),
                         match_dependencies: Vec::new(),
                         priority: 0,
@@ -907,6 +934,8 @@ mod tests {
                     (
                         "default".to_owned(),
                         Template {
+                            env: Default::default(),
+                            on_create: None,
                             detect: Vec::new(),
                             match_dependencies: Vec::new(),
                             priority: 0,
@@ -927,6 +956,8 @@ mod tests {
                     (
                         "project".to_owned(),
                         Template {
+                            env: Default::default(),
+                            on_create: None,
                             detect: Vec::new(),
                             match_dependencies: Vec::new(),
                             priority: 0,
@@ -947,6 +978,8 @@ mod tests {
                     (
                         "explicit".to_owned(),
                         Template {
+                            env: Default::default(),
+                            on_create: None,
                             detect: Vec::new(),
                             match_dependencies: Vec::new(),
                             priority: 0,
@@ -969,6 +1002,8 @@ mod tests {
             projects: HashMap::from([(
                 "demo".to_owned(),
                 Project {
+                    env: Default::default(),
+                    on_create: None,
                     path: "/tmp/demo".to_owned(),
                     template: Some("project".to_owned()),
                     session_name: None,
@@ -1010,6 +1045,8 @@ mod tests {
             templates: HashMap::from([(
                 "default".to_owned(),
                 Template {
+                    env: Default::default(),
+                    on_create: None,
                     detect: Vec::new(),
                     match_dependencies: Vec::new(),
                     priority: 0,
