@@ -85,6 +85,10 @@ toggle_hints = "?"
 # roots = ["~"]
 # max_depth = 3
 # include_hidden = false
+
+[settings.clone]
+# root = "~/Development"   # where `smux clone` checkouts land
+# owners = ["my-org"]      # extra GitHub owners in the `smux clone` browser
 ```
 
 Example project file:
@@ -297,6 +301,27 @@ Fields:
   - controls whether folder search descends into hidden directories
 
 Folder search is bounded and skips common heavyweight directories such as `Library`, `node_modules`, and `target`.
+
+### `[settings.clone]`
+
+```toml
+[settings.clone]
+root = "~/Development"
+owners = ["my-org"]
+```
+
+Fields:
+
+- `root`
+  - type: string
+  - optional
+  - directory new `smux clone` checkouts land in when no target directory is given on the command line; unset means the current working directory
+- `owners`
+  - type: array of strings
+  - optional
+  - extra GitHub owners (users or orgs) whose repositories appear in the `smux clone` browser alongside your own
+
+Running `smux clone` without a URL opens a fuzzy browser over your GitHub repositories (via the `gh` CLI): each row shows `owner/name`, visibility, when it was last updated, and the description. Selecting a row clones it with `gh repo clone` and connects. The `gh` CLI is an optional dependency, reported by `smux doctor`.
 
 ## Template files
 

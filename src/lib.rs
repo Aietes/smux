@@ -5,6 +5,7 @@ pub mod docs;
 pub mod doctor;
 pub mod folder_search;
 pub mod fzf;
+pub mod github;
 pub mod process;
 pub mod project_export;
 pub mod session;

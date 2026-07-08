@@ -164,6 +164,22 @@ pub struct Settings {
     pub picker: PickerSettings,
     #[serde(default)]
     pub folder_search: FolderSearchSettings,
+    /// `[settings.clone]`; named to avoid colliding with `Clone::clone` in
+    /// field-access chains.
+    #[serde(default, rename = "clone")]
+    pub clone_settings: CloneSettings,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CloneSettings {
+    /// Directory new clones land in when no target is given on the command
+    /// line. Unset means the current working directory.
+    pub root: Option<String>,
+    /// Extra GitHub owners (users or orgs) whose repositories appear in the
+    /// `smux clone` browser alongside your own.
+    #[serde(default)]
+    pub owners: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Default, Eq, PartialEq)]

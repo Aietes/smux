@@ -36,6 +36,9 @@
         },
         "folder_search": {
           "$ref": "#/$defs/folder_search"
+        },
+        "clone": {
+          "$ref": "#/$defs/clone"
         }
       }
     },
@@ -181,6 +184,23 @@
           "minimum": 0,
           "maximum": 255,
           "default": 81
+        }
+      }
+    },
+    "clone": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "type": "string",
+          "description": "Directory new `smux clone` checkouts land in when no target directory is given; unset means the current working directory."
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra GitHub owners (users or orgs) whose repositories appear in the `smux clone` browser alongside your own."
         }
       }
     }

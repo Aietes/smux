@@ -182,12 +182,16 @@ smux kill           # kill the current session, switching to the last one first
 smux prune          # kill all detached sessions
 ```
 
-Clone a repository and open it in one step — template auto-detection picks the layout for the fresh checkout:
+Clone a repository and open it in one step — template auto-detection picks the layout for the fresh checkout. Without a URL, `smux clone` opens a fuzzy browser over your GitHub repositories (requires the `gh` CLI) showing visibility, last update, and description; pick one and you land in a ready session:
 
 ```bash
+smux clone                                  # browse your GitHub repos, clone + connect
 smux clone https://github.com/user/repo.git
 smux clone git@github.com:user/repo.git ~/code/repo
+smux clone --no-connect                     # browse + clone, but skip the session
 ```
+
+Where clones land and which extra owners/orgs appear in the browser are configurable under `[settings.clone]`.
 
 Capture the current tmux session as a reusable project definition:
 
@@ -372,7 +376,7 @@ smux connect [--template <name>] [--session-name <name>] <path>
 smux switch <session>
 smux last
 smux kill [<session>]
-smux clone [--template <name>] <url> [<dir>]
+smux clone [--template <name>] [--no-connect] [<url>] [<dir>]
 smux prune
 smux list-sessions [--json]
 smux list-templates [--json]

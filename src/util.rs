@@ -165,6 +165,58 @@ pub fn repo_directory_from_url(url: &str) -> Result<String> {
     Ok(name.to_owned())
 }
 
+/// Compact "time ago" for an RFC 3339 UTC timestamp such as
+/// `2026-07-08T12:00:00Z`: "just now", "5m ago", "3h ago", "3d ago",
+/// "2mo ago", "1y ago". Returns `None` for unparseable input.
+pub fn relative_time_ago(iso: &str, now_epoch: u64) -> Option<String> {
+    let epoch = parse_utc_epoch(iso)?;
+    let elapsed = now_epoch.saturating_sub(epoch);
+    Some(match elapsed {
+        0..=59 => "just now".to_owned(),
+        60..=3_599 => format!("{}m ago", elapsed / 60),
+        3_600..=86_399 => format!("{}h ago", elapsed / 3_600),
+        86_400..=2_591_999 => format!("{}d ago", elapsed / 86_400),
+        2_592_000..=31_535_999 => format!("{}mo ago", elapsed / 2_592_000),
+        _ => format!("{}y ago", elapsed / 31_536_000),
+    })
+}
+
+fn parse_utc_epoch(iso: &str) -> Option<u64> {
+    let (date, time) = iso.split_once('T')?;
+    let time = time.strip_suffix('Z')?;
+
+    let mut date_parts = date.splitn(3, '-');
+    let year: i64 = date_parts.next()?.parse().ok()?;
+    let month: u64 = date_parts.next()?.parse().ok()?;
+    let day: u64 = date_parts.next()?.parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+
+    let mut time_parts = time.splitn(3, ':');
+    let hours: u64 = time_parts.next()?.parse().ok()?;
+    let minutes: u64 = time_parts.next()?.parse().ok()?;
+    // Tolerate fractional seconds ("…:05.123").
+    let seconds: u64 = time_parts.next()?.split('.').next()?.parse().ok()?;
+
+    let days = days_from_civil(year, month, day);
+    if days < 0 {
+        return None;
+    }
+    Some(days as u64 * 86_400 + hours * 3_600 + minutes * 60 + seconds)
+}
+
+/// Days since 1970-01-01 for a proleptic Gregorian date
+/// (Howard Hinnant's `days_from_civil`).
+fn days_from_civil(year: i64, month: u64, day: u64) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let year_of_era = (year - era * 400) as u64;
+    let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era as i64 - 719_468
+}
+
 /// Render a value as a quoted JSON string. The `--json` payloads are flat
 /// lists of names and paths, so escaping by hand beats a serde_json
 /// dependency.
@@ -223,6 +275,23 @@ mod tests {
         // for git itself to validate.
         assert!(super::repo_directory_from_url("").is_err());
         assert!(super::repo_directory_from_url("/").is_err());
+    }
+
+    #[test]
+    fn renders_relative_times() {
+        // now = 2026-07-08T12:00:00Z
+        let now = 1_783_512_000;
+        let ago = |iso: &str| super::relative_time_ago(iso, now).expect("should parse");
+        assert_eq!(ago("2026-07-08T11:59:30Z"), "just now");
+        assert_eq!(ago("2026-07-08T11:15:00Z"), "45m ago");
+        assert_eq!(ago("2026-07-08T03:00:00Z"), "9h ago");
+        assert_eq!(ago("2026-07-05T12:00:00Z"), "3d ago");
+        assert_eq!(ago("2026-05-01T12:00:00Z"), "2mo ago");
+        assert_eq!(ago("2024-07-08T12:00:00Z"), "2y ago");
+        // Fractional seconds are tolerated; garbage is not.
+        assert_eq!(ago("2026-07-08T11:59:30.123Z"), "just now");
+        assert!(super::relative_time_ago("not-a-date", now).is_none());
+        assert!(super::relative_time_ago("2026-13-40T00:00:00Z", now).is_none());
     }
 
     #[test]

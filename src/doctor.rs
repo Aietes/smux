@@ -54,6 +54,7 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
     let tmux = util::command_available("tmux");
     let fzf = util::command_available("fzf");
     let zoxide_available = util::command_available("zoxide");
+    let gh_available = util::command_available("gh");
     let config_path = path_for_missing_config(config_path);
     let project_dir = config::projects_dir_for_config_path(&config_path);
     let template_dir = config::templates_dir_for_config_path(&config_path);
@@ -75,6 +76,7 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
                 dependency_check("tmux", tmux, true),
                 dependency_check("fzf", fzf, true),
                 dependency_check("zoxide", zoxide_available, false),
+                dependency_check("gh", gh_available, false),
             ],
         },
         Section {

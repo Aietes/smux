@@ -518,6 +518,38 @@ fn clone_runs_git_and_connects() {
 }
 
 #[test]
+fn clone_no_connect_just_prints_the_checkout_path() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let git = tool_dir.path().join("git");
+    fs::write(
+        &git,
+        "#!/bin/sh\n[ \"$2\" = \"--\" ] || exit 9\nmkdir -p \"$4\"\n",
+    )
+    .expect("git stub should be written");
+    let mut permissions = fs::metadata(&git)
+        .expect("git stub metadata should be readable")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&git, permissions).expect("git stub should be executable");
+
+    let target = tempdir.path().join("demo");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["clone", "--no-connect", "https://example.com/user/demo.git"]);
+    command.arg(&target);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+    command.env_remove("TMUX");
+
+    command
+        .assert()
+        .success()
+        .stdout(contains(target.display().to_string()));
+    assert!(target.is_dir(), "git stub should have created the checkout");
+}
+
+#[test]
 fn skill_writes_skill_md_to_the_given_dir() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let skill_dir = tempdir.path().join("skills").join("smux");

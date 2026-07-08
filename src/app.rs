@@ -9,6 +9,7 @@ use crate::docs;
 use crate::doctor;
 use crate::folder_search;
 use crate::fzf;
+use crate::github;
 use crate::project_export;
 use crate::session;
 use crate::skill;
@@ -59,35 +60,30 @@ pub fn run(cli: Cli) -> Result<()> {
             println!("killed {killed}");
             Ok(())
         }
-        Commands::Clone { url, dir, template } => {
+        Commands::Clone {
+            url,
+            dir,
+            template,
+            no_connect,
+        } => {
             let loaded = config::load_optional(config.as_deref())?;
-            let target = match dir {
-                Some(dir) => dir,
-                None => PathBuf::from(util::repo_directory_from_url(&url)?),
+            let clone_settings = loaded
+                .as_ref()
+                .map(|loaded| loaded.config.settings.clone_settings.clone())
+                .unwrap_or_default();
+            let display_style =
+                DisplayStyle::from_config(loaded.as_ref().map(|loaded| &loaded.config));
+
+            let Some(target) =
+                clone_repository(url.as_deref(), dir, &clone_settings, display_style)?
+            else {
+                // The repo browser was cancelled; nothing to do.
+                return Ok(());
             };
-            if target.exists() {
-                eprintln!("{} already exists, connecting", target.display());
-            } else {
-                // `--` keeps a URL or directory starting with `-` from being
-                // parsed as a git flag (e.g. `--upload-pack=<cmd>` executes
-                // arbitrary commands).
-                let args = vec![
-                    "clone".to_owned(),
-                    "--".to_owned(),
-                    url.clone(),
-                    util::path_to_string(&target)?,
-                ];
-                // Inherited stdio so git's progress and auth prompts reach
-                // the terminal.
-                let status = crate::process::default_runner()
-                    .run_inherit("git", &args)
-                    .context("failed to execute git clone")?;
-                if !status.success {
-                    bail!(
-                        "git clone failed with {}",
-                        util::exit_status_label(status.code)
-                    );
-                }
+
+            if no_connect {
+                println!("{}", target.display());
+                return Ok(());
             }
             session::connect_path(
                 &tmux,
@@ -428,6 +424,114 @@ fn run_select(
             (fzf::SelectAction::ChooseTemplate, _) => continue,
         }
     }
+}
+
+/// Resolve (and if necessary create) the checkout for `smux clone`. With a
+/// URL, `git clone` it; without one, open the GitHub repo browser and
+/// `gh repo clone` the selection. Returns `None` when browsing is cancelled.
+fn clone_repository(
+    url: Option<&str>,
+    dir: Option<PathBuf>,
+    settings: &config::CloneSettings,
+    display_style: DisplayStyle,
+) -> Result<Option<PathBuf>> {
+    match url {
+        Some(url) => {
+            let target = match dir {
+                Some(dir) => dir,
+                None => clone_destination(settings, &util::repo_directory_from_url(url)?),
+            };
+            if target.exists() {
+                eprintln!("{} already exists, connecting", target.display());
+                return Ok(Some(target));
+            }
+            // `--` keeps a URL or directory starting with `-` from being
+            // parsed as a git flag (e.g. `--upload-pack=<cmd>` executes
+            // arbitrary commands).
+            run_clone_tool(
+                "git",
+                vec![
+                    "clone".to_owned(),
+                    "--".to_owned(),
+                    url.to_owned(),
+                    util::path_to_string(&target)?,
+                ],
+            )?;
+            Ok(Some(target))
+        }
+        None => {
+            // The browser drives fzf, which needs a terminal.
+            require_interactive_terminal()?;
+
+            let runner = crate::process::default_runner();
+            let repos = github::list_repos(&runner, &settings.owners)?;
+            if repos.is_empty() {
+                bail!("gh returned no repositories to browse");
+            }
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_secs())
+                .unwrap_or(0);
+            let choices = repos
+                .iter()
+                .map(|repo| {
+                    fzf::Choice::new(
+                        "repo",
+                        github::repo_label(display_style, repo, now),
+                        repo.name_with_owner.clone(),
+                    )
+                })
+                .collect();
+
+            let Some(selection) = fzf::select_value("clone> ", choices)? else {
+                return Ok(None);
+            };
+            let name = selection.rsplit('/').next().unwrap_or(&selection).to_owned();
+            let target = match dir {
+                Some(dir) => dir,
+                None => clone_destination(settings, &name),
+            };
+            if target.exists() {
+                eprintln!("{} already exists, connecting", target.display());
+                return Ok(Some(target));
+            }
+            // gh resolved the name from GitHub's own listing, so it cannot
+            // start with `-` (and `--` here would mean "flags for git").
+            run_clone_tool(
+                "gh",
+                vec![
+                    "repo".to_owned(),
+                    "clone".to_owned(),
+                    selection,
+                    util::path_to_string(&target)?,
+                ],
+            )?;
+            Ok(Some(target))
+        }
+    }
+}
+
+/// Where a clone lands when no explicit directory is given: under
+/// `[settings.clone] root` if set, else the current directory.
+fn clone_destination(settings: &config::CloneSettings, name: &str) -> PathBuf {
+    match settings.root.as_deref() {
+        Some(root) => util::expand_tilde_path(Path::new(root)).join(name),
+        None => PathBuf::from(name),
+    }
+}
+
+fn run_clone_tool(program: &str, args: Vec<String>) -> Result<()> {
+    // Inherited stdio so progress and auth prompts reach the terminal.
+    let status = crate::process::default_runner()
+        .run_inherit(program, &args)
+        .with_context(|| format!("failed to execute {program} clone"))?;
+    if !status.success {
+        bail!(
+            "{program} clone failed with {}",
+            util::exit_status_label(status.code)
+        );
+    }
+    Ok(())
 }
 
 fn json_name_array(names: &[String]) -> String {
@@ -826,5 +930,32 @@ mod tests {
     #[test]
     fn empty_select_message_mentions_missing_zoxide() {
         assert!(empty_select_message(0, 0, false).contains("zoxide is unavailable"));
+    }
+    use super::clone_destination;
+    use crate::config::CloneSettings;
+    use std::path::Path;
+
+    #[test]
+    fn clone_destination_prefers_the_configured_root() {
+        let _guard = crate::util::test_env::lock();
+        unsafe {
+            std::env::set_var("HOME", "/Users/dev");
+        }
+
+        let with_root = CloneSettings {
+            root: Some("~/Development".to_owned()),
+            owners: Vec::new(),
+        };
+        assert_eq!(
+            clone_destination(&with_root, "demo"),
+            Path::new("/Users/dev/Development/demo")
+        );
+
+        let without_root = CloneSettings::default();
+        assert_eq!(clone_destination(&without_root, "demo"), Path::new("demo"));
+
+        unsafe {
+            std::env::remove_var("HOME");
+        }
     }
 }

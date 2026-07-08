@@ -79,19 +79,24 @@ pub enum Commands {
         /// Exact name of the session to kill. Defaults to the current session.
         session: Option<String>,
     },
-    /// Clone a git repository and connect to it.
+    /// Clone a git repository (or browse your GitHub repos) and connect to it.
     #[command(
-        long_about = "Run `git clone` and open the result with `smux connect`, so template auto-detection picks the right layout for the fresh checkout. When the target directory already exists, the clone is skipped and smux just connects."
+        long_about = "With a URL: run `git clone` and open the result with `smux connect`, so template auto-detection picks the right layout for the fresh checkout. When the target directory already exists, the clone is skipped and smux just connects.\n\nWithout a URL: browse your GitHub repositories (and those of any `[settings.clone] owners`) in a fuzzy picker — visibility, last update, and description included — then clone the selection with `gh repo clone`. Requires the GitHub CLI (gh).\n\nClones land in `[settings.clone] root` when set (falling back to the current directory) unless a target directory is given."
     )]
     Clone {
-        /// Repository URL — anything `git clone` accepts.
-        url: String,
-        /// Target directory. Defaults to the repository name, like git.
+        /// Repository URL — anything `git clone` accepts. Omit to browse your
+        /// GitHub repositories instead (requires gh).
+        url: Option<String>,
+        /// Target directory. Defaults to the repository name inside
+        /// `[settings.clone] root` (or the current directory).
         #[arg(value_hint = ValueHint::DirPath)]
         dir: Option<PathBuf>,
         /// Template to apply instead of the auto-detected one.
         #[arg(long)]
         template: Option<String>,
+        /// Just clone and print the checkout path; skip connecting a session.
+        #[arg(long)]
+        no_connect: bool,
     },
     /// Kill all detached tmux sessions.
     #[command(
