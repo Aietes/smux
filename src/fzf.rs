@@ -232,12 +232,21 @@ impl TempInputFile {
     fn new(contents: &str) -> Result<Self> {
         use std::io::Write;
 
+        // A process-wide counter disambiguates concurrent callers (parallel
+        // tests can hit the same nanosecond); pid + nanos disambiguate across
+        // processes and restarts.
+        static FILE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let serial = FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let mut path = std::env::temp_dir();
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .context("system clock should be after unix epoch")?
             .as_nanos();
-        path.push(format!("smux-fzf-{}-{nanos}.tsv", std::process::id()));
+        path.push(format!(
+            "smux-fzf-{}-{nanos}-{serial}.tsv",
+            std::process::id()
+        ));
         // create_new (O_CREAT|O_EXCL) refuses to follow or reuse a pre-existing
         // path, defeating a symlink planted at this name; the temp dir's sticky
         // bit then prevents another user from replacing the file afterwards.
