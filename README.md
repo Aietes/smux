@@ -181,6 +181,13 @@ smux kill           # kill the current session, switching to the last one first
 smux prune          # kill all detached sessions
 ```
 
+Clone a repository and open it in one step — template auto-detection picks the layout for the fresh checkout:
+
+```bash
+smux clone https://github.com/user/repo.git
+smux clone git@github.com:user/repo.git ~/code/repo
+```
+
 Capture the current tmux session as a reusable project definition:
 
 ```bash
@@ -363,6 +370,7 @@ smux connect [--template <name>] [--session-name <name>] <path>
 smux switch <session>
 smux last
 smux kill [<session>]
+smux clone [--template <name>] <url> [<dir>]
 smux prune
 smux list-sessions [--json]
 smux list-templates [--json]

@@ -152,6 +152,19 @@ pub fn exit_status_label(code: Option<i32>) -> String {
     }
 }
 
+/// Directory name a bare `git clone <url>` would create: the last path
+/// segment with any `.git` suffix removed. Handles scp-style addresses
+/// (`git@host:user/repo.git`) too.
+pub fn repo_directory_from_url(url: &str) -> Result<String> {
+    let trimmed = url.trim_end_matches('/');
+    let tail = trimmed.rsplit(['/', ':']).next().unwrap_or("");
+    let name = tail.strip_suffix(".git").unwrap_or(tail);
+    if name.is_empty() || name == "." || name == ".." {
+        bail!("could not derive a directory name from {url}");
+    }
+    Ok(name.to_owned())
+}
+
 /// Render a value as a quoted JSON string. The `--json` payloads are flat
 /// lists of names and paths, so escaping by hand beats a serde_json
 /// dependency.
@@ -197,6 +210,20 @@ mod tests {
         validated_project_name, validated_session_name,
     };
     use std::path::Path;
+
+    #[test]
+    fn derives_repo_directories_from_urls() {
+        let name = |url: &str| super::repo_directory_from_url(url).expect("should derive");
+        assert_eq!(name("https://github.com/user/demo.git"), "demo");
+        assert_eq!(name("https://github.com/user/demo"), "demo");
+        assert_eq!(name("git@github.com:user/demo.git"), "demo");
+        assert_eq!(name("git@github.com:demo.git"), "demo");
+        assert_eq!(name("https://host/group/sub/repo/"), "repo");
+        // Nonsense inputs surface as errors here; anything plausible is left
+        // for git itself to validate.
+        assert!(super::repo_directory_from_url("").is_err());
+        assert!(super::repo_directory_from_url("/").is_err());
+    }
 
     #[test]
     fn escapes_json_strings() {

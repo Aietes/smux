@@ -79,6 +79,20 @@ pub enum Commands {
         /// Exact name of the session to kill. Defaults to the current session.
         session: Option<String>,
     },
+    /// Clone a git repository and connect to it.
+    #[command(
+        long_about = "Run `git clone` and open the result with `smux connect`, so template auto-detection picks the right layout for the fresh checkout. When the target directory already exists, the clone is skipped and smux just connects."
+    )]
+    Clone {
+        /// Repository URL — anything `git clone` accepts.
+        url: String,
+        /// Target directory. Defaults to the repository name, like git.
+        #[arg(value_hint = ValueHint::DirPath)]
+        dir: Option<PathBuf>,
+        /// Template to apply instead of the auto-detected one.
+        #[arg(long)]
+        template: Option<String>,
+    },
     /// Kill all detached tmux sessions.
     #[command(
         long_about = "Kill every tmux session that has no attached client. The session you are currently attached to is preserved; outside tmux, all sessions are detached and will be killed."

@@ -59,6 +59,41 @@ pub fn run(cli: Cli) -> Result<()> {
             println!("killed {killed}");
             Ok(())
         }
+        Commands::Clone { url, dir, template } => {
+            let loaded = config::load_optional(config.as_deref())?;
+            let target = match dir {
+                Some(dir) => dir,
+                None => PathBuf::from(util::repo_directory_from_url(&url)?),
+            };
+            if target.exists() {
+                eprintln!("{} already exists, connecting", target.display());
+            } else {
+                let args = vec![
+                    "clone".to_owned(),
+                    url.clone(),
+                    util::path_to_string(&target)?,
+                ];
+                // Inherited stdio so git's progress and auth prompts reach
+                // the terminal.
+                let status = crate::process::default_runner()
+                    .run_inherit("git", &args)
+                    .context("failed to execute git clone")?;
+                if !status.success {
+                    bail!(
+                        "git clone failed with {}",
+                        util::exit_status_label(status.code)
+                    );
+                }
+            }
+            session::connect_path(
+                &tmux,
+                &target,
+                loaded.as_ref(),
+                template.as_deref(),
+                None,
+                session::ProjectDetection::Enabled,
+            )
+        }
         Commands::Prune => {
             let pruned = session::prune_detached(&tmux)?;
             if pruned.is_empty() {
