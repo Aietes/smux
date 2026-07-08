@@ -283,21 +283,26 @@ fn load_template(config: &crate::config::Config, template_name: &str) -> Result<
         .ok_or_else(|| anyhow::anyhow!("unknown template: {template_name}"))
 }
 
+// Names of sessions that already exist are tmux's, not ours: tmux allows
+// characters (spaces, unicode, ...) that smux's own name derivation rejects, so
+// sanitizing here would make sessions created outside smux unreachable. Use
+// existing names verbatim; only names smux creates go through validation.
+
 pub fn switch_existing(tmux: &Tmux, session: &str) -> Result<()> {
-    let session = util::validated_session_name(session)?;
-    tmux.ensure_session_exists(&session)?;
-    tmux.switch_or_attach(&session)
+    let session = existing_session_name(session)?;
+    tmux.ensure_session_exists(session)?;
+    tmux.switch_or_attach(session)
 }
 
 pub fn kill_existing(tmux: &Tmux, session: &str) -> Result<()> {
-    let session = util::validated_session_name(session)?;
-    tmux.ensure_session_exists(&session)?;
-    tmux.kill_session(&session)
+    let session = existing_session_name(session)?;
+    tmux.ensure_session_exists(session)?;
+    tmux.kill_session(session)
 }
 
 pub fn rename_existing(tmux: &Tmux, session: &str, new_name: &str) -> Result<String> {
-    let session = util::validated_session_name(session)?;
-    tmux.ensure_session_exists(&session)?;
+    let session = existing_session_name(session)?;
+    tmux.ensure_session_exists(session)?;
     let new_name = util::validated_session_name(new_name)?;
     if new_name == session {
         return Ok(new_name);
@@ -305,8 +310,15 @@ pub fn rename_existing(tmux: &Tmux, session: &str, new_name: &str) -> Result<Str
     if tmux.has_session(&new_name)? {
         anyhow::bail!("a tmux session named {new_name} already exists");
     }
-    tmux.rename_session(&session, &new_name)?;
+    tmux.rename_session(session, &new_name)?;
     Ok(new_name)
+}
+
+fn existing_session_name(session: &str) -> Result<&str> {
+    if session.trim().is_empty() {
+        anyhow::bail!("session name must not be empty");
+    }
+    Ok(session)
 }
 
 pub fn switch_last(tmux: &Tmux) -> Result<()> {
@@ -333,6 +345,36 @@ mod tests {
     use crate::util;
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn kill_existing_uses_tmux_session_names_verbatim() {
+        use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner};
+        use crate::tmux::Tmux;
+        use std::sync::Arc;
+
+        let ok = || {
+            Ok(CommandOutput {
+                status: CommandStatus {
+                    success: true,
+                    code: Some(0),
+                },
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+        };
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok());
+        runner.push_capture(ok());
+        let tmux = Tmux::with_runner(runner.clone());
+
+        // Session names that already exist in tmux must not be sanitized:
+        // `my app` is a legal tmux name that smux itself would never create.
+        super::kill_existing(&tmux, "my app").expect("kill should succeed");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded[0].args, ["has-session", "-t", "=my app"]);
+        assert_eq!(recorded[1].args, ["kill-session", "-t", "=my app"]);
+    }
 
     #[test]
     fn sanitizes_session_names() {

@@ -67,6 +67,13 @@ impl Default for Tmux {
     }
 }
 
+/// tmux resolves a bare `-t name` target with prefix and fnmatch fallbacks, so
+/// `app` can silently match a session named `app-server` when no exact `app`
+/// exists. The `=` prefix restricts resolution to the exact name.
+fn exact_target(session: &str) -> String {
+    format!("={session}")
+}
+
 impl Tmux {
     pub fn new() -> Self {
         Self {
@@ -175,7 +182,7 @@ impl Tmux {
                 &[
                     "has-session".to_owned(),
                     "-t".to_owned(),
-                    session.to_owned(),
+                    exact_target(session),
                 ],
             )
             .context("failed to execute tmux has-session")?;
@@ -227,13 +234,13 @@ impl Tmux {
 
     pub fn switch_or_attach(&self, session: &str) -> Result<()> {
         if util::inside_tmux() {
-            self.run_tmux(["switch-client", "-t", session])
+            self.run_tmux(["switch-client", "-t", &exact_target(session)])
                 .context("failed to execute tmux switch-client")
         } else {
             let args = vec![
                 "attach-session".to_owned(),
                 "-t".to_owned(),
-                session.to_owned(),
+                exact_target(session),
             ];
 
             let status = self
@@ -250,12 +257,12 @@ impl Tmux {
     }
 
     pub fn kill_session(&self, session: &str) -> Result<()> {
-        self.run_tmux(["kill-session", "-t", session])
+        self.run_tmux(["kill-session", "-t", &exact_target(session)])
             .context("failed to execute tmux kill-session")
     }
 
     pub fn rename_session(&self, session: &str, new_name: &str) -> Result<()> {
-        self.run_tmux(["rename-session", "-t", session, new_name])
+        self.run_tmux(["rename-session", "-t", &exact_target(session), new_name])
             .context("failed to execute tmux rename-session")
     }
 
@@ -814,14 +821,11 @@ fn initial_pane_cwd(window: &crate::templates::WindowPlan) -> &Path {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use std::sync::Mutex;
 
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner, IoMode};
     use crate::templates::{PaneLayout, PanePlan, PanePosition, SessionPlan, WindowPlan};
 
     use super::{PaneRecord, Tmux, infer_pane_layout};
-
-    static TMUX_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn pane_record(left: i32, top: i32, width: i32, height: i32) -> PaneRecord {
         PaneRecord {
@@ -858,7 +862,7 @@ mod tests {
 
     #[test]
     fn outside_tmux_uses_inherited_stdio_for_attach() {
-        let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
+        let _guard = crate::util::test_env::lock();
         let runner = Arc::new(FakeCommandRunner::new());
         runner.push_inherit(Ok(CommandStatus {
             success: true,
@@ -876,7 +880,7 @@ mod tests {
         let recorded = runner.recorded();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].program, "tmux");
-        assert_eq!(recorded[0].args, vec!["attach-session", "-t", "demo"]);
+        assert_eq!(recorded[0].args, vec!["attach-session", "-t", "=demo"]);
         assert_eq!(recorded[0].io_mode, IoMode::Inherit);
     }
 
@@ -949,7 +953,7 @@ mod tests {
 
     #[test]
     fn outside_tmux_has_no_current_session() {
-        let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
+        let _guard = crate::util::test_env::lock();
         let runner = Arc::new(FakeCommandRunner::new());
 
         unsafe {
@@ -963,7 +967,7 @@ mod tests {
 
     #[test]
     fn inside_tmux_uses_switch_client_with_captured_io() {
-        let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
+        let _guard = crate::util::test_env::lock();
         let runner = Arc::new(FakeCommandRunner::new());
         runner.push_capture(Ok(CommandOutput {
             status: CommandStatus {
@@ -985,7 +989,7 @@ mod tests {
         let recorded = runner.recorded();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].program, "tmux");
-        assert_eq!(recorded[0].args, vec!["switch-client", "-t", "demo"]);
+        assert_eq!(recorded[0].args, vec!["switch-client", "-t", "=demo"]);
         assert_eq!(recorded[0].io_mode, IoMode::Capture);
 
         unsafe {
@@ -995,7 +999,7 @@ mod tests {
 
     #[test]
     fn inside_tmux_reads_current_session() {
-        let _guard = TMUX_ENV_LOCK.lock().expect("tmux env lock should work");
+        let _guard = crate::util::test_env::lock();
         let runner = Arc::new(FakeCommandRunner::new());
         runner.push_capture(Ok(CommandOutput {
             status: CommandStatus {
@@ -1285,7 +1289,7 @@ mod tests {
         let recorded = runner.recorded();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].program, "tmux");
-        assert_eq!(recorded[0].args, vec!["kill-session", "-t", "demo"]);
+        assert_eq!(recorded[0].args, vec!["kill-session", "-t", "=demo"]);
         assert_eq!(recorded[0].io_mode, IoMode::Capture);
     }
 

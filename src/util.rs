@@ -143,6 +143,21 @@ fn is_tmux_safe(character: char) -> bool {
     character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
 }
 
+/// One process-wide lock for every test that mutates environment variables
+/// (HOME, TMUX, XDG_CONFIG_HOME, ...). Unit tests across all modules run in
+/// the same parallel test binary, so per-module locks don't exclude each
+/// other and would eventually flake.
+#[cfg(test)]
+pub(crate) mod test_env {
+    use std::sync::{Mutex, MutexGuard, PoisonError};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    pub(crate) fn lock() -> MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -150,13 +165,10 @@ mod tests {
         validated_session_name,
     };
     use std::path::Path;
-    use std::sync::Mutex;
-
-    static HOME_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn expands_tilde_paths() {
-        let _guard = HOME_ENV_LOCK.lock().expect("home env lock should work");
+        let _guard = crate::util::test_env::lock();
         unsafe {
             std::env::set_var("HOME", "/Users/stefan");
         }
@@ -202,7 +214,7 @@ mod tests {
 
     #[test]
     fn collapses_home_for_config_paths() {
-        let _guard = HOME_ENV_LOCK.lock().expect("home env lock should work");
+        let _guard = crate::util::test_env::lock();
         unsafe {
             std::env::set_var("HOME", "/Users/stefan");
         }

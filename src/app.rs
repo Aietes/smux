@@ -120,6 +120,12 @@ pub fn run(cli: Cli) -> Result<()> {
             Ok(())
         }
         Commands::Detect { path, config } => {
+            // Fail on a missing or non-directory path (as `connect` does) so a
+            // typo doesn't read as "no template matched".
+            let path = util::normalize_path(&path)?;
+            if !path.is_dir() {
+                bail!("not a directory: {}", path.display());
+            }
             let loaded = config::load_workspace(config.as_deref())?;
             let matches = session::detect_matches(&loaded.config, &path);
             if matches.is_empty() {
@@ -184,6 +190,8 @@ fn run_select(
     choose_template: bool,
     no_project_detect: bool,
 ) -> Result<()> {
+    require_interactive_terminal()?;
+
     let project_detection = if no_project_detect {
         session::ProjectDetection::Disabled
     } else {
@@ -226,9 +234,14 @@ fn run_select(
             }
             (fzf::SelectAction::Delete, fzf::EntryKind::Session) => {
                 if current_session.as_deref() == Some(selection.entry.value.as_str()) {
+                    eprintln!("cannot close the current session from the picker");
                     continue;
                 }
-                session::kill_existing(tmux, &selection.entry.value)?;
+                // Downgrade to a warning so a failed delete (like the other
+                // in-loop actions) keeps the picker alive.
+                if let Err(error) = session::kill_existing(tmux, &selection.entry.value) {
+                    eprintln!("warning: {error:#}");
+                }
             }
             (fzf::SelectAction::Rename, fzf::EntryKind::Session) => {
                 if let Some(new_name) = rename_session_from_picker(tmux, &selection.entry.value)? {
@@ -313,6 +326,18 @@ fn run_select(
             (fzf::SelectAction::ChooseTemplate, _) => continue,
         }
     }
+}
+
+/// The picker drives fzf, which needs a terminal to draw on; without one
+/// (cron, CI, a stray script) it would block forever waiting for input.
+/// Opening `/dev/tty` is the same probe fzf uses for its interactive UI.
+fn require_interactive_terminal() -> Result<()> {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .map(|_| ())
+        .map_err(|_| anyhow::anyhow!("smux select requires an interactive terminal"))
 }
 
 fn rename_session_from_picker(tmux: &Tmux, session_name: &str) -> Result<Option<String>> {

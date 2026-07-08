@@ -718,6 +718,7 @@ fn validate_picker_bindings(bindings: &PickerBindings) -> Result<()> {
         ("save_project", bindings.save_project.trim()),
         ("rename_session", bindings.rename_session.trim()),
         ("edit_project", bindings.edit_project.trim()),
+        ("choose_template", bindings.choose_template.trim()),
         ("toggle_hints", bindings.toggle_hints.trim()),
     ];
 
@@ -768,6 +769,11 @@ fn validate_template(name: &str, template: &Template) -> Result<()> {
     }
 
     validate_startup_pane(name, template)?;
+
+    // Enforce the tmux-target window-name rules at load time too, so a bad
+    // name surfaces in `doctor` and the picker instead of at connect time.
+    crate::templates::validate_window_names(template)
+        .with_context(|| format!("{name} has an invalid window name"))?;
 
     for window in &template.windows {
         validate_window(name, window)?;
@@ -1348,6 +1354,36 @@ save_project = "alt-s"
     }
 
     #[test]
+    fn rejects_choose_template_binding_duplicating_another() {
+        let input = r#"
+[settings.picker.bindings]
+choose_template = "ctrl-s"
+"#;
+
+        let config: Config = toml::from_str(input).expect("config should parse");
+        let error = validate_config(&config).expect_err("duplicate picker bindings should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("duplicates another picker binding")
+        );
+    }
+
+    #[test]
+    fn rejects_window_names_with_target_separators_at_load() {
+        let config: Config = toml::from_str(
+            r#"
+[templates.default]
+windows = [ { name = "vim.main", command = "nvim" } ]
+"#,
+        )
+        .expect("config should parse");
+
+        let error = validate_config(&config).expect_err("validation should fail");
+        assert!(error.to_string().contains("invalid window name"));
+    }
+
+    #[test]
     fn defaults_folder_search_to_home_root() -> Result<()> {
         let config: Config = toml::from_str("[settings]\n")?;
         assert_eq!(config.settings.folder_search.roots, vec!["~"]);
@@ -1718,6 +1754,7 @@ windows = [{ name = "main", command = "nvim" }]
 
     #[test]
     fn uses_xdg_config_home_when_set() -> Result<()> {
+        let _guard = crate::util::test_env::lock();
         let tempdir = tempfile::tempdir()?;
         unsafe {
             std::env::set_var("XDG_CONFIG_HOME", tempdir.path());

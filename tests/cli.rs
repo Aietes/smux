@@ -360,6 +360,20 @@ fn detect_reports_the_winning_template_and_its_markers() {
 }
 
 #[test]
+fn detect_rejects_missing_paths() {
+    let tool_dir = fake_tool_dir();
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["detect", "/nonexistent/smux-test-path"]);
+    command.env("PATH", prepend_path(tool_dir.path()));
+
+    command
+        .assert()
+        .failure()
+        .stderr(contains("failed to resolve path"));
+}
+
+#[test]
 fn skill_writes_skill_md_to_the_given_dir() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let skill_dir = tempdir.path().join("skills").join("smux");

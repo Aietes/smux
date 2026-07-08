@@ -103,7 +103,7 @@ pub fn build_session_plan(
 /// addressed by name after creation, so a name containing the tmux target
 /// separators (`:` or `.`) would mis-address later commands, and duplicate
 /// names would resolve ambiguously. Reject both up front with a clear error.
-fn validate_window_names(template: &Template) -> Result<()> {
+pub(crate) fn validate_window_names(template: &Template) -> Result<()> {
     let mut seen = std::collections::HashSet::new();
     for window in &template.windows {
         if window.name.contains(':') || window.name.contains('.') {
@@ -260,9 +260,6 @@ mod tests {
     use crate::config::{Pane, Template, Window};
     use anyhow::Result;
     use std::path::Path;
-    use std::sync::Mutex;
-
-    static HOME_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn fallback_template_has_main_window() {
@@ -455,7 +452,7 @@ mod tests {
 
     #[test]
     fn expands_tilde_window_and_pane_paths() -> Result<()> {
-        let _guard = HOME_ENV_LOCK.lock().expect("home env lock should work");
+        let _guard = crate::util::test_env::lock();
         unsafe {
             std::env::set_var("HOME", "/Users/stefan");
         }

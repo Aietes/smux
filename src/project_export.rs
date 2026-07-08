@@ -103,9 +103,14 @@ pub fn project_exists(name: &str, config_path: Option<&Path>) -> Result<bool> {
 fn resolve_source_session(tmux: &Tmux, session: Option<&str>) -> Result<String> {
     match session {
         Some(session) => {
-            let session = util::validated_session_name(session)?;
-            tmux.ensure_session_exists(&session)?;
-            Ok(session)
+            // The source session already exists in tmux, so its name is used
+            // verbatim — sanitizing would make sessions created outside smux
+            // (e.g. names with spaces) unreachable.
+            if session.trim().is_empty() {
+                bail!("session name must not be empty");
+            }
+            tmux.ensure_session_exists(session)?;
+            Ok(session.to_owned())
         }
         None if util::inside_tmux() => tmux
             .current_session()?
@@ -121,16 +126,32 @@ impl ExportedProject {
             None => util::path_to_config_string(&snapshot.active_path)?,
         };
 
+        // tmux permits window names that smux's own validation rejects (`:`
+        // and `.` break tmux target addressing; duplicates resolve
+        // ambiguously), so captured names are rewritten before export — the
+        // saved project must connect cleanly. The startup window is remapped
+        // to the rewritten name of the same window.
+        let window_names = sanitized_window_names(&snapshot.windows);
+        let startup_window = snapshot
+            .windows
+            .iter()
+            .position(|window| window.active)
+            .and_then(|index| window_names.get(index))
+            .or_else(|| window_names.first())
+            .cloned()
+            .unwrap_or_else(|| snapshot.active_window.clone());
+
         let windows = snapshot
             .windows
             .into_iter()
-            .map(ExportedWindow::from_snapshot)
+            .zip(window_names)
+            .map(|(window, name)| ExportedWindow::from_snapshot(window, name))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             path,
             session_name: snapshot.session_name,
-            startup_window: snapshot.active_window,
+            startup_window,
             startup_pane: snapshot.active_pane,
             windows,
         })
@@ -163,8 +184,32 @@ impl ExportedProject {
     }
 }
 
+/// Rewrite captured tmux window names into names that pass smux's template
+/// validation: `:` and `.` become `_`, empty names fall back to "window", and
+/// duplicates get a numeric suffix (`dev`, `dev-2`, ...).
+fn sanitized_window_names(windows: &[WindowSnapshot]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut names = Vec::with_capacity(windows.len());
+    for window in windows {
+        let base = window.name.replace([':', '.'], "_");
+        let base = if base.is_empty() {
+            "window".to_owned()
+        } else {
+            base
+        };
+        let mut candidate = base.clone();
+        let mut counter = 2;
+        while !seen.insert(candidate.clone()) {
+            candidate = format!("{base}-{counter}");
+            counter += 1;
+        }
+        names.push(candidate);
+    }
+    names
+}
+
 impl ExportedWindow {
-    fn from_snapshot(window: WindowSnapshot) -> Result<Self> {
+    fn from_snapshot(window: WindowSnapshot, name: String) -> Result<Self> {
         let all_same_cwd = all_panes_share_cwd(&window.panes);
         let cwd = if all_same_cwd {
             Some(util::path_to_config_string(&window.panes[0].cwd)?)
@@ -186,7 +231,7 @@ impl ExportedWindow {
         };
 
         Ok(Self {
-            name: window.name,
+            name,
             cwd,
             layout: None,
             synchronize: window.synchronize,
@@ -276,14 +321,11 @@ fn toml_string(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-    use std::sync::Mutex;
 
     use super::{ExportedProject, ExportedWindow, capture_project};
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner};
     use crate::tmux::{PaneSnapshot, Tmux, WindowSnapshot};
     use std::sync::Arc;
-
-    static HOME_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn exported_project_renders_inline_toml() {
@@ -321,7 +363,7 @@ mod tests {
 
     #[test]
     fn capture_project_uses_active_pane_path_by_default() {
-        let _guard = HOME_ENV_LOCK.lock().expect("home env lock should work");
+        let _guard = crate::util::test_env::lock();
         unsafe {
             std::env::set_var("HOME", "/Users/stefan");
         }
@@ -381,22 +423,56 @@ mod tests {
     }
 
     #[test]
+    fn sanitizes_and_dedupes_captured_window_names() {
+        let _guard = crate::util::test_env::lock();
+        let pane = PaneSnapshot {
+            cwd: PathBuf::from("/tmp/demo"),
+            active: true,
+            layout: None,
+        };
+        let window = |name: &str, active: bool| WindowSnapshot {
+            name: name.to_owned(),
+            synchronize: false,
+            active,
+            panes: vec![pane.clone()],
+        };
+
+        let snapshot = crate::tmux::SessionSnapshot {
+            session_name: "demo".to_owned(),
+            active_window: "vim.main".to_owned(),
+            active_pane: 0,
+            active_path: PathBuf::from("/tmp/demo"),
+            windows: vec![window("vim.main", false), window("vim:main", true)],
+        };
+
+        let project =
+            ExportedProject::from_snapshot(snapshot, None).expect("export should succeed");
+        assert_eq!(project.windows[0].name, "vim_main");
+        assert_eq!(project.windows[1].name, "vim_main-2");
+        // The startup window follows the rewritten name of the active window.
+        assert_eq!(project.startup_window, "vim_main-2");
+    }
+
+    #[test]
     fn exported_window_omits_duplicate_pane_cwds() {
-        let _guard = HOME_ENV_LOCK.lock().expect("home env lock should work");
+        let _guard = crate::util::test_env::lock();
         unsafe {
             std::env::set_var("HOME", "/Users/stefan");
         }
 
-        let window = ExportedWindow::from_snapshot(WindowSnapshot {
-            name: "editor".to_owned(),
-            synchronize: false,
-            active: true,
-            panes: vec![PaneSnapshot {
-                cwd: PathBuf::from("/Users/stefan/code/demo"),
+        let window = ExportedWindow::from_snapshot(
+            WindowSnapshot {
+                name: "editor".to_owned(),
+                synchronize: false,
                 active: true,
-                layout: None,
-            }],
-        })
+                panes: vec![PaneSnapshot {
+                    cwd: PathBuf::from("/Users/stefan/code/demo"),
+                    active: true,
+                    layout: None,
+                }],
+            },
+            "editor".to_owned(),
+        )
         .expect("window export should succeed");
 
         assert_eq!(window.cwd.as_deref(), Some("~/code/demo"));
