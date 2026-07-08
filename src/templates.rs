@@ -454,7 +454,7 @@ mod tests {
     fn expands_tilde_window_and_pane_paths() -> Result<()> {
         let _guard = crate::util::test_env::lock();
         unsafe {
-            std::env::set_var("HOME", "/Users/stefan");
+            std::env::set_var("HOME", "/Users/dev");
         }
 
         let template = Template {
@@ -491,11 +491,11 @@ mod tests {
         let plan = build_session_plan("demo", Path::new("/tmp/demo"), &template)?;
         assert_eq!(
             plan.windows[0].cwd,
-            Path::new("/Users/stefan/Development/smux")
+            Path::new("/Users/dev/Development/smux")
         );
         assert_eq!(
             plan.windows[0].panes[1].cwd,
-            Path::new("/Users/stefan/Development/nixpkgs")
+            Path::new("/Users/dev/Development/nixpkgs")
         );
 
         unsafe {

@@ -365,7 +365,7 @@ mod tests {
     fn capture_project_uses_active_pane_path_by_default() {
         let _guard = crate::util::test_env::lock();
         unsafe {
-            std::env::set_var("HOME", "/Users/stefan");
+            std::env::set_var("HOME", "/Users/dev");
         }
 
         let runner = Arc::new(FakeCommandRunner::new());
@@ -398,7 +398,7 @@ mod tests {
                 success: true,
                 code: Some(0),
             },
-            stdout: b"0\t/Users/stefan/code/demo\t1\t0\t0\t100\t40\n1\t/Users/stefan/code/demo/server\t0\t50\t0\t50\t40\n".to_vec(),
+            stdout: b"0\t/Users/dev/code/demo\t1\t0\t0\t100\t40\n1\t/Users/dev/code/demo/server\t0\t50\t0\t50\t40\n".to_vec(),
             stderr: Vec::new(),
         }));
 
@@ -457,7 +457,7 @@ mod tests {
     fn exported_window_omits_duplicate_pane_cwds() {
         let _guard = crate::util::test_env::lock();
         unsafe {
-            std::env::set_var("HOME", "/Users/stefan");
+            std::env::set_var("HOME", "/Users/dev");
         }
 
         let window = ExportedWindow::from_snapshot(
@@ -466,7 +466,7 @@ mod tests {
                 synchronize: false,
                 active: true,
                 panes: vec![PaneSnapshot {
-                    cwd: PathBuf::from("/Users/stefan/code/demo"),
+                    cwd: PathBuf::from("/Users/dev/code/demo"),
                     active: true,
                     layout: None,
                 }],

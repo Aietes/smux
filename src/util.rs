@@ -170,7 +170,7 @@ mod tests {
     fn expands_tilde_paths() {
         let _guard = crate::util::test_env::lock();
         unsafe {
-            std::env::set_var("HOME", "/Users/stefan");
+            std::env::set_var("HOME", "/Users/dev");
         }
 
         let path = expand_tilde_path(Path::new("~/code"));
@@ -216,7 +216,7 @@ mod tests {
     fn collapses_home_for_config_paths() {
         let _guard = crate::util::test_env::lock();
         unsafe {
-            std::env::set_var("HOME", "/Users/stefan");
+            std::env::set_var("HOME", "/Users/dev");
         }
 
         let home = std::env::var("HOME").expect("HOME should be set");
