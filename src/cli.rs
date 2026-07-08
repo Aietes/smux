@@ -60,6 +60,9 @@ pub enum Commands {
         /// Directory to run template auto-detection against.
         #[arg(value_hint = ValueHint::DirPath)]
         path: PathBuf,
+        /// Print only the winning template name; exit 1 when nothing matches.
+        #[arg(long, short = 'q')]
+        quiet: bool,
     },
     /// Switch to or attach an existing tmux session.
     Switch {
@@ -74,11 +77,23 @@ pub enum Commands {
     )]
     Prune,
     /// Print current tmux session names.
-    ListSessions,
+    ListSessions {
+        /// Emit a JSON array instead of one name per line.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print configured template names.
-    ListTemplates,
+    ListTemplates {
+        /// Emit a JSON array instead of one name per line.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print configured project entries.
-    ListProjects,
+    ListProjects {
+        /// Emit a JSON array of {name, path} objects instead of tab-separated lines.
+        #[arg(long)]
+        json: bool,
+    },
     /// Validate runtime dependencies and basic environment state.
     Doctor {
         /// Apply safe fixes (create missing config and directories) instead of

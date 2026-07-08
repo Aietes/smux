@@ -359,10 +359,10 @@ smux connect [--template <name>] [--session-name <name>] <path>
 smux switch <session>
 smux last
 smux prune
-smux list-sessions
-smux list-templates
-smux list-projects
-smux detect <path>
+smux list-sessions [--json]
+smux list-templates [--json]
+smux list-projects [--json]
+smux detect [--quiet] <path>
 smux doctor [--fix]
 smux save-project [<name>] [--session <name>] [--path <path>] [--stdout] [--force]
 smux init
@@ -373,11 +373,11 @@ smux skill [--dir <path>]
 
 Every command accepts a global `-c`/`--config <path>` to use a config file other than `~/.config/smux/config.toml`.
 
-`smux detect <path>` prints the templates that match a directory, ranked the way smux auto-selects them, so you can see which one a folder would open with (see [Smart template selection](#smart-template-selection)).
+`smux detect <path>` prints the templates that match a directory, ranked the way smux auto-selects them, so you can see which one a folder would open with (see [Smart template selection](#smart-template-selection)). For scripts, `--quiet` prints only the winning template name and exits 1 when nothing matches, and the `list-*` commands accept `--json`.
 
 ## Completions And Man Pages
 
-Completions are available for zsh, bash, fish, elvish, and powershell:
+Completions are available for zsh, bash, fish, elvish, and powershell. The zsh script also completes `smux switch <TAB>` with live tmux session names:
 
 ```bash
 smux completions zsh

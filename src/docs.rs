@@ -1,10 +1,10 @@
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use clap_complete::Generator;
 use clap_complete::Shell;
-use clap_complete::aot::{generate, generate_to};
+use clap_complete::aot::generate;
 
 use crate::cli::Cli;
 
@@ -13,20 +13,57 @@ const STATIC_CONFIG_MANPAGE: &str = include_str!("../docs/smux-config.5");
 pub fn generate_completions(shell: Shell, dir: Option<&Path>) -> Result<Option<PathBuf>> {
     let mut command = Cli::command();
 
+    let mut buffer = Vec::new();
+    generate(shell, &mut command, "smux", &mut buffer);
+    let mut script =
+        String::from_utf8(buffer).context("generated completions were not valid utf-8")?;
+    if shell == Shell::Zsh {
+        script = complete_sessions_dynamically(script);
+    }
+
     match dir {
         Some(dir) => {
             fs::create_dir_all(dir).with_context(|| {
                 format!("failed to create completion directory {}", dir.display())
             })?;
-            let path = generate_to(shell, &mut command, "smux", dir)
-                .with_context(|| format!("failed to write completions to {}", dir.display()))?;
+            let path = dir.join(shell.file_name("smux"));
+            fs::write(&path, script)
+                .with_context(|| format!("failed to write completions to {}", path.display()))?;
             Ok(Some(path))
         }
         None => {
-            let mut stdout = io::stdout();
-            generate(shell, &mut command, "smux", &mut stdout);
+            print!("{script}");
             Ok(None)
         }
+    }
+}
+
+/// clap's static zsh script completes the `smux switch` positional with
+/// `_default` (filenames). Rewrite it to offer live tmux session names —
+/// the single most useful completion a session switcher can have.
+fn complete_sessions_dynamically(script: String) -> String {
+    let helper = "\
+(( $+functions[_smux_live_sessions] )) ||\n\
+_smux_live_sessions() {\n\
+    local -a sessions\n\
+    sessions=(${(f)\"$(smux list-sessions 2>/dev/null)\"})\n\
+    compadd -a sessions\n\
+}\n";
+
+    let patched = script.replace(
+        ":session -- Exact name of the tmux session to switch to:_default",
+        ":session -- Exact name of the tmux session to switch to:_smux_live_sessions",
+    );
+
+    // Insert the helper right after the #compdef line so it is defined before
+    // the script's trailing `_smux "$@"` call runs.
+    match patched.find('\n') {
+        Some(index) => format!(
+            "{}{helper}{}",
+            &patched[..index + 1],
+            &patched[index + 1..]
+        ),
+        None => patched,
     }
 }
 
@@ -96,4 +133,36 @@ fn write_static_man_page(
         .with_context(|| format!("failed to write static man page {}", destination.display()))?;
     paths.push(destination);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use clap_complete::Shell;
+
+    #[test]
+    fn zsh_completions_offer_live_session_names_for_switch() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let path = super::generate_completions(Shell::Zsh, Some(tempdir.path()))
+            .expect("completions should generate")
+            .expect("a path should be returned");
+        let script = std::fs::read_to_string(path).expect("script should be readable");
+
+        // The helper is defined and the switch positional uses it. If a clap
+        // upgrade changes the generated shape, this pins the expectation.
+        assert!(script.contains("_smux_live_sessions() {"));
+        assert!(
+            script.contains(":session -- Exact name of the tmux session to switch to:_smux_live_sessions")
+        );
+        assert!(script.starts_with("#compdef smux"));
+    }
+
+    #[test]
+    fn bash_completions_still_generate() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let path = super::generate_completions(Shell::Bash, Some(tempdir.path()))
+            .expect("completions should generate")
+            .expect("a path should be returned");
+        let script = std::fs::read_to_string(path).expect("script should be readable");
+        assert!(script.contains("smux"));
+    }
 }

@@ -65,9 +65,14 @@ pub fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        Commands::ListSessions => {
-            for session in tmux.list_sessions()? {
-                println!("{session}");
+        Commands::ListSessions { json } => {
+            let sessions = tmux.list_sessions()?;
+            if json {
+                println!("{}", json_name_array(&sessions));
+            } else {
+                for session in sessions {
+                    println!("{session}");
+                }
             }
 
             Ok(())
@@ -93,19 +98,24 @@ pub fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        Commands::ListTemplates => {
+        Commands::ListTemplates { json } => {
             let loaded = config::load(config.as_deref())?;
             let mut names = loaded.config.templates.keys().cloned().collect::<Vec<_>>();
             names.sort();
-            for name in names {
-                println!("{name}");
+            if json {
+                println!("{}", json_name_array(&names));
+            } else {
+                for name in names {
+                    println!("{name}");
+                }
             }
             Ok(())
         }
-        Commands::ListProjects => {
+        Commands::ListProjects { json } => {
             let loaded = config::load_workspace(config.as_deref())?;
             let mut names = loaded.projects.keys().cloned().collect::<Vec<_>>();
             names.sort();
+            let mut lines = Vec::with_capacity(names.len());
             for name in names {
                 let project = &loaded.projects[&name];
                 // Use the graceful resolver: a project whose directory doesn't
@@ -113,11 +123,22 @@ pub fn run(cli: Cli) -> Result<()> {
                 // aborting the whole command — consistent with how `doctor` and
                 // project validation treat missing paths.
                 let resolved = util::expand_and_absolutize_path(Path::new(&project.path))?;
-                println!("{name}\t{}", resolved.display());
+                if json {
+                    lines.push(format!(
+                        "{{\"name\":{},\"path\":{}}}",
+                        util::json_string(&name),
+                        util::json_string(&resolved.display().to_string())
+                    ));
+                } else {
+                    println!("{name}\t{}", resolved.display());
+                }
+            }
+            if json {
+                println!("[{}]", lines.join(","));
             }
             Ok(())
         }
-        Commands::Detect { path } => {
+        Commands::Detect { path, quiet } => {
             // Fail on a missing or non-directory path (as `connect` does) so a
             // typo doesn't read as "no template matched".
             let path = util::normalize_path(&path)?;
@@ -126,6 +147,17 @@ pub fn run(cli: Cli) -> Result<()> {
             }
             let loaded = config::load_workspace(config.as_deref())?;
             let matches = session::detect_matches(&loaded.config, &path);
+            if quiet {
+                // Script-friendly: just the winning template name, exit 1 on
+                // no match, no prose on either path.
+                return match matches.first() {
+                    Some(matched) => {
+                        println!("{}", matched.name);
+                        Ok(())
+                    }
+                    None => std::process::exit(1),
+                };
+            }
             if matches.is_empty() {
                 println!("no template auto-detects {}", path.display());
                 println!(
@@ -204,6 +236,11 @@ fn run_select(
     // hint toggle persist across those relaunches within one `smux select`.
     let hint_state = fzf::HintState::new(initial_show_hints)?;
 
+    // Scanning zoxide and the folder-search roots is the expensive part of
+    // building the entry list, and no in-picker action changes what's on
+    // disk — scan once and rebuild only sessions and projects per relaunch.
+    let directories = scan_directories(loaded.as_ref());
+
     loop {
         let config = loaded.as_ref().map(|loaded| &loaded.config);
         let display_style = DisplayStyle::from_config(config);
@@ -219,6 +256,7 @@ fn run_select(
             loaded.as_ref(),
             display_style,
             current_session.as_deref(),
+            &directories,
         )?;
 
         let Some(selection) = fzf::select(entries, &picker_bindings, &picker_preview, &hint_state)?
@@ -324,6 +362,14 @@ fn run_select(
             (fzf::SelectAction::ChooseTemplate, _) => continue,
         }
     }
+}
+
+fn json_name_array(names: &[String]) -> String {
+    let items = names
+        .iter()
+        .map(|name| util::json_string(name))
+        .collect::<Vec<_>>();
+    format!("[{}]", items.join(","))
 }
 
 /// The picker drives fzf, which needs a terminal to draw on; without one
@@ -443,11 +489,60 @@ fn save_project_from_picker(
     )
 }
 
+/// Directory candidates for the picker, gathered once per `smux select` run.
+struct ScannedDirectories {
+    /// Deduplicated directories, zoxide results first.
+    directories: Vec<String>,
+    zoxide_available: bool,
+}
+
+fn scan_directories(loaded: Option<&config::LoadedConfig>) -> ScannedDirectories {
+    let mut directories = Vec::new();
+    let mut directory_keys = HashSet::new();
+    let mut zoxide_available = true;
+
+    match zoxide::list_directories() {
+        Ok(zoxide_directories) => {
+            for directory in zoxide_directories {
+                if insert_directory_key(&mut directory_keys, &directory) {
+                    directories.push(directory);
+                }
+            }
+        }
+        Err(error) => {
+            zoxide_available = false;
+            eprintln!("warning: {error:#}");
+        }
+    }
+
+    let folder_search_settings = loaded
+        .map(|loaded| loaded.config.settings.folder_search.clone())
+        .unwrap_or_default();
+    let result = folder_search::list_directories(&folder_search_settings);
+    for warning in result.warnings {
+        eprintln!(
+            "warning: folder search {}: {}",
+            warning.root, warning.message
+        );
+    }
+    for directory in result.directories {
+        if insert_directory_key(&mut directory_keys, &directory) {
+            directories.push(directory);
+        }
+    }
+
+    ScannedDirectories {
+        directories,
+        zoxide_available,
+    }
+}
+
 fn select_entries(
     tmux: &Tmux,
     loaded: Option<&config::LoadedConfig>,
     display_style: DisplayStyle,
     current_session: Option<&str>,
+    directories: &ScannedDirectories,
 ) -> Result<Vec<fzf::Entry>> {
     let mut entries = Vec::new();
     let sessions = tmux.list_sessions()?;
@@ -506,46 +601,18 @@ fn select_entries(
         }
     }
 
-    let mut zoxide_available = true;
-    let mut directory_count = 0;
-    let mut directory_keys = HashSet::new();
-
-    match zoxide::list_directories() {
-        Ok(directories) => {
-            for directory in directories {
-                if insert_directory_key(&mut directory_keys, &directory) {
-                    directory_count += 1;
-                    entries.push(fzf::Entry::directory(display_style, directory));
-                }
-            }
-        }
-        Err(error) => {
-            zoxide_available = false;
-            eprintln!("warning: {error:#}");
-        }
-    }
-
-    let folder_search_settings = loaded
-        .map(|loaded| loaded.config.settings.folder_search.clone())
-        .unwrap_or_default();
-    let result = folder_search::list_directories(&folder_search_settings);
-    for warning in result.warnings {
-        eprintln!(
-            "warning: folder search {}: {}",
-            warning.root, warning.message
-        );
-    }
-    for directory in result.directories {
-        if insert_directory_key(&mut directory_keys, &directory) {
-            directory_count += 1;
-            entries.push(fzf::Entry::directory(display_style, directory));
-        }
+    for directory in &directories.directories {
+        entries.push(fzf::Entry::directory(display_style, directory.clone()));
     }
 
     if entries.is_empty() {
         bail!(
             "{}",
-            empty_select_message(session_count, directory_count, zoxide_available)
+            empty_select_message(
+                session_count,
+                directories.directories.len(),
+                directories.zoxide_available
+            )
         );
     }
 

@@ -360,6 +360,104 @@ fn detect_reports_the_winning_template_and_its_markers() {
 }
 
 #[test]
+fn detect_quiet_prints_only_the_winning_template() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let config_path = tempdir.path().join("config.toml");
+    let template_dir = tempdir.path().join("templates");
+    fs::create_dir(&template_dir).expect("template dir should be created");
+    fs::write(&config_path, "[settings]\n").expect("config fixture should be written");
+    fs::write(
+        template_dir.join("rust.toml"),
+        "match = [\"Cargo.toml\"]\nwindows = [{ name = \"main\" }]\n",
+    )
+    .expect("template fixture should be written");
+
+    let target = tempdir.path().join("proj");
+    fs::create_dir(&target).expect("target dir should be created");
+    fs::write(target.join("Cargo.toml"), "").expect("marker should be written");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["detect", "--quiet"]);
+    command.arg(&target);
+    command.args(["--config"]);
+    command.arg(&config_path);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+
+    command.assert().success().stdout("rust\n");
+}
+
+#[test]
+fn detect_quiet_exits_one_without_a_match() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let config_path = tempdir.path().join("config.toml");
+    fs::write(&config_path, "[settings]\n").expect("config fixture should be written");
+
+    let target = tempdir.path().join("plain");
+    fs::create_dir(&target).expect("target dir should be created");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["detect", "--quiet"]);
+    command.arg(&target);
+    command.args(["--config"]);
+    command.arg(&config_path);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+
+    command.assert().failure().code(1).stdout("");
+}
+
+#[test]
+fn list_projects_json_emits_name_and_path_objects() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let config_path = tempdir.path().join("config.toml");
+    let project_dir = tempdir.path().join("projects");
+    fs::create_dir(&project_dir).expect("project dir should be created");
+    fs::write(&config_path, "[settings]\n").expect("config fixture should be written");
+    fs::write(
+        project_dir.join("ghost.toml"),
+        "path = \"/tmp/definitely-not-a-real-smux-dir\"\n",
+    )
+    .expect("project fixture should be written");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["list-projects", "--json", "--config"]);
+    command.arg(&config_path);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+
+    command.assert().success().stdout(
+        "[{\"name\":\"ghost\",\"path\":\"/tmp/definitely-not-a-real-smux-dir\"}]\n",
+    );
+}
+
+#[test]
+fn list_templates_json_emits_a_name_array() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let tool_dir = fake_tool_dir();
+    let config_path = tempdir.path().join("config.toml");
+    let template_dir = tempdir.path().join("templates");
+    fs::create_dir(&template_dir).expect("template dir should be created");
+    fs::write(&config_path, "[settings]\n").expect("config fixture should be written");
+    fs::write(
+        template_dir.join("rust.toml"),
+        "match = [\"Cargo.toml\"]\nwindows = [{ name = \"main\" }]\n",
+    )
+    .expect("template fixture should be written");
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["list-templates", "--json", "--config"]);
+    command.arg(&config_path);
+    command.env("PATH", prepend_path(tool_dir.path()));
+    command.env("XDG_CONFIG_HOME", tempdir.path());
+
+    command.assert().success().stdout("[\"rust\"]\n");
+}
+
+#[test]
 fn detect_rejects_missing_paths() {
     let tool_dir = fake_tool_dir();
 

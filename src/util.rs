@@ -152,6 +152,29 @@ pub fn exit_status_label(code: Option<i32>) -> String {
     }
 }
 
+/// Render a value as a quoted JSON string. The `--json` payloads are flat
+/// lists of names and paths, so escaping by hand beats a serde_json
+/// dependency.
+pub fn json_string(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len() + 2);
+    escaped.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            character if (character as u32) < 0x20 => {
+                escaped.push_str(&format!("\\u{:04x}", character as u32));
+            }
+            character => escaped.push(character),
+        }
+    }
+    escaped.push('"');
+    escaped
+}
+
 /// One process-wide lock for every test that mutates environment variables
 /// (HOME, TMUX, XDG_CONFIG_HOME, ...). Unit tests across all modules run in
 /// the same parallel test binary, so per-module locks don't exclude each
@@ -170,10 +193,19 @@ pub(crate) mod test_env {
 #[cfg(test)]
 mod tests {
     use super::{
-        expand_tilde_path, path_to_config_string, sanitize_session_name, validated_project_name,
-        validated_session_name,
+        expand_tilde_path, json_string, path_to_config_string, sanitize_session_name,
+        validated_project_name, validated_session_name,
     };
     use std::path::Path;
+
+    #[test]
+    fn escapes_json_strings() {
+        assert_eq!(json_string("plain"), r#""plain""#);
+        assert_eq!(json_string(r#"a"b\c"#), r#""a\"b\\c""#);
+        assert_eq!(json_string("tab\there"), r#""tab\there""#);
+        assert_eq!(json_string("bell\u{7}"), r#""bell\u0007""#);
+        assert_eq!(json_string("ünïcode"), r#""ünïcode""#);
+    }
 
     #[test]
     fn expands_tilde_paths() {
