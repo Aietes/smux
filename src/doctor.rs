@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -9,12 +10,45 @@ use crate::ui::DisplayStyle;
 use crate::util;
 use crate::zoxide;
 
-const ANSI_RESET: &str = "\x1b[0m";
-const ANSI_BOLD: &str = "\x1b[1m";
-const ANSI_DIM: &str = "\x1b[2m";
-const ANSI_GREEN: &str = "\x1b[32m";
-const ANSI_YELLOW: &str = "\x1b[33m";
-const ANSI_RED: &str = "\x1b[31m";
+struct Style {
+    reset: &'static str,
+    bold: &'static str,
+    dim: &'static str,
+    green: &'static str,
+    yellow: &'static str,
+    red: &'static str,
+}
+
+const COLOR: Style = Style {
+    reset: "\x1b[0m",
+    bold: "\x1b[1m",
+    dim: "\x1b[2m",
+    green: "\x1b[32m",
+    yellow: "\x1b[33m",
+    red: "\x1b[31m",
+};
+
+const PLAIN: Style = Style {
+    reset: "",
+    bold: "",
+    dim: "",
+    green: "",
+    yellow: "",
+    red: "",
+};
+
+impl Style {
+    /// Honor the NO_COLOR convention (set to any non-empty value) and drop
+    /// ANSI codes when stdout is piped or redirected.
+    fn detect() -> &'static Style {
+        let no_color = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty());
+        if no_color || !std::io::stdout().is_terminal() {
+            &PLAIN
+        } else {
+            &COLOR
+        }
+    }
+}
 
 pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
     let tmux = util::command_available("tmux");
@@ -191,8 +225,9 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
         .filter(|check| check.status.is_warning())
         .count();
 
-    render_report(&sections);
-    render_footer(errors, warnings);
+    let style = Style::detect();
+    render_report(&sections, style);
+    render_footer(errors, warnings, style);
 
     if errors > 0 {
         bail!("doctor checks failed");
@@ -226,12 +261,12 @@ impl Status {
         }
     }
 
-    fn color(self) -> &'static str {
+    fn color(self, style: &'static Style) -> &'static str {
         match self {
-            Self::Ok => ANSI_GREEN,
-            Self::Missing | Self::Drift => ANSI_YELLOW,
-            Self::Error => ANSI_RED,
-            Self::Unavailable => ANSI_DIM,
+            Self::Ok => style.green,
+            Self::Missing | Self::Drift => style.yellow,
+            Self::Error => style.red,
+            Self::Unavailable => style.dim,
         }
     }
 
@@ -265,7 +300,7 @@ struct Section {
     checks: Vec<Check>,
 }
 
-fn render_report(sections: &[Section]) {
+fn render_report(sections: &[Section], style: &'static Style) {
     let width = sections
         .iter()
         .flat_map(|section| &section.checks)
@@ -273,25 +308,26 @@ fn render_report(sections: &[Section]) {
         .max()
         .unwrap_or(0);
 
-    println!("{ANSI_BOLD}smux doctor{ANSI_RESET}");
+    println!("{}smux doctor{}", style.bold, style.reset);
 
     for section in sections {
         if section.checks.is_empty() {
             continue;
         }
         println!();
-        println!("{ANSI_BOLD}{}{ANSI_RESET}", section.title);
+        println!("{}{}{}", style.bold, section.title, style.reset);
         for check in &section.checks {
             let symbol = format!(
-                "{}{}{ANSI_RESET}",
-                check.status.color(),
-                check.status.symbol()
+                "{}{}{}",
+                check.status.color(style),
+                check.status.symbol(),
+                style.reset
             );
             match &check.detail {
                 Some(detail) => {
                     println!(
-                        "  {symbol} {:<width$}  {ANSI_DIM}{detail}{ANSI_RESET}",
-                        check.label
+                        "  {symbol} {:<width$}  {}{detail}{}",
+                        check.label, style.dim, style.reset
                     )
                 }
                 None => println!("  {symbol} {}", check.label),
@@ -300,15 +336,15 @@ fn render_report(sections: &[Section]) {
     }
 }
 
-fn render_footer(errors: usize, warnings: usize) {
+fn render_footer(errors: usize, warnings: usize, style: &'static Style) {
     println!();
     let summary = summary_text(errors, warnings);
     if errors > 0 {
-        println!("{ANSI_RED}✗ {summary}{ANSI_RESET}");
+        println!("{}✗ {summary}{}", style.red, style.reset);
     } else if warnings > 0 {
-        println!("{ANSI_YELLOW}⚠ {summary}{ANSI_RESET}");
+        println!("{}⚠ {summary}{}", style.yellow, style.reset);
     } else {
-        println!("{ANSI_GREEN}✓ {summary}{ANSI_RESET}");
+        println!("{}✓ {summary}{}", style.green, style.reset);
     }
 }
 

@@ -551,7 +551,10 @@ pub fn load(path: Option<&Path>) -> Result<LoadedConfig> {
     };
 
     if !path.exists() {
-        bail!("failed to read config {}", path.display());
+        bail!(
+            "no config found at {} — run `smux init` to create one",
+            path.display()
+        );
     }
 
     load_workspace(Some(&path))

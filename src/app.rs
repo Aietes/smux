@@ -21,12 +21,12 @@ const BUILTIN_TEMPLATE_LABEL: &str = "<builtin>";
 
 pub fn run(cli: Cli) -> Result<()> {
     let tmux = Tmux::new();
+    let config = cli.config;
 
     match cli.command {
         Commands::Select {
             choose_template,
             no_project_detect,
-            config,
         } => {
             let loaded = config::load_optional(config.as_deref())?;
             run_select(
@@ -41,7 +41,6 @@ pub fn run(cli: Cli) -> Result<()> {
             path,
             template,
             session_name,
-            config,
         } => {
             let loaded = config::load_optional(config.as_deref())?;
             session::connect_path(
@@ -73,14 +72,13 @@ pub fn run(cli: Cli) -> Result<()> {
 
             Ok(())
         }
-        Commands::Doctor { fix, config } => doctor::run(config.as_deref(), fix),
+        Commands::Doctor { fix } => doctor::run(config.as_deref(), fix),
         Commands::SaveProject {
             name,
             session,
             path,
             stdout,
             force,
-            config,
         } => {
             if let Some(path) = project_export::save_project(
                 &tmux,
@@ -95,7 +93,7 @@ pub fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        Commands::ListTemplates { config } => {
+        Commands::ListTemplates => {
             let loaded = config::load(config.as_deref())?;
             let mut names = loaded.config.templates.keys().cloned().collect::<Vec<_>>();
             names.sort();
@@ -104,7 +102,7 @@ pub fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        Commands::ListProjects { config } => {
+        Commands::ListProjects => {
             let loaded = config::load_workspace(config.as_deref())?;
             let mut names = loaded.projects.keys().cloned().collect::<Vec<_>>();
             names.sort();
@@ -119,7 +117,7 @@ pub fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        Commands::Detect { path, config } => {
+        Commands::Detect { path } => {
             // Fail on a missing or non-directory path (as `connect` does) so a
             // typo doesn't read as "no template matched".
             let path = util::normalize_path(&path)?;
@@ -155,7 +153,7 @@ pub fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        Commands::Init { config } => {
+        Commands::Init => {
             let path = config::init(config.as_deref())?;
             println!("{}", path.display());
             Ok(())

@@ -143,6 +143,15 @@ fn is_tmux_safe(character: char) -> bool {
     character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
 }
 
+/// Render a child-process exit code for error messages: "exit code 1", or
+/// "termination by signal" when the process died without one.
+pub fn exit_status_label(code: Option<i32>) -> String {
+    match code {
+        Some(code) => format!("exit code {code}"),
+        None => "termination by signal".to_owned(),
+    }
+}
+
 /// One process-wide lock for every test that mutates environment variables
 /// (HOME, TMUX, XDG_CONFIG_HOME, ...). Unit tests across all modules run in
 /// the same parallel test binary, so per-module locks don't exclude each

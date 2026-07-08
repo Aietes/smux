@@ -456,9 +456,15 @@ fn select_value_with_runner(
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stderr = stderr.trim();
         if stderr.is_empty() {
-            bail!("fzf exited with status {:?}", output.status.code);
+            bail!(
+                "fzf failed with {}",
+                crate::util::exit_status_label(output.status.code)
+            );
         }
-        bail!("fzf exited with status {:?}: {stderr}", output.status.code);
+        bail!(
+            "fzf failed with {}: {stderr}",
+            crate::util::exit_status_label(output.status.code)
+        );
     }
 
     let selection = String::from_utf8(output.stdout).context("fzf output was not valid utf-8")?;
@@ -537,9 +543,15 @@ fn select_with_runner(
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stderr = stderr.trim();
         if stderr.is_empty() {
-            bail!("fzf exited with status {:?}", output.status.code);
+            bail!(
+                "fzf failed with {}",
+                crate::util::exit_status_label(output.status.code)
+            );
         }
-        bail!("fzf exited with status {:?}: {stderr}", output.status.code);
+        bail!(
+            "fzf failed with {}: {stderr}",
+            crate::util::exit_status_label(output.status.code)
+        );
     }
 
     let selection = String::from_utf8(output.stdout).context("fzf output was not valid utf-8")?;

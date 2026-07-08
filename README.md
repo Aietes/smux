@@ -354,32 +354,36 @@ That reference also includes layout recipes such as:
 ## Commands
 
 ```text
-smux select [--choose-template] [--no-project-detect] [--config <path>]
-smux connect [--template <name>] [--session-name <name>] [--config <path>] <path>
+smux select [--choose-template] [--no-project-detect]
+smux connect [--template <name>] [--session-name <name>] <path>
 smux switch <session>
 smux last
 smux prune
 smux list-sessions
-smux list-templates [--config <path>]
-smux list-projects [--config <path>]
-smux detect [--config <path>] <path>
-smux doctor [--fix] [--config <path>]
-smux save-project [<name>] [--session <name>] [--path <path>] [--stdout] [--force] [--config <path>]
-smux init [--config <path>]
-smux completions zsh [--dir <path>]
+smux list-templates
+smux list-projects
+smux detect <path>
+smux doctor [--fix]
+smux save-project [<name>] [--session <name>] [--path <path>] [--stdout] [--force]
+smux init
+smux completions <shell> [--dir <path>]
 smux man [--dir <path>]
 smux skill [--dir <path>]
 ```
+
+Every command accepts a global `-c`/`--config <path>` to use a config file other than `~/.config/smux/config.toml`.
 
 `smux detect <path>` prints the templates that match a directory, ranked the way smux auto-selects them, so you can see which one a folder would open with (see [Smart template selection](#smart-template-selection)).
 
 ## Completions And Man Pages
 
-zsh completions:
+Completions are available for zsh, bash, fish, elvish, and powershell:
 
 ```bash
 smux completions zsh
 smux completions zsh --dir ~/.local/share/zsh/site-functions
+smux completions bash --dir ~/.local/share/bash-completion/completions
+smux completions fish --dir ~/.config/fish/completions
 ```
 
 man pages:

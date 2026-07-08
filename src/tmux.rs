@@ -251,7 +251,10 @@ impl Tmux {
             if status.success {
                 Ok(())
             } else {
-                bail!("tmux attach-session failed with status {:?}", status.code)
+                bail!(
+                    "tmux attach-session failed with {}",
+                    util::exit_status_label(status.code)
+                )
             }
         }
     }
@@ -760,8 +763,8 @@ fn tmux_failure_message(subcommand: &str, output: &CommandOutput) -> String {
     let stderr = stderr.trim();
     if stderr.is_empty() {
         format!(
-            "tmux {subcommand} failed with status {:?}",
-            output.status.code
+            "tmux {subcommand} failed with {}",
+            util::exit_status_label(output.status.code)
         )
     } else {
         format!("tmux {subcommand} failed: {stderr}")
