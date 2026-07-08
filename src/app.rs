@@ -54,6 +54,11 @@ pub fn run(cli: Cli) -> Result<()> {
         }
         Commands::Switch { session } => session::switch_existing(&tmux, &session),
         Commands::Last => session::switch_last(&tmux),
+        Commands::Kill { session } => {
+            let killed = session::kill_target(&tmux, session.as_deref())?;
+            println!("killed {killed}");
+            Ok(())
+        }
         Commands::Prune => {
             let pruned = session::prune_detached(&tmux)?;
             if pruned.is_empty() {

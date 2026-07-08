@@ -71,6 +71,14 @@ pub enum Commands {
     },
     /// Switch to the most recently used tmux session.
     Last,
+    /// Kill a tmux session (default: the current one).
+    #[command(
+        long_about = "Kill a tmux session by exact name. With no name, inside tmux, the client switches to the last session first and then kills the one it was on, so the terminal survives the kill."
+    )]
+    Kill {
+        /// Exact name of the session to kill. Defaults to the current session.
+        session: Option<String>,
+    },
     /// Kill all detached tmux sessions.
     #[command(
         long_about = "Kill every tmux session that has no attached client. The session you are currently attached to is preserved; outside tmux, all sessions are detached and will be killed."

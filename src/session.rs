@@ -345,6 +345,28 @@ fn existing_session_name(session: &str) -> Result<&str> {
     Ok(session)
 }
 
+/// `smux kill [<session>]`: kill the named session, or — with no name, inside
+/// tmux — switch the client to the last session first and then kill the one
+/// it was on, so the terminal survives the kill. Returns the killed name.
+pub fn kill_target(tmux: &Tmux, session: Option<&str>) -> Result<String> {
+    match session {
+        Some(session) => {
+            kill_existing(tmux, session)?;
+            Ok(session.to_owned())
+        }
+        None => {
+            let current = tmux
+                .current_session()?
+                .context("smux kill without a session name only works inside tmux")?;
+            // Best effort: with no other session to land on this fails and
+            // the client simply exits with the kill, like `tmux kill-session`.
+            let _ = tmux.switch_to_last();
+            tmux.kill_session(&current)?;
+            Ok(current)
+        }
+    }
+}
+
 pub fn switch_last(tmux: &Tmux) -> Result<()> {
     tmux.switch_to_last()
 }
@@ -398,6 +420,53 @@ mod tests {
         let recorded = runner.recorded();
         assert_eq!(recorded[0].args, ["has-session", "-t", "=my app"]);
         assert_eq!(recorded[1].args, ["kill-session", "-t", "=my app"]);
+    }
+
+    #[test]
+    fn kill_target_kills_the_named_session_exactly() {
+        use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner};
+        use crate::tmux::Tmux;
+        use std::sync::Arc;
+
+        let ok = || {
+            Ok(CommandOutput {
+                status: CommandStatus {
+                    success: true,
+                    code: Some(0),
+                },
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+        };
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok());
+        runner.push_capture(ok());
+        let tmux = Tmux::with_runner(runner.clone());
+
+        let killed = super::kill_target(&tmux, Some("demo")).expect("kill should succeed");
+        assert_eq!(killed, "demo");
+
+        let recorded = runner.recorded();
+        assert_eq!(recorded[0].args, ["has-session", "-t", "=demo"]);
+        assert_eq!(recorded[1].args, ["kill-session", "-t", "=demo"]);
+    }
+
+    #[test]
+    fn kill_target_without_a_name_requires_tmux() {
+        use crate::process::FakeCommandRunner;
+        use crate::tmux::Tmux;
+        use std::sync::Arc;
+
+        let _guard = crate::util::test_env::lock();
+        unsafe {
+            std::env::remove_var("TMUX");
+        }
+
+        let runner = Arc::new(FakeCommandRunner::new());
+        let tmux = Tmux::with_runner(runner);
+
+        let error = super::kill_target(&tmux, None).expect_err("kill should fail outside tmux");
+        assert!(error.to_string().contains("inside tmux"));
     }
 
     #[test]

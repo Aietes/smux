@@ -472,6 +472,17 @@ fn detect_rejects_missing_paths() {
 }
 
 #[test]
+fn kill_reports_the_killed_session() {
+    let tool_dir = fake_tool_dir();
+
+    let mut command = Command::cargo_bin("smux").expect("binary should build");
+    command.args(["kill", "demo"]);
+    command.env("PATH", prepend_path(tool_dir.path()));
+
+    command.assert().success().stdout(contains("killed demo"));
+}
+
+#[test]
 fn skill_writes_skill_md_to_the_given_dir() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let skill_dir = tempdir.path().join("skills").join("smux");

@@ -171,11 +171,13 @@ smux connect ~/code/myapp
 smux connect --template rust ~/code/myapp   # force a specific template
 ```
 
-Switch sessions, jump to the previous one, or clean up detached ones:
+Switch sessions, jump to the previous one, kill one, or clean up detached ones:
 
 ```bash
 smux switch myapp   # switch to or attach a session by name
 smux last           # switch to the most recently used session
+smux kill myapp     # kill a session by name
+smux kill           # kill the current session, switching to the last one first
 smux prune          # kill all detached sessions
 ```
 
@@ -360,6 +362,7 @@ smux select [--choose-template] [--no-project-detect]
 smux connect [--template <name>] [--session-name <name>] <path>
 smux switch <session>
 smux last
+smux kill [<session>]
 smux prune
 smux list-sessions [--json]
 smux list-templates [--json]
