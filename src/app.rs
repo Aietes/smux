@@ -68,8 +68,12 @@ pub fn run(cli: Cli) -> Result<()> {
             if target.exists() {
                 eprintln!("{} already exists, connecting", target.display());
             } else {
+                // `--` keeps a URL or directory starting with `-` from being
+                // parsed as a git flag (e.g. `--upload-pack=<cmd>` executes
+                // arbitrary commands).
                 let args = vec![
                     "clone".to_owned(),
+                    "--".to_owned(),
                     url.clone(),
                     util::path_to_string(&target)?,
                 ];

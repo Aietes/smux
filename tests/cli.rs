@@ -486,10 +486,16 @@ fn kill_reports_the_killed_session() {
 fn clone_runs_git_and_connects() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let tool_dir = fake_tool_dir();
-    // A git stub that "clones" by creating the target directory ($3), so the
-    // subsequent connect finds a real path.
+    // A git stub that "clones" by creating the target directory, so the
+    // subsequent connect finds a real path. It also asserts the `--`
+    // separator smux must pass so `-`-prefixed URLs can't smuggle git flags
+    // (argument injection, e.g. --upload-pack).
     let git = tool_dir.path().join("git");
-    fs::write(&git, "#!/bin/sh\nmkdir -p \"$3\"\n").expect("git stub should be written");
+    fs::write(
+        &git,
+        "#!/bin/sh\n[ \"$2\" = \"--\" ] || exit 9\nmkdir -p \"$4\"\n",
+    )
+    .expect("git stub should be written");
     let mut permissions = fs::metadata(&git)
         .expect("git stub metadata should be readable")
         .permissions();
