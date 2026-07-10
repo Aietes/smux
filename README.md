@@ -51,8 +51,9 @@ Runtime dependencies:
 
 - required: `tmux`, `fzf`
 - optional but recommended: `zoxide`
+- optional: `gh` (GitHub CLI) — powers the `smux clone` repository browser
 
-If `zoxide` is unavailable, `smux select` still works with tmux sessions, saved projects, and folder search.
+If `zoxide` is unavailable, `smux select` still works with tmux sessions, saved projects, and folder search. Without `gh`, `smux clone` still clones by URL.
 
 ## Quick Start
 

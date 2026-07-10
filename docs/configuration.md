@@ -650,10 +650,14 @@ Validation includes:
 
 - `default_template` must exist if set
 - each template must contain at least one window
+- window names must be unique within a template and must not contain `:` or `.` (tmux target separators)
 - `startup_window` must refer to an existing template window
 - `startup_pane` must be valid for the chosen startup window
 - a window cannot define both `command` and `panes`
 - a `panes` array cannot be empty
+- `env` names must not be empty or contain `=`
+- `on_create` must not be blank if set
+- picker bindings must be non-empty and unique
 - project `template` references must exist
 - project paths must be expandable and valid
 
@@ -678,10 +682,12 @@ Current behavior:
 - `Ctrl-S` limits the main picker to sessions
 - `Ctrl-P` limits the main picker to saved projects
 - `Ctrl-F` limits the main picker to folders
-- `Ctrl-X` closes the selected non-current tmux session or deletes the selected project file, and keeps the picker open
+- `Ctrl-W` switches to individual tmux windows across all sessions; windows are hidden from the default list, and Enter jumps straight to the selected window
+- `Ctrl-X` closes the selected non-current tmux session or window, or deletes the selected project file, and keeps the picker open
 - `Alt-S` saves (or updates) the selected tmux session as a project, and keeps the picker open
-- `Ctrl-R` renames the selected tmux session, and keeps the picker open
+- `Ctrl-R` renames the selected tmux session or window, and keeps the picker open
 - `Ctrl-E` opens the selected project (or broken project) file in `$EDITOR`, and returns to the picker
+- `Ctrl-T` opens the selected folder with the template chooser, overriding auto-detection for that one folder
 - `Ctrl-T` opens the selected folder and prompts for its template, overriding auto-detection for that folder
 - `?` shows or hides the keyboard-shortcut hint bar
 - these keybinds are configurable through `[settings.picker.bindings]`

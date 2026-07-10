@@ -4,15 +4,48 @@ All notable changes to `smux` are documented in this file.
 
 The format is based on Keep a Changelog and uses semantic-versioned release headings.
 
-## [Unreleased]
+## [0.4.0] - 2026-07-10
+
+### Added
+
+- **`env` tables on templates and projects** — set per-workspace environment variables (`env = { AWS_PROFILE = "dev" }`) applied via `tmux new-session -e` (needs tmux >= 3.2; the flag is only emitted when env is configured). Project entries merge over the template's and win on conflicts, regardless of whether the template came from the project, auto-detection, or the built-in fallback
+- **`on_create` lifecycle hook** — a shell command on a template or project that runs once, in the session root, with the session `env` applied, *before* the session is created — so services it starts (`docker compose up -d`, direnv, ...) are ready when pane commands launch. A failing hook aborts the connect with its stderr and leaves no half-built session; re-attaching does not re-run it. Projects override the template's hook
+- **`smux kill [<session>]`** — kill a session by exact name; with no name, inside tmux, the client switches to the last session first and then kills the one it was on, so the terminal survives
+- **`smux clone [<url>] [<dir>]`** — clone and connect in one step. With a URL it runs `git clone` and opens the checkout with template auto-detection. Without one it opens a fuzzy browser over your GitHub repositories (requires the optional `gh` CLI) showing visibility, last update, and description, then clones the selection with `gh repo clone`. `[settings.clone] root` sets where checkouts land, `owners` adds extra GitHub users/orgs to the browser, `--no-connect` just clones and prints the path, and `--template` overrides detection
+- **window-level picker mode** — `Ctrl-W` (configurable as `[settings.picker.bindings] windows`) switches the picker to individual tmux windows across all sessions; Enter jumps straight to the selected window, `Ctrl-X` closes it, `Ctrl-R` renames it, and the preview shows it in session context. Windows stay out of the default list
+- `smux detect --quiet` prints only the winning template name and exits 1 when nothing matches, for scripts and prompts
+- `--json` on `list-sessions`, `list-templates`, and `list-projects` for machine-readable output
+- the generated zsh completions now complete `smux switch <TAB>` with live tmux session names
+- `--config` is now a global flag with a `-c` short form (`smux -c x doctor`); the old per-subcommand position keeps working
+- `smux doctor` reports the optional `gh` dependency
 
 ### Changed
 
 - the picker now jumps the cursor back to the top (best) match whenever you change the search query, instead of leaving it wherever you had scrolled — so refining a search always lands on the most relevant result
+- the picker scans zoxide and the folder-search roots once per run instead of after every in-picker action, so it relaunches noticeably faster on large home directories
+- `smux doctor` emits ANSI colors only on a terminal and honors `NO_COLOR`
+- child-process failures now read "exit code 1" / "termination by signal" instead of debug-formatted values, and a missing config file suggests `smux init`
+- every CLI flag now has help text
+- `Cargo.toml` declares `rust-version = "1.85"` and release builds are stripped with thin LTO
+
+### Fixed
+
+- tmux targets now use the exact-match `=name` form, so `smux switch app` can no longer silently prefix-match a session named `app-server` (the same applied to kill, rename, and existence checks)
+- sessions created outside smux with names smux would never generate (spaces, unicode) can now be opened, killed, and renamed from the picker instead of being listed but unreachable — existing tmux names are used verbatim, and a failed delete keeps the picker alive
+- `smux select` without an interactive terminal fails fast instead of hanging forever
+- the `choose_template` picker binding is validated like the others, so a duplicate or empty binding is rejected at load time
+- `smux save-project` rewrites captured window names that would fail on reconnect (`:` and `.` become `_`, duplicates get a suffix) and remaps `startup_window` accordingly; templates also validate window names at load time so `doctor` catches bad ones
+- `smux detect` on a missing or non-directory path exits with an error instead of reporting "no template matched"
+- deleting the current session from the picker now explains why it is refused instead of silently doing nothing
+
+### Security
+
+- `smux clone` passes `--` to `git clone`, so a URL or directory starting with `-` cannot smuggle git flags (argument injection, e.g. `--upload-pack`)
 
 ### Documentation
 
 - updated installation and distribution docs now that `smux` is packaged in nixpkgs
+- documented `env`, `on_create`, `[settings.clone]`, the window picker mode, and all new flags across the README, the configuration reference, the man pages, the JSON schemas, and the bundled Claude Code skill
 
 ## [0.3.1] - 2026-07-01
 

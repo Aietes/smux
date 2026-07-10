@@ -111,6 +111,8 @@ to preserve your exact split sequence from the `pane.layout` values.
 match = ["Cargo.toml"]
 startup_window = "editor"
 startup_pane = 0
+env = { RUST_LOG = "debug" }        # optional: session environment (tmux >= 3.2)
+on_create = "docker compose up -d"  # optional: runs once in the session root before creation
 windows = [
   { name = "editor", command = "nvim" },
   { name = "cargo", layout = "main-horizontal", panes = [
@@ -197,13 +199,14 @@ session.
 ## Useful commands
 
 smux commands operate on `~/.config/smux` by default — no flag needed for normal
-use. To target a different config root, pass `--config <path>` **after** the
-subcommand (it's a per-subcommand flag: `smux doctor --config <path>`, not
-`smux --config <path> doctor`).
+use. To target a different config root, pass the global `-c`/`--config <path>`
+flag (either position works: `smux -c <path> doctor` or `smux doctor --config <path>`).
 
 - `smux list-templates` / `smux list-projects` — what smux currently sees
+  (`--json` for machine-readable output)
 - `smux detect <dir>` — show (and debug) which template auto-detects for a folder,
-  ranked, with the matched markers; the `→` entry is the one smux would apply
+  ranked, with the matched markers; the `→` entry is the one smux would apply.
+  `--quiet` prints only the winning name and exits 1 on no match — ideal for scripts
 - `smux doctor` — validate everything; `smux doctor --fix` — also refresh `#:schema`
 - `smux connect --template <name> <path>` — apply a template to a folder
 - `smux save-project <session> --stdout` — print a running session's captured
