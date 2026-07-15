@@ -1561,8 +1561,8 @@ on_create = "template-hook"
             on_create: Some("project-hook".to_owned()),
         };
 
-        let effective = materialize_project_template(&config, &project)?
-            .expect("project should materialize");
+        let effective =
+            materialize_project_template(&config, &project)?.expect("project should materialize");
         assert_eq!(
             effective.env.get("AWS_PROFILE").map(String::as_str),
             Some("dev")

@@ -58,11 +58,7 @@ _smux_live_sessions() {\n\
     // Insert the helper right after the #compdef line so it is defined before
     // the script's trailing `_smux "$@"` call runs.
     match patched.find('\n') {
-        Some(index) => format!(
-            "{}{helper}{}",
-            &patched[..index + 1],
-            &patched[index + 1..]
-        ),
+        Some(index) => format!("{}{helper}{}", &patched[..index + 1], &patched[index + 1..]),
         None => patched,
     }
 }
@@ -150,9 +146,9 @@ mod tests {
         // The helper is defined and the switch positional uses it. If a clap
         // upgrade changes the generated shape, this pins the expectation.
         assert!(script.contains("_smux_live_sessions() {"));
-        assert!(
-            script.contains(":session -- Exact name of the tmux session to switch to:_smux_live_sessions")
-        );
+        assert!(script.contains(
+            ":session -- Exact name of the tmux session to switch to:_smux_live_sessions"
+        ));
         assert!(script.starts_with("#compdef smux"));
     }
 

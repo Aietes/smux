@@ -429,9 +429,10 @@ fn list_projects_json_emits_name_and_path_objects() {
     command.env("PATH", prepend_path(tool_dir.path()));
     command.env("XDG_CONFIG_HOME", tempdir.path());
 
-    command.assert().success().stdout(
-        "[{\"name\":\"ghost\",\"path\":\"/tmp/definitely-not-a-real-smux-dir\"}]\n",
-    );
+    command
+        .assert()
+        .success()
+        .stdout("[{\"name\":\"ghost\",\"path\":\"/tmp/definitely-not-a-real-smux-dir\"}]\n");
 }
 
 #[test]

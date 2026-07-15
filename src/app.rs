@@ -338,11 +338,9 @@ fn run_select(
                 }
             }
             (fzf::SelectAction::Rename, fzf::EntryKind::Window) => {
-                if let Some(new_name) = rename_window_from_picker(
-                    tmux,
-                    &selection.entry.label,
-                    &selection.entry.value,
-                )? {
+                if let Some(new_name) =
+                    rename_window_from_picker(tmux, &selection.entry.label, &selection.entry.value)?
+                {
                     eprintln!("renamed window to {new_name}");
                 }
             }
@@ -486,7 +484,11 @@ fn clone_repository(
             let Some(selection) = fzf::select_value("clone> ", choices)? else {
                 return Ok(None);
             };
-            let name = selection.rsplit('/').next().unwrap_or(&selection).to_owned();
+            let name = selection
+                .rsplit('/')
+                .next()
+                .unwrap_or(&selection)
+                .to_owned();
             let target = match dir {
                 Some(dir) => dir,
                 None => clone_destination(settings, &name),
@@ -554,11 +556,7 @@ fn require_interactive_terminal() -> Result<()> {
         .map_err(|_| anyhow::anyhow!("smux select requires an interactive terminal"))
 }
 
-fn rename_window_from_picker(
-    tmux: &Tmux,
-    label: &str,
-    window_id: &str,
-) -> Result<Option<String>> {
+fn rename_window_from_picker(tmux: &Tmux, label: &str, window_id: &str) -> Result<Option<String>> {
     // Prompt with the human-readable "session: window" label, not the @id.
     let Some(input) = prompt_line(&format!("rename window \"{label}\" to: "))? else {
         return Ok(None);

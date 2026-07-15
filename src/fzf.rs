@@ -792,17 +792,13 @@ mod tests {
         assert!(stdin.contains("session\tdemo"));
         assert!(!stdin.contains("window\t@3"));
         // ...the window filter key reloads them...
-        assert!(
-            recorded[0].args.iter().any(|arg| arg.contains(
-                "ctrl-w:change-prompt(window> )+clear-query+reload(awk -F '\\t' '$1 == \"window\"'"
-            ))
-        );
+        assert!(recorded[0].args.iter().any(|arg| arg.contains(
+            "ctrl-w:change-prompt(window> )+clear-query+reload(awk -F '\\t' '$1 == \"window\"'"
+        )));
         // ...and reset shows everything except windows.
-        assert!(
-            recorded[0].args.iter().any(|arg| arg.contains(
-                "ctrl-c:change-prompt(smux> )+clear-query+reload(awk -F '\\t' '$1 != \"window\"'"
-            ))
-        );
+        assert!(recorded[0].args.iter().any(|arg| arg.contains(
+            "ctrl-c:change-prompt(smux> )+clear-query+reload(awk -F '\\t' '$1 != \"window\"'"
+        )));
         assert!(
             recorded[0]
                 .args

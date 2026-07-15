@@ -147,8 +147,7 @@ mod tests {
         ));
         let runner_dyn: Arc<dyn crate::process::CommandRunner> = runner.clone();
 
-        let repos =
-            list_repos(&runner_dyn, &["org".to_owned()]).expect("listing should succeed");
+        let repos = list_repos(&runner_dyn, &["org".to_owned()]).expect("listing should succeed");
 
         // Newest first across owners, duplicates dropped.
         assert_eq!(

@@ -347,13 +347,8 @@ impl Tmux {
 
     /// Session that owns a window id.
     pub fn window_session(&self, window_id: &str) -> Result<String> {
-        let output = self.run_tmux_capture([
-            "display-message",
-            "-p",
-            "-t",
-            window_id,
-            "#{session_name}",
-        ])?;
+        let output =
+            self.run_tmux_capture(["display-message", "-p", "-t", window_id, "#{session_name}"])?;
 
         if !output.status.success {
             bail!("tmux window not found: {window_id}");
@@ -1749,7 +1744,8 @@ mod tests {
         );
         tmux.select_window_by_id("@7").expect("select should work");
         tmux.kill_window("@7").expect("kill should work");
-        tmux.rename_window("@7", "logs").expect("rename should work");
+        tmux.rename_window("@7", "logs")
+            .expect("rename should work");
 
         let recorded = runner.recorded();
         assert_eq!(
@@ -1837,7 +1833,11 @@ mod tests {
         let tmux = Tmux::with_runner(runner.clone());
 
         let error = tmux
-            .run_session_hook("docker compose up -d", std::path::Path::new("/tmp/demo"), &[])
+            .run_session_hook(
+                "docker compose up -d",
+                std::path::Path::new("/tmp/demo"),
+                &[],
+            )
             .expect_err("hook should fail");
         assert!(error.to_string().contains("compose file not found"));
     }
