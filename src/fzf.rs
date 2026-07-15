@@ -170,7 +170,10 @@ impl Choice {
     }
 
     fn encode(&self) -> String {
-        format!("{}\t{}\t{}", self.kind, self.value, self.label)
+        let kind = sanitize_field(&self.kind);
+        let value = sanitize_field(&self.value);
+        let label = sanitize_field(&self.label);
+        format!("{kind}\t{value}\t{label}")
     }
 
     fn decode(line: &str) -> Result<Self> {
@@ -679,6 +682,24 @@ mod tests {
         assert_eq!(decoded.kind, EntryKind::Directory);
         assert_eq!(decoded.value, "/tmp/has tab and-newline");
         assert_eq!(decoded.label, "dir weird label");
+    }
+
+    #[test]
+    fn choice_encode_neutralizes_record_delimiters() {
+        let choice = Choice::new(
+            "template\tcustom",
+            "template\tweird\nlabel".to_owned(),
+            "weird\tvalue\nname".to_owned(),
+        );
+
+        let encoded = choice.encode();
+        assert_eq!(encoded.lines().count(), 1);
+        assert_eq!(encoded.matches('\t').count(), 2);
+
+        let decoded = Choice::decode(&encoded).expect("choice should decode");
+        assert_eq!(decoded.kind, "template custom");
+        assert_eq!(decoded.value, "weird value name");
+        assert_eq!(decoded.label, "template weird label");
     }
 
     #[test]
