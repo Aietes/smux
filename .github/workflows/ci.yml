@@ -5,6 +5,12 @@ on:
     branches:
       - main
   pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to verify; defaults to the triggering ref
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -16,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v19
@@ -31,6 +39,12 @@ jobs:
 
       - name: Clippy
         run: nix develop --command cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build Nix package
+        run: nix build .#smux
+
+      - name: Verify crates.io package
+        run: nix develop --command cargo package --locked
 
       - name: Generate zsh completions
         run: nix develop --command cargo run -- completions zsh --dir target/generated/completions
