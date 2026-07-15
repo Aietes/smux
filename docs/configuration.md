@@ -315,13 +315,13 @@ Fields:
 - `root`
   - type: string
   - optional
-  - directory new `smux clone` checkouts land in when no target directory is given on the command line; unset means the current working directory
+  - directory new `smux clone` checkouts land in when no target directory is given with `--dir`; unset means the current working directory
 - `owners`
   - type: array of strings
   - optional
   - extra GitHub owners (users or orgs) whose repositories appear in the `smux clone` browser alongside your own
 
-Running `smux clone` without a URL opens a fuzzy browser over your GitHub repositories (via the `gh` CLI): each row shows `owner/name`, visibility, when it was last updated, and the description. Selecting a row clones it with `gh repo clone` and connects. The `gh` CLI is an optional dependency, reported by `smux doctor`.
+Running `smux clone` without a URL opens a fuzzy browser over your GitHub repositories (via the `gh` CLI): each row shows `owner/name`, visibility, when it was last updated, and the description. Selecting a row clones it with `gh repo clone` and connects. Pass `--dir <path>` to override the destination in either URL or browser mode. The `gh` CLI is an optional dependency, reported by `smux doctor`.
 
 ## Template files
 

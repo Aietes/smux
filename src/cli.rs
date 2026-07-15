@@ -81,7 +81,7 @@ pub enum Commands {
     },
     /// Clone a git repository (or browse your GitHub repos) and connect to it.
     #[command(
-        long_about = "With a URL: run `git clone` and open the result with `smux connect`, so template auto-detection picks the right layout for the fresh checkout. When the target directory already exists, the clone is skipped and smux just connects.\n\nWithout a URL: browse your GitHub repositories (and those of any `[settings.clone] owners`) in a fuzzy picker — visibility, last update, and description included — then clone the selection with `gh repo clone`. Requires the GitHub CLI (gh).\n\nClones land in `[settings.clone] root` when set (falling back to the current directory) unless a target directory is given."
+        long_about = "With a URL: run `git clone` and open the result with `smux connect`, so template auto-detection picks the right layout for the fresh checkout. When the target directory already exists, the clone is skipped and smux just connects.\n\nWithout a URL: browse your GitHub repositories (and those of any `[settings.clone] owners`) in a fuzzy picker — visibility, last update, and description included — then clone the selection with `gh repo clone`. Requires the GitHub CLI (gh).\n\nClones land in `[settings.clone] root` when set (falling back to the current directory) unless a target directory is given with `--dir`."
     )]
     Clone {
         /// Repository URL — anything `git clone` accepts. Omit to browse your
@@ -89,7 +89,7 @@ pub enum Commands {
         url: Option<String>,
         /// Target directory. Defaults to the repository name inside
         /// `[settings.clone] root` (or the current directory).
-        #[arg(value_hint = ValueHint::DirPath)]
+        #[arg(long, value_hint = ValueHint::DirPath)]
         dir: Option<PathBuf>,
         /// Template to apply instead of the auto-detected one.
         #[arg(long)]
@@ -177,4 +177,43 @@ pub enum Commands {
         #[arg(value_hint = ValueHint::DirPath)]
         dir: Option<PathBuf>,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use clap::Parser;
+
+    use super::{Cli, Commands};
+
+    #[test]
+    fn clone_dir_option_does_not_require_a_url() {
+        let cli = Cli::try_parse_from(["smux", "clone", "--dir", "/tmp/demo"])
+            .expect("clone --dir should parse without a URL");
+
+        let Commands::Clone { url, dir, .. } = cli.command else {
+            panic!("clone command should parse");
+        };
+        assert_eq!(url, None);
+        assert_eq!(dir, Some(PathBuf::from("/tmp/demo")));
+    }
+
+    #[test]
+    fn clone_dir_option_parses_with_a_url() {
+        let cli = Cli::try_parse_from([
+            "smux",
+            "clone",
+            "https://example.com/user/demo.git",
+            "--dir",
+            "/tmp/demo",
+        ])
+        .expect("clone --dir should parse with a URL");
+
+        let Commands::Clone { url, dir, .. } = cli.command else {
+            panic!("clone command should parse");
+        };
+        assert_eq!(url.as_deref(), Some("https://example.com/user/demo.git"));
+        assert_eq!(dir, Some(PathBuf::from("/tmp/demo")));
+    }
 }

@@ -188,7 +188,8 @@ Clone a repository and open it in one step — template auto-detection picks the
 ```bash
 smux clone                                  # browse your GitHub repos, clone + connect
 smux clone https://github.com/user/repo.git
-smux clone git@github.com:user/repo.git ~/code/repo
+smux clone git@github.com:user/repo.git --dir ~/code/repo
+smux clone --dir ~/code/repo                  # browse, then clone to this path
 smux clone --no-connect                     # browse + clone, but skip the session
 ```
 
@@ -377,7 +378,7 @@ smux connect [--template <name>] [--session-name <name>] <path>
 smux switch <session>
 smux last
 smux kill [<session>]
-smux clone [--template <name>] [--no-connect] [<url>] [<dir>]
+smux clone [--template <name>] [--no-connect] [--dir <dir>] [<url>]
 smux prune
 smux list-sessions [--json]
 smux list-templates [--json]

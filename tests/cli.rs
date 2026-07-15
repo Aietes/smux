@@ -506,6 +506,7 @@ fn clone_runs_git_and_connects() {
 
     let mut command = Command::cargo_bin("smux").expect("binary should build");
     command.args(["clone", "https://example.com/user/demo.git"]);
+    command.arg("--dir");
     command.arg(&target);
     command.env("PATH", prepend_path(tool_dir.path()));
     command.env("XDG_CONFIG_HOME", tempdir.path());
@@ -537,6 +538,7 @@ fn clone_no_connect_just_prints_the_checkout_path() {
 
     let mut command = Command::cargo_bin("smux").expect("binary should build");
     command.args(["clone", "--no-connect", "https://example.com/user/demo.git"]);
+    command.arg("--dir");
     command.arg(&target);
     command.env("PATH", prepend_path(tool_dir.path()));
     command.env("XDG_CONFIG_HOME", tempdir.path());
