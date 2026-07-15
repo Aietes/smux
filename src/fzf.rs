@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 
@@ -206,6 +205,18 @@ pub fn select_value(prompt: &str, choices: Vec<Choice>) -> Result<Option<String>
     select_value_with_runner(default_runner(), prompt, choices)
 }
 
+fn private_tempdir(prefix: &str, error_context: &str) -> Result<tempfile::TempDir> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(prefix);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        builder.permissions(fs::Permissions::from_mode(0o700));
+    }
+    builder.tempdir().with_context(|| error_context.to_owned())
+}
+
 /// Tracks whether the picker hint bar is currently shown, persisted in a temp
 /// file so the runtime toggle survives the picker relaunching between actions.
 /// Convention: the file existing means the hints are hidden.
@@ -222,10 +233,7 @@ pub struct HintState {
 
 impl HintState {
     pub fn new(initially_shown: bool) -> Result<Self> {
-        let dir = tempfile::Builder::new()
-            .prefix("smux-hints-")
-            .tempdir()
-            .context("failed to create hint state directory")?;
+        let dir = private_tempdir("smux-hints-", "failed to create hint state directory")?;
         let path = dir.path().join("state");
         // "Hidden" is represented by the file existing, so only create it when
         // the hints should start hidden.
@@ -245,49 +253,22 @@ impl HintState {
 }
 
 struct TempInputFile {
+    // Held for its `Drop`, which removes the private directory and input file.
+    _dir: tempfile::TempDir,
     path: PathBuf,
 }
 
 impl TempInputFile {
     fn new(contents: &str) -> Result<Self> {
-        use std::io::Write;
-
-        // A process-wide counter disambiguates concurrent callers (parallel
-        // tests can hit the same nanosecond); pid + nanos disambiguate across
-        // processes and restarts.
-        static FILE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let serial = FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-        let mut path = std::env::temp_dir();
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .context("system clock should be after unix epoch")?
-            .as_nanos();
-        path.push(format!(
-            "smux-fzf-{}-{nanos}-{serial}.tsv",
-            std::process::id()
-        ));
-        // create_new (O_CREAT|O_EXCL) refuses to follow or reuse a pre-existing
-        // path, defeating a symlink planted at this name; the temp dir's sticky
-        // bit then prevents another user from replacing the file afterwards.
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .with_context(|| format!("failed to create {}", path.display()))?;
-        file.write_all(contents.as_bytes())
+        let dir = private_tempdir("smux-fzf-", "failed to create picker input directory")?;
+        let path = dir.path().join("entries.tsv");
+        fs::write(&path, contents)
             .with_context(|| format!("failed to write {}", path.display()))?;
-        Ok(Self { path })
+        Ok(Self { _dir: dir, path })
     }
 
     fn shell_quoted_path(&self) -> String {
         shell_quote(&self.path)
-    }
-}
-
-impl Drop for TempInputFile {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
     }
 }
 
@@ -640,12 +621,13 @@ fn select_with_runner(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{fs, sync::Arc};
 
     use crate::process::{CommandOutput, CommandStatus, FakeCommandRunner};
 
     use super::{
-        Choice, Entry, EntryKind, SelectAction, select_value_with_runner, select_with_runner,
+        Choice, Entry, EntryKind, SelectAction, TempInputFile, select_value_with_runner,
+        select_with_runner,
     };
     use crate::config::{IconMode, PickerBindings, PickerPreviewSettings};
     use crate::ui::DisplayStyle;
@@ -700,6 +682,38 @@ mod tests {
         assert_eq!(decoded.kind, "template custom");
         assert_eq!(decoded.value, "weird value name");
         assert_eq!(decoded.label, "template weird label");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn picker_input_uses_a_private_directory_and_cleans_it_up() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path;
+        let directory;
+        {
+            let input = TempInputFile::new("template\trust\ttemplate rust\n")
+                .expect("picker input should be created");
+            path = input.path.clone();
+            directory = path
+                .parent()
+                .expect("picker input should have a parent")
+                .to_owned();
+
+            let mode = fs::metadata(&directory)
+                .expect("picker input directory should exist")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o700);
+            assert_eq!(
+                fs::read_to_string(&path).expect("picker input should be readable"),
+                "template\trust\ttemplate rust\n"
+            );
+        }
+
+        assert!(!path.exists());
+        assert!(!directory.exists());
     }
 
     #[test]
