@@ -2,7 +2,8 @@
 name = "smux-cli"
 version = "0.4.0"
 edition = "2024"
-rust-version = "1.85"
+# MSRV; development and packaging use latest stable through flake.lock.
+rust-version = "1.88"
 description = "Small Rust CLI for tmux session selection and creation"
 readme = "README.md"
 license = "MIT"
