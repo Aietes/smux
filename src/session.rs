@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -153,9 +154,11 @@ pub struct TemplateMatch {
 /// template smux would apply. This is the single source of truth for detection —
 /// [`detect_template_name`] just takes its first result.
 pub fn detect_matches(config: &crate::config::Config, path: &Path) -> Vec<TemplateMatch> {
-    // Read package.json once (if present) so dependency matching scans it a
-    // single time regardless of how many templates are configured.
-    let package_json = std::fs::read_to_string(path.join("package.json")).ok();
+    // Parse package.json once (if present) so dependency matching is both JSON
+    // aware and independent of how many templates are configured.
+    let package_dependencies = std::fs::read_to_string(path.join("package.json"))
+        .ok()
+        .and_then(|contents| package_dependency_names(&contents));
     // Specificity is (kind, longest matched marker), where a matched dependency
     // (kind 1) outranks a matched file marker (kind 0): declaring a dependency is
     // a stronger signal than a marker file merely being present, so `react` beats
@@ -171,13 +174,13 @@ pub fn detect_matches(config: &crate::config::Config, path: &Path) -> Vec<Templa
             .filter(|pattern| marker_present(path, pattern))
             .cloned()
             .collect();
-        let matched_dependencies: Vec<String> = package_json
-            .as_deref()
-            .map(|pkg| {
+        let matched_dependencies: Vec<String> = package_dependencies
+            .as_ref()
+            .map(|dependencies| {
                 template
                     .match_dependencies
                     .iter()
-                    .filter(|dependency| depends_on(pkg, dependency))
+                    .filter(|dependency| dependencies.contains(dependency.as_str()))
                     .cloned()
                     .collect()
             })
@@ -222,12 +225,24 @@ fn detect_template_name(config: &crate::config::Config, path: &Path) -> Option<S
         .map(|m| m.name)
 }
 
-/// Whether `package_json` declares `dependency`. A quoted-key scan (`"react":`)
-/// that avoids pulling in a JSON parser: it matches the dependency as an object
-/// key, not a substring of another key (`"react-dom"`) or a plain string value
-/// (a package whose `"name"` happens to be `"react"`).
-fn depends_on(package_json: &str, dependency: &str) -> bool {
-    package_json.contains(&format!("\"{dependency}\":"))
+/// Dependency names declared by the standard package.json dependency maps.
+/// Invalid JSON has no dependency matches; file-based template detection still
+/// works independently.
+fn package_dependency_names(package_json: &str) -> Option<HashSet<String>> {
+    let manifest: serde_json::Value = serde_json::from_str(package_json).ok()?;
+    let manifest = manifest.as_object()?;
+    let mut names = HashSet::new();
+    for section in [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
+    ] {
+        if let Some(dependencies) = manifest.get(section).and_then(|value| value.as_object()) {
+            names.extend(dependencies.keys().cloned());
+        }
+    }
+    Some(names)
 }
 
 /// Whether `pattern` — an exact filename or a simple `*`/`?` glob — matches an
@@ -415,7 +430,7 @@ mod tests {
     };
     use crate::templates;
     use crate::util;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -682,25 +697,33 @@ mod tests {
     }
 
     #[test]
-    fn depends_on_matches_whole_dependency_keys() {
-        let package_json = r#"{ "dependencies": { "react": "^18", "react-dom": "^18" } }"#;
-        assert!(super::depends_on(package_json, "react"));
-        assert!(super::depends_on(package_json, "react-dom"));
-        assert!(super::depends_on(
-            r#"{ "dependencies": { "@sveltejs/kit": "^2" } }"#,
-            "@sveltejs/kit"
-        ));
-        // A substring of another dependency name must not match.
-        assert!(!super::depends_on(
-            r#"{ "dependencies": { "react-dom": "^18" } }"#,
-            "react"
-        ));
-        // A dependency name appearing only as a value or the package's own name
-        // must not match — it has to be an object key.
-        assert!(!super::depends_on(
-            r#"{ "name": "react", "scripts": { "build": "react-scripts build" } }"#,
-            "react"
-        ));
+    fn package_dependency_names_reads_standard_sections() {
+        let package_json = r#"{
+            "dependencies" : { "react": "^18" },
+            "devDependencies": { "vitest": "^3" },
+            "peerDependencies": { "vue": "^3" },
+            "optionalDependencies": { "fsevents": "^2" }
+        }"#;
+        let dependencies =
+            super::package_dependency_names(package_json).expect("package.json should parse");
+        assert_eq!(
+            dependencies,
+            HashSet::from([
+                "fsevents".to_owned(),
+                "react".to_owned(),
+                "vitest".to_owned(),
+                "vue".to_owned(),
+            ])
+        );
+    }
+
+    #[test]
+    fn package_dependency_names_ignore_unrelated_keys_and_invalid_json() {
+        let package_json = r#"{ "name": "react", "scripts": { "react": "react-scripts build" } }"#;
+        let dependencies =
+            super::package_dependency_names(package_json).expect("package.json should parse");
+        assert!(dependencies.is_empty());
+        assert!(super::package_dependency_names("not json").is_none());
     }
 
     #[test]
