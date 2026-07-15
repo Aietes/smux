@@ -27,6 +27,7 @@ impl DisplayStyle {
         Self::new(icon_mode, icon_colors)
     }
 
+    #[cfg(test)]
     pub fn from_icon_mode(icon_mode: IconMode) -> Self {
         Self::new(icon_mode, IconColors::default())
     }

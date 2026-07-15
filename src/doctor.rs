@@ -117,7 +117,7 @@ pub fn run(config_path: Option<&Path>, fix: bool) -> Result<()> {
                     loaded.template_dir.display()
                 )),
             ));
-            config_checks.push(invalid_templates_check(loaded.invalid_templates.len()));
+            config_checks.push(invalid_templates_check(loaded.invalid_template_count));
             config_checks.push(Check::new(
                 Status::Ok,
                 "projects",

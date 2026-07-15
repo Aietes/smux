@@ -20,7 +20,7 @@ use crate::zoxide;
 
 const BUILTIN_TEMPLATE_LABEL: &str = "<builtin>";
 
-pub fn run(cli: Cli) -> Result<()> {
+pub(crate) fn run(cli: Cli) -> Result<()> {
     let tmux = Tmux::new();
     let config = cli.config;
 

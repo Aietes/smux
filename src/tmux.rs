@@ -89,6 +89,7 @@ impl Tmux {
         }
     }
 
+    #[cfg(test)]
     pub fn with_runner(runner: Arc<dyn CommandRunner>) -> Self {
         Self { runner }
     }
@@ -204,10 +205,6 @@ impl Tmux {
         } else {
             bail!("tmux session not found: {session}")
         }
-    }
-
-    pub fn create_session(&self, session: &str, directory: &Path) -> Result<()> {
-        self.create_session_with_window(session, "main", directory, &[])
     }
 
     pub fn create_session_from_plan(&self, plan: &SessionPlan) -> Result<()> {

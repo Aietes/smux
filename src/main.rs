@@ -1,10 +1,7 @@
-use clap::Parser;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let cli = smux::cli::Cli::parse();
-
-    match smux::app::run(cli) {
+    match smux::run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error:#}");

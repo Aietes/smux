@@ -25,19 +25,11 @@ pub fn connect_path(
         (None, _) => None,
     };
 
-    let template = resolve_template(
-        loaded,
-        override_template,
-        resolved_project.as_ref(),
-        &normalized,
-    )?;
+    let template = resolve_template(loaded, override_template, resolved_project, &normalized)?;
 
     let session_name = match override_name {
         Some(name) => util::validated_session_name(name)?,
-        None => match resolved_project
-            .as_ref()
-            .and_then(|project| project.project.session_name.as_deref())
-        {
+        None => match resolved_project.and_then(|project| project.session_name.as_deref()) {
             Some(name) => util::validated_session_name(name)?,
             None => util::session_name_from_path(&normalized)?,
         },
@@ -52,8 +44,7 @@ pub fn connect_path(
     // A project's env and on_create apply regardless of where the template
     // came from (materialized, auto-detected, or the built-in fallback);
     // project entries win on key conflicts.
-    if let Some(resolved) = &resolved_project {
-        let project = resolved.project;
+    if let Some(project) = resolved_project {
         if !project.env.is_empty() {
             let mut env: std::collections::BTreeMap<String, String> =
                 plan.env.into_iter().collect();
@@ -100,7 +91,7 @@ pub enum ProjectDetection {
 fn resolve_template(
     loaded: Option<&LoadedConfig>,
     override_template: Option<&str>,
-    project: Option<&crate::config::ResolvedProject<'_>>,
+    project: Option<&crate::config::Project>,
     path: &Path,
 ) -> Result<Template> {
     if let Some(template_name) = override_template {
@@ -115,7 +106,7 @@ fn resolve_template(
     if let Some(project) = project {
         let loaded = loaded.context("project template resolution requires config")?;
         if let Some(template) =
-            crate::config::materialize_project_template(&loaded.config, project.project)?
+            crate::config::materialize_project_template(&loaded.config, project)?
         {
             return Ok(template);
         }
@@ -425,9 +416,7 @@ pub fn prune_detached(tmux: &Tmux) -> Result<Vec<String>> {
 mod tests {
     use anyhow::Result;
 
-    use crate::config::{
-        Config, LoadedConfig, Project, ResolvedProject, Settings, Template, Window,
-    };
+    use crate::config::{Config, LoadedConfig, Project, Settings, Template, Window};
     use crate::templates;
     use crate::util;
     use std::collections::{HashMap, HashSet};
@@ -907,13 +896,9 @@ mod tests {
             },
         )]);
 
-        let project = ResolvedProject {
-            name: "demo",
-            project: projects.get("demo").expect("project exists"),
-            normalized_path: PathBuf::from("/tmp/demo"),
-        };
+        let project = projects.get("demo").expect("project exists");
 
-        let name = match project.project.session_name.as_deref() {
+        let name = match project.session_name.as_deref() {
             Some(name) => util::validated_session_name(name)?,
             None => unreachable!(),
         };
@@ -959,8 +944,7 @@ mod tests {
             projects: HashMap::new(),
             project_files: HashMap::new(),
             invalid_projects: Vec::new(),
-            template_files: HashMap::new(),
-            invalid_templates: Vec::new(),
+            invalid_template_count: 0,
         };
 
         let error =
@@ -1022,8 +1006,7 @@ mod tests {
             projects: HashMap::new(),
             project_files: HashMap::new(),
             invalid_projects: Vec::new(),
-            template_files: HashMap::new(),
-            invalid_templates: Vec::new(),
+            invalid_template_count: 0,
         }
     }
 
@@ -1194,20 +1177,15 @@ mod tests {
             )]),
             project_files: HashMap::new(),
             invalid_projects: Vec::new(),
-            template_files: HashMap::new(),
-            invalid_templates: Vec::new(),
+            invalid_template_count: 0,
         };
 
-        let project = ResolvedProject {
-            name: "demo",
-            project: loaded.projects.get("demo").expect("project exists"),
-            normalized_path: PathBuf::from("/tmp/demo"),
-        };
+        let project = loaded.projects.get("demo").expect("project exists");
 
         let template = super::resolve_template(
             Some(&loaded),
             Some("explicit"),
-            Some(&project),
+            Some(project),
             Path::new("/tmp/demo"),
         )?;
         assert_eq!(template.windows[0].name, "explicit-window");
@@ -1254,8 +1232,7 @@ mod tests {
             projects: HashMap::new(),
             project_files: HashMap::new(),
             invalid_projects: Vec::new(),
-            template_files: HashMap::new(),
-            invalid_templates: Vec::new(),
+            invalid_template_count: 0,
         };
 
         let template = super::resolve_template(Some(&loaded), None, None, Path::new("/tmp/demo"))?;

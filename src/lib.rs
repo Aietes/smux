@@ -1,17 +1,24 @@
-pub mod app;
-pub mod cli;
-pub mod config;
-pub mod docs;
-pub mod doctor;
-pub mod folder_search;
-pub mod fzf;
-pub mod github;
-pub mod process;
-pub mod project_export;
-pub mod session;
-pub mod skill;
-pub mod templates;
-pub mod tmux;
-pub mod ui;
-pub mod util;
-pub mod zoxide;
+mod app;
+mod cli;
+mod config;
+mod docs;
+mod doctor;
+mod folder_search;
+mod fzf;
+mod github;
+mod process;
+mod project_export;
+mod session;
+mod skill;
+mod templates;
+mod tmux;
+mod ui;
+mod util;
+mod zoxide;
+
+use clap::Parser;
+
+/// Parse process arguments and run the smux CLI.
+pub fn run() -> anyhow::Result<()> {
+    app::run(cli::Cli::parse())
+}

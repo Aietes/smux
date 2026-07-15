@@ -481,26 +481,11 @@ pub struct LoadedConfig {
     pub projects: HashMap<String, Project>,
     pub project_files: HashMap<String, PathBuf>,
     pub invalid_projects: Vec<InvalidProject>,
-    pub template_files: HashMap<String, PathBuf>,
-    pub invalid_templates: Vec<InvalidTemplate>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ResolvedProject<'a> {
-    pub name: &'a str,
-    pub project: &'a Project,
-    pub normalized_path: PathBuf,
+    pub invalid_template_count: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct InvalidProject {
-    pub name: String,
-    pub path: PathBuf,
-    pub error: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct InvalidTemplate {
     pub name: String,
     pub path: PathBuf,
     pub error: String,
@@ -512,11 +497,7 @@ type LoadedProjects = (
     Vec<InvalidProject>,
 );
 
-type LoadedTemplates = (
-    HashMap<String, Template>,
-    HashMap<String, PathBuf>,
-    Vec<InvalidTemplate>,
-);
+type LoadedTemplates = (HashMap<String, Template>, usize);
 
 pub fn starter_config() -> String {
     format!(
@@ -562,7 +543,8 @@ pub fn default_config_path() -> Result<PathBuf> {
     Ok(default_config_dir()?.join("config.toml"))
 }
 
-pub fn default_projects_dir() -> Result<PathBuf> {
+#[cfg(test)]
+fn default_projects_dir() -> Result<PathBuf> {
     Ok(default_config_dir()?.join("projects"))
 }
 
@@ -570,10 +552,6 @@ pub fn projects_dir_for_config_path(path: &Path) -> PathBuf {
     path.parent()
         .map(|parent| parent.join("projects"))
         .unwrap_or_else(|| PathBuf::from("projects"))
-}
-
-pub fn default_templates_dir() -> Result<PathBuf> {
-    Ok(default_config_dir()?.join("templates"))
 }
 
 pub fn templates_dir_for_config_path(path: &Path) -> PathBuf {
@@ -623,7 +601,7 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
         Config::default()
     };
 
-    let (templates, template_files, invalid_templates) = load_templates(&template_dir)?;
+    let (templates, invalid_template_count) = load_templates(&template_dir)?;
     config.templates = templates;
 
     validate_config(&config)?;
@@ -640,8 +618,7 @@ pub fn load_workspace(path: Option<&Path>) -> Result<LoadedConfig> {
         projects,
         project_files,
         invalid_projects,
-        template_files,
-        invalid_templates,
+        invalid_template_count,
     })
 }
 
@@ -1036,7 +1013,7 @@ fn load_project_file(
 
 fn load_templates(template_dir: &Path) -> Result<LoadedTemplates> {
     if !template_dir.exists() {
-        return Ok((HashMap::new(), HashMap::new(), Vec::new()));
+        return Ok((HashMap::new(), 0));
     }
 
     let mut files = fs::read_dir(template_dir)
@@ -1056,8 +1033,7 @@ fn load_templates(template_dir: &Path) -> Result<LoadedTemplates> {
     files.sort_by_key(|entry| entry.file_name());
 
     let mut templates = HashMap::new();
-    let mut template_files = HashMap::new();
-    let mut invalid_templates = Vec::new();
+    let mut invalid_template_count = 0;
 
     for entry in files {
         let path = entry.path();
@@ -1077,18 +1053,13 @@ fn load_templates(template_dir: &Path) -> Result<LoadedTemplates> {
 
         match load_template_file(&path, &name) {
             Ok(template) => {
-                template_files.insert(name.clone(), path.clone());
                 templates.insert(name, template);
             }
-            Err(error) => invalid_templates.push(InvalidTemplate {
-                name,
-                path: path.clone(),
-                error: error.to_string(),
-            }),
+            Err(_) => invalid_template_count += 1,
         }
     }
 
-    Ok((templates, template_files, invalid_templates))
+    Ok((templates, invalid_template_count))
 }
 
 fn load_template_file(path: &Path, name: &str) -> Result<Template> {
@@ -1219,24 +1190,17 @@ pub fn materialize_project_template(
     Ok(Some(effective))
 }
 
-pub fn resolve_project<'a>(
-    loaded: &'a LoadedConfig,
-    path: &Path,
-) -> Result<Option<ResolvedProject<'a>>> {
+pub fn resolve_project<'a>(loaded: &'a LoadedConfig, path: &Path) -> Result<Option<&'a Project>> {
     // Normalize the query path the same way as each project path so the
     // comparison is symmetric (both canonicalize when the directory exists and
     // fall back to a lexical absolute path otherwise); using `normalize_path`
     // here would canonicalize only one side and error on not-yet-created dirs.
     let normalized = util::expand_and_absolutize_path(path)?;
 
-    for (name, project) in &loaded.projects {
+    for project in loaded.projects.values() {
         let project_path = util::expand_and_absolutize_path(Path::new(&project.path))?;
         if project_path == normalized {
-            return Ok(Some(ResolvedProject {
-                name,
-                project,
-                normalized_path: project_path,
-            }));
+            return Ok(Some(project));
         }
     }
 
@@ -1728,6 +1692,25 @@ windows = [
     }
 
     #[test]
+    fn load_workspace_counts_invalid_templates() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let config_path = tempdir.path().join("config.toml");
+        let template_dir = tempdir.path().join("templates");
+        fs::create_dir(&template_dir)?;
+        fs::write(
+            template_dir.join("valid.toml"),
+            "windows = [{ name = \"main\" }]\n",
+        )?;
+        fs::write(template_dir.join("broken.toml"), "not = valid = toml")?;
+
+        let loaded = load_workspace(Some(&config_path))?;
+        assert_eq!(loaded.invalid_template_count, 1);
+        assert!(loaded.config.templates.contains_key("valid"));
+        assert!(!loaded.config.templates.contains_key("broken"));
+        Ok(())
+    }
+
+    #[test]
     fn rejects_unknown_project_fields() {
         let error = toml::from_str::<super::Project>(
             "path = \"/tmp/demo\"\nwindows = [{ name = \"main\", panes = [{ cmd = \"nvim\" }] }]\n",
@@ -1843,7 +1826,7 @@ windows = [
         let loaded = load_workspace(Some(&config_path))?;
         let resolved =
             resolve_project(&loaded, Path::new(&workspace_dir))?.expect("project should resolve");
-        assert_eq!(resolved.name, "demo");
+        assert_eq!(resolved.template.as_deref(), Some("default"));
 
         Ok(())
     }
