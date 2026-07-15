@@ -4,6 +4,27 @@ All notable changes to `smux` are documented in this file.
 
 The format is based on Keep a Changelog and uses semantic-versioned release headings.
 
+## [0.5.0] - 2026-07-15
+
+### Changed
+
+- **BREAKING:** clone destinations now use `--dir <path>` instead of a second positional argument (`smux clone <url> --dir <path>`). The option also works without a URL, so repository-browser selections can be cloned to an explicit destination
+- **BREAKING:** the published Rust library now exposes only the supported `smux::run` entry point; implementation modules are private
+- the minimum supported Rust version is now 1.88, and the Nix flake uses one pinned latest-stable Rust release for development and packaging
+- GitHub releases, crates.io publication, and Homebrew tap updates now wait for formatting, tests, strict Clippy, Nix packaging, and crates.io package verification against the exact release tag
+
+### Fixed
+
+- `smux init` refuses to overwrite any existing starter file and rolls back files created by a partially failed initialization
+- failed tmux layout setup removes the incomplete session, so retrying creates the intended layout instead of attaching to a partial one
+- projects that normalize to the same path are reported as invalid instead of resolving nondeterministically
+- `package.json` template detection parses the standard dependency maps as JSON, handling normal whitespace and ignoring unrelated keys and values
+- template and repository picker records sanitize tabs and newlines so values cannot corrupt fzf's field structure
+
+### Security
+
+- picker input and hint-state files now live in automatically cleaned temporary directories with explicit owner-only (`0700`) permissions
+
 ## [0.4.0] - 2026-07-10
 
 ### Added
