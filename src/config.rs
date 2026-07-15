@@ -676,6 +676,23 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
     let project_dir = config_dir.join("projects");
     let template_dir = config_dir.join("templates");
 
+    let starter_project_path = project_dir.join("example.toml");
+    let starter_template_paths = STARTER_TEMPLATES
+        .iter()
+        .map(|(name, _)| template_dir.join(format!("{name}.toml")))
+        .collect::<Vec<_>>();
+    let conflicts = std::iter::once(&starter_project_path)
+        .chain(starter_template_paths.iter())
+        .filter(|candidate| candidate.exists())
+        .map(|candidate| candidate.display().to_string())
+        .collect::<Vec<_>>();
+    if !conflicts.is_empty() {
+        bail!(
+            "refusing to overwrite existing starter file(s): {}",
+            conflicts.join(", ")
+        );
+    }
+
     fs::create_dir_all(config_dir)
         .with_context(|| format!("failed to create config directory {}", config_dir.display()))?;
     fs::create_dir_all(&project_dir).with_context(|| {
@@ -691,28 +708,48 @@ pub fn init(path: Option<&Path>) -> Result<PathBuf> {
         )
     })?;
 
-    fs::write(&path, starter_config())
-        .with_context(|| format!("failed to write starter config to {}", path.display()))?;
-
-    let starter_project_path = project_dir.join("example.toml");
-    fs::write(&starter_project_path, starter_project()).with_context(|| {
-        format!(
-            "failed to write starter project to {}",
-            starter_project_path.display()
-        )
-    })?;
-
-    for &(name, body) in STARTER_TEMPLATES {
-        let template_path = template_dir.join(format!("{name}.toml"));
-        fs::write(&template_path, starter_template(body)).with_context(|| {
-            format!(
-                "failed to write starter template to {}",
-                template_path.display()
-            )
-        })?;
-    }
+    // Write the config last so its presence continues to mean initialization
+    // completed. `create_new` closes the preflight race, while rollback avoids
+    // leaving a partially initialized workspace if any write fails.
+    let mut files = vec![(starter_project_path, starter_project())];
+    files.extend(
+        STARTER_TEMPLATES
+            .iter()
+            .zip(starter_template_paths)
+            .map(|((_, body), template_path)| (template_path, starter_template(body))),
+    );
+    files.push((path.clone(), starter_config()));
+    write_new_files(&files)?;
 
     Ok(path)
+}
+
+fn write_new_files(files: &[(PathBuf, String)]) -> Result<()> {
+    use std::io::Write;
+
+    let mut created = Vec::with_capacity(files.len());
+    let result: Result<()> = (|| {
+        for (path, contents) in files {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+                .with_context(|| format!("failed to create {}", path.display()))?;
+            created.push(path.clone());
+            file.write_all(contents.as_bytes())
+                .with_context(|| format!("failed to write {}", path.display()))?;
+        }
+        Ok(())
+    })();
+
+    if let Err(error) = result {
+        for path in created.iter().rev() {
+            let _ = fs::remove_file(path);
+        }
+        return Err(error);
+    }
+
+    Ok(())
 }
 
 pub fn validate_config(config: &Config) -> Result<()> {
@@ -1903,6 +1940,46 @@ windows = [{ name = "main", command = "nvim" }]
         assert!(template_dir.is_dir());
         assert!(template_dir.join("rust.toml").exists());
         assert!(template_dir.join("node.toml").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn init_refuses_to_overwrite_existing_starter_files() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join("config.toml");
+        let project_dir = tempdir.path().join("projects");
+        let template_dir = tempdir.path().join("templates");
+        fs::create_dir(&project_dir)?;
+        fs::create_dir(&template_dir)?;
+
+        let project_path = project_dir.join("example.toml");
+        let template_path = template_dir.join("rust.toml");
+        fs::write(&project_path, "existing project")?;
+        fs::write(&template_path, "existing template")?;
+
+        let error = super::init(Some(&path)).expect_err("init should refuse collisions");
+        assert!(error.to_string().contains("refusing to overwrite"));
+        assert_eq!(fs::read_to_string(project_path)?, "existing project");
+        assert_eq!(fs::read_to_string(template_path)?, "existing template");
+        assert!(!path.exists());
+        assert!(!template_dir.join("default.toml").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn new_file_batch_rolls_back_after_a_write_failure() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let first = tempdir.path().join("first.toml");
+        let second = tempdir.path().join("missing").join("second.toml");
+
+        let error = super::write_new_files(&[
+            (first.clone(), "first".to_owned()),
+            (second, "second".to_owned()),
+        ])
+        .expect_err("the missing parent should fail");
+
+        assert!(error.to_string().contains("failed to create"));
+        assert!(!first.exists());
         Ok(())
     }
 
