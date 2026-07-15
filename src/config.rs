@@ -981,6 +981,42 @@ fn load_projects(
         }
     }
 
+    let mut names_by_path: HashMap<PathBuf, Vec<String>> = HashMap::new();
+    for (name, project) in &projects {
+        let normalized = util::expand_and_absolutize_path(Path::new(&project.path))?;
+        names_by_path
+            .entry(normalized)
+            .or_default()
+            .push(name.clone());
+    }
+
+    for (path, mut names) in names_by_path {
+        if names.len() < 2 {
+            continue;
+        }
+        names.sort();
+        for name in &names {
+            let others = names
+                .iter()
+                .filter(|candidate| *candidate != name)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
+            projects.remove(name);
+            let file = project_files
+                .remove(name)
+                .context("loaded project did not have a source file")?;
+            invalid_projects.push(InvalidProject {
+                name: name.clone(),
+                path: file,
+                error: format!(
+                    "project path {} is also used by project(s): {others}",
+                    path.display()
+                ),
+            });
+        }
+    }
+
     Ok((projects, project_files, invalid_projects))
 }
 
@@ -1918,6 +1954,36 @@ windows = [{ name = "main", command = "nvim" }]
         let loaded = load_optional(Some(&path))?.expect("workspace should load");
         assert!(!loaded.config_exists);
         assert!(loaded.projects.contains_key("example"));
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_project_paths_are_loaded_as_invalid() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join("config.toml");
+        let project_dir = tempdir.path().join("projects");
+        let workspace = tempdir.path().join("workspace");
+        fs::create_dir(&project_dir)?;
+        fs::create_dir(&workspace)?;
+        fs::write(&path, "[settings]\n")?;
+
+        for name in ["alpha", "beta"] {
+            fs::write(
+                project_dir.join(format!("{name}.toml")),
+                format!(
+                    "path = {:?}\nwindows = [{{ name = \"main\" }}]\n",
+                    workspace.display().to_string()
+                ),
+            )?;
+        }
+
+        let loaded = load_workspace(Some(&path))?;
+        assert!(loaded.projects.is_empty());
+        assert!(loaded.project_files.is_empty());
+        assert_eq!(loaded.invalid_projects.len(), 2);
+        assert!(loaded.invalid_projects.iter().all(|project| {
+            project.error.contains("project path") && project.error.contains("also used by project")
+        }));
         Ok(())
     }
 
