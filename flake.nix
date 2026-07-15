@@ -4,7 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -22,7 +25,8 @@
           inherit system;
           overlays = [ (import rust-overlay) ];
         };
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        rustRelease = pkgs.rust-bin.stable.latest;
+        rustToolchain = rustRelease.default.override {
           extensions = [
             "clippy"
             "rust-analyzer"
@@ -31,8 +35,10 @@
           ];
         };
         rustPlatform = pkgs.makeRustPlatform {
-          cargo = rustToolchain;
-          rustc = rustToolchain;
+          # Package with the same Rust release as the dev shell without pulling
+          # editor and linting components into the build toolchain.
+          cargo = rustRelease.minimal;
+          rustc = rustRelease.minimal;
         };
       in
       {
