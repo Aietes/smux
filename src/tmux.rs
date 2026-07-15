@@ -222,22 +222,44 @@ impl Tmux {
             initial_pane_cwd(first_window),
             &plan.env,
         )?;
-        self.configure_panes(&plan.session_name, &first_window.name, first_window)?;
 
-        let mut previous_window = first_window.name.as_str();
-        for window in plan.windows.iter().skip(1) {
-            self.new_window_after(
+        let result: Result<()> = (|| {
+            self.configure_panes(&plan.session_name, &first_window.name, first_window)?;
+
+            let mut previous_window = first_window.name.as_str();
+            for window in plan.windows.iter().skip(1) {
+                self.new_window_after(
+                    &plan.session_name,
+                    previous_window,
+                    &window.name,
+                    initial_pane_cwd(window),
+                )?;
+                self.configure_panes(&plan.session_name, &window.name, window)?;
+                previous_window = &window.name;
+            }
+
+            self.select_window(&plan.session_name, &plan.startup_window)?;
+            self.select_pane_by_offset(
                 &plan.session_name,
-                previous_window,
-                &window.name,
-                initial_pane_cwd(window),
+                &plan.startup_window,
+                plan.startup_pane,
             )?;
-            self.configure_panes(&plan.session_name, &window.name, window)?;
-            previous_window = &window.name;
+            Ok(())
+        })();
+
+        if let Err(error) = result {
+            return match self.kill_session(&plan.session_name) {
+                Ok(()) => Err(error.context(format!(
+                    "session \"{}\" setup failed; removed the incomplete session",
+                    plan.session_name
+                ))),
+                Err(cleanup_error) => Err(error.context(format!(
+                    "session \"{}\" setup failed; cleanup also failed: {cleanup_error:#}",
+                    plan.session_name
+                ))),
+            };
         }
 
-        self.select_window(&plan.session_name, &plan.startup_window)?;
-        self.select_pane_by_offset(&plan.session_name, &plan.startup_window, plan.startup_pane)?;
         Ok(())
     }
 
@@ -1370,6 +1392,52 @@ mod tests {
             vec!["list-panes", "-t", "demo:editor", "-F", "#{pane_id}"]
         );
         assert_eq!(recorded[21].args, vec!["select-pane", "-t", "%1"]);
+    }
+
+    #[test]
+    fn failed_session_setup_removes_the_incomplete_session() {
+        let runner = Arc::new(FakeCommandRunner::new());
+        runner.push_capture(ok_capture(Vec::new())); // new-session
+        runner.push_capture(ok_capture(b"%1\n".to_vec())); // list-panes
+        runner.push_capture(Ok(CommandOutput {
+            status: CommandStatus {
+                success: false,
+                code: Some(1),
+            },
+            stdout: Vec::new(),
+            stderr: b"pane disappeared".to_vec(),
+        })); // send-keys
+        runner.push_capture(ok_capture(Vec::new())); // rollback kill-session
+
+        let tmux = Tmux::with_runner(runner.clone());
+        let plan = SessionPlan {
+            root: PathBuf::from("/tmp/demo"),
+            env: Vec::new(),
+            on_create: None,
+            session_name: "demo".to_owned(),
+            startup_window: "main".to_owned(),
+            startup_pane: 0,
+            windows: vec![WindowPlan {
+                name: "main".to_owned(),
+                cwd: "/tmp/demo".into(),
+                pre_command: None,
+                command: Some("nvim".to_owned()),
+                layout: None,
+                synchronize: false,
+                panes: Vec::new(),
+            }],
+        };
+
+        let error = tmux
+            .create_session_from_plan(&plan)
+            .expect_err("session setup should fail");
+        assert!(error.to_string().contains("removed the incomplete session"));
+
+        let recorded = runner.recorded();
+        assert_eq!(
+            recorded.last().expect("cleanup command").args,
+            ["kill-session", "-t", "=demo"]
+        );
     }
 
     #[test]
